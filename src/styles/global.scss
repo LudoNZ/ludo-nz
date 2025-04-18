@@ -1,4 +1,4 @@
-@import "/src/app/styles/config";
+@import "/src/styles/config";
 
 // ================ **DEVELOPER OUTLINE MODE** ================
 // reveals outlines on all elements during development
@@ -14,15 +14,17 @@
 // ============================================================
 
 :root {
-  font-size: 16px;
+  font-size: 10px;
   @media (max-width: $MAX_TABLET) {
-    font-size: 14px;
+    font-size: 8px;
   }
   // CSS CUSTOM PROPERTIES / VARIABLES
   --background: #ffffff;
   --foreground: #171717;
   --color-primary: #1bb12f;
-  --color-secondary: #b1391b;
+  --color-secondary: #b1ae1b;
+  --color-danger: #b11b1b;
+  --borderRadius: 8px;
 }
 
 @media (prefers-color-scheme: dark) {

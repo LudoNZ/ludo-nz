@@ -1,0 +1,41 @@
+@mixin button($backgroundColor, $borderColor) {
+  cursor: pointer;
+  padding: 1rem;
+  width: max-content;
+  min-width: 10rem;
+  border-radius: var(--borderRadius);
+  border: 2px solid $borderColor;
+  background-color: $backgroundColor;
+}
+
+// VARIANTS
+
+.primary {
+  @include button(var(--color-primary), var(--color-secondary));
+}
+.secondary {
+  @include button(var(--color-secondary), var(--color-primary));
+}
+.danger {
+  @include button(var(--color-danger), var(--color-primary));
+  background-color: var(--color-danger);
+}
+
+// SIZES
+.small {
+  min-width: none;
+  padding: 0.2rem 0.5rem;
+  font-size: 1rem;
+}
+
+.medium {
+  min-width: 10rem;
+  padding: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.large {
+  min-width: 20rem;
+  padding: 1rem;
+  font-size: 1.5rem;
+}

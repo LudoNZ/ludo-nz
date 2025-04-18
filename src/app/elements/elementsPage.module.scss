@@ -1,0 +1,23 @@
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#primary-colour-picker {
+  background-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.primaryColourPickerSample {
+  background-color: var(--color-primary);
+  width: max-content;
+  border-radius: var(--borderRadius);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem;
+  label {
+    padding: 0.5rem;
+  }
+}

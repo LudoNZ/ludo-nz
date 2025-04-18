@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 // import "./globals.css"
-import "/src/app/styles/global.scss"
+import "/src/styles/global.scss"
 import Link from "next/link"
 import React from "react"
 import styles from "./layout.module.scss"
@@ -21,6 +21,9 @@ const Header = () => {
           </li>
           <li>
             <Link href={"/register"}>register</Link>
+          </li>
+          <li>
+            <Link href={"/elements"}>elements</Link>
           </li>
         </ul>
       </nav>
