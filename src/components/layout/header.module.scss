@@ -1,0 +1,8 @@
+.header {
+  padding: 1rem;
+  background-color: var(--color-primary);
+  .navigation {
+    display: flex;
+    justify-content: space-between;
+  }
+}
