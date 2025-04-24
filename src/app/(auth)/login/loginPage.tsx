@@ -10,12 +10,13 @@ const LoginPage = () => {
     <div>
       <h2>login Page</h2>
       <Button
-        children="Continue with Google"
         size="large"
         onClick={() => {
           auth?.loginWithGoogle()
         }}
-      />
+      >
+        Continue with Google
+      </Button>
     </div>
   )
 }

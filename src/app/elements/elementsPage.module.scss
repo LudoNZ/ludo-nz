@@ -1,5 +1,10 @@
 .buttons {
   display: flex;
+  gap: 1rem;
+}
+
+.cycleButtons {
+  display: flex;
   flex-direction: column;
   gap: 1rem;
 }
