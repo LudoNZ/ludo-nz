@@ -18,7 +18,11 @@ const poppins = Poppins({
 })
 
 const Footer: React.FC = () => {
-  return <footer className={styles.footer}>footer</footer>
+  return (
+    <footer className={styles.footer}>
+      <p>© 2025 Ludo Bourneville</p>
+    </footer>
+  )
 }
 
 export default function RootLayout({

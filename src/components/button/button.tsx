@@ -14,7 +14,6 @@ type ButtonProps = {
   variant?: Variant
   size?: Size
   className?: string
-  id?: string
 }
 
 const variantClassMap: Record<Variant, string> = {
@@ -37,7 +36,6 @@ const Button: React.FC<ButtonProps> = ({
   variant = "primary",
   size = "medium",
   className = "",
-  id = undefined,
 }) => {
   return (
     <button

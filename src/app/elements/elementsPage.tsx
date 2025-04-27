@@ -4,6 +4,26 @@ import Button, { Size, Variant } from "@/components/button/button"
 import styles from "./elementsPage.module.scss"
 import { useState } from "react"
 
+const ThemeColours = () => {
+  return (
+    <>
+      <h3>Theme Colours</h3>
+      <div className={styles.primaryColourPickerSample}>
+        <label htmlFor="primary-colour-picker">Set primary-color:</label>
+        <input
+          id="primary-colour-picker"
+          type="color"
+          onChange={(e) =>
+            document.documentElement.style.setProperty(
+              "--color-primary",
+              e.target.value
+            )
+          }
+        />
+      </div>
+    </>
+  )
+}
 const Buttons = () => {
   const [showcaseSize, setShowcaseSize] = useState<Size>("medium")
   const [showcaseVariant, setShowcaseVariant] = useState<Variant>("primary")
@@ -43,20 +63,6 @@ const Buttons = () => {
 
   return (
     <>
-      <h3>Theme Colours</h3>
-      <div className={styles.primaryColourPickerSample}>
-        <label htmlFor="primary-colour-picker">Set primary-color:</label>
-        <input
-          id="primary-colour-picker"
-          type="color"
-          onChange={(e) =>
-            document.documentElement.style.setProperty(
-              "--color-primary",
-              e.target.value
-            )
-          }
-        />
-      </div>
       <h3>Buttons</h3>
       <div className={styles.buttons}>
         <div className={styles.cycleButtons}>
@@ -74,10 +80,11 @@ const Buttons = () => {
 const ElementsPage = () => {
   return (
     <div>
-      <h2>ELEMENTS</h2>
+      <h2>Components</h2>
       <br />
 
       <Buttons />
+      <ThemeColours />
     </div>
   )
 }

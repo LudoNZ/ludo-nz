@@ -4,5 +4,13 @@
   .navigation {
     display: flex;
     justify-content: space-between;
+    .logoBox {
+      position: relative;
+      height: 100px;
+      width: 120px;
+    }
+    .logout {
+      cursor: pointer;
+    }
   }
 }

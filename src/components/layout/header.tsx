@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/auth"
 import styles from "./header.module.scss"
 import Link from "next/link"
+import Image from "next/image"
 
 const Header = () => {
   const auth = useAuth()
@@ -10,19 +11,25 @@ const Header = () => {
   return (
     <header className={styles.header}>
       <nav className={styles.navigation}>
-        <Link href={"/"}>Home</Link>
+        <Link href={"/"} className={styles.logoBox}>
+          <Image
+            className={styles.logo}
+            fill
+            src={"/logo.svg"}
+            alt="Logo"
+          ></Image>
+        </Link>
+
         <ul>
-          {!!auth?.currentUser && (
+          {!!auth?.currentUser && ( //user loged in
             <>
               <li>{`Hi ${auth.currentUser.displayName}`}</li>
-              <li>{`${auth.currentUser.email}`}</li>
-              <li onClick={() => auth.logout()}>Logout</li>
-              <li>
-                <Link href={"/elements"}>elements</Link>
+              <li onClick={() => auth.logout()} className={styles.logout}>
+                Logout
               </li>
             </>
           )}
-          {!auth?.currentUser && (
+          {!auth?.currentUser && ( // anonymous visitor
             <>
               <li>
                 <Link href={"/login"}>login</Link>
@@ -32,6 +39,9 @@ const Header = () => {
               </li>
             </>
           )}
+          <li>
+            <Link href={"/elements"}>Components</Link>
+          </li>
         </ul>
       </nav>
     </header>
