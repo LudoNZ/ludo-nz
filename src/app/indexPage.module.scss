@@ -2,4 +2,32 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
+
+  .intro {
+  }
+
+  .logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2rem;
+
+    .mainLogo {
+      position: relative;
+      width: clamp(250px, 50%, 500px);
+      height: auto;
+      aspect-ratio: 5/4;
+    }
+
+    .heroText {
+      margin-top: 1.5rem;
+      font-family: "Orbitron", sans-serif;
+      font-size: 2.4rem;
+      color: var(--color-primary);
+      text-align: center;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+  }
 }
