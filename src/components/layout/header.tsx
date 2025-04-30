@@ -4,9 +4,26 @@ import { useAuth } from "@/context/auth"
 import styles from "./header.module.scss"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/router"
+import React from "react"
 
 const Header = () => {
   const auth = useAuth()
+
+  const LogoutButton: React.FC = () => {
+    const router = useRouter()
+
+    const handleLogout = () => {
+      auth?.logout()
+      router.push("/")
+    }
+
+    return (
+      <li onClick={() => handleLogout()} className={styles.logout}>
+        Logout
+      </li>
+    )
+  }
 
   return (
     <header className={styles.header}>
@@ -21,14 +38,13 @@ const Header = () => {
         </Link>
 
         <ul>
-          {!!auth?.currentUser && ( //user loged in
-            <>
-              <li>{`Hi ${auth.currentUser.displayName}`}</li>
-              <li onClick={() => auth.logout()} className={styles.logout}>
-                Logout
-              </li>
-            </>
-          )}
+          {!!auth &&
+            !!auth.currentUser && ( //user loged in
+              <>
+                <li>{`Hi ${auth.currentUser.displayName}`}</li>
+                <LogoutButton />
+              </>
+            )}
           {!auth?.currentUser && ( // anonymous visitor
             <>
               <li>
@@ -39,6 +55,7 @@ const Header = () => {
               </li>
             </>
           )}
+          {auth && !!auth.customClaims?.admin && <li>Admin</li>}
           <li>
             <Link href={"/elements"}>Components</Link>
           </li>
