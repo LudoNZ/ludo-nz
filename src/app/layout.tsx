@@ -11,7 +11,6 @@ import Head from "next/head"
 export const metadata: Metadata = {
   title: "Ludo",
   description: "web developer",
-  themeColor: "#1bb12f",
   icons: {
     icon: "/icons/icon-192.png",
   },
