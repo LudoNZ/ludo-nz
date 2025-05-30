@@ -6,8 +6,9 @@ import { useState } from "react"
 
 const ThemeColours = () => {
   return (
-    <>
+    <div className={styles.themeColours}>
       <h3>Theme Colours</h3>
+
       <div className={styles.primaryColourPickerSample}>
         <label htmlFor="primary-colour-picker">Set primary-color:</label>
         <input
@@ -21,7 +22,20 @@ const ThemeColours = () => {
           }
         />
       </div>
-    </>
+      <div className={styles.secondaryColourPickerSample}>
+        <label htmlFor="secondary-colour-picker">Set secondary-color:</label>
+        <input
+          id="secondary-colour-picker"
+          type="color"
+          onChange={(e) =>
+            document.documentElement.style.setProperty(
+              "--color-secondary",
+              e.target.value
+            )
+          }
+        />
+      </div>
+    </div>
   )
 }
 const Buttons = () => {
@@ -79,7 +93,7 @@ const Buttons = () => {
 
 const ElementsPage = () => {
   return (
-    <div>
+    <div className={styles.elementsPage}>
       <h2>Components</h2>
       <br />
 
