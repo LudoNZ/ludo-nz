@@ -3,7 +3,8 @@
 import Button, { Size, Variant } from "@/components/button/button"
 import styles from "./elementsPage.module.scss"
 import { useState } from "react"
-import { Theme } from "./Theme"
+import { Theme } from "./Theme/Theme"
+import { ThemeDemo } from "./Theme/themeDemo"
 
 const ThemeColours = () => {
   const defaultTheme = new Theme(
@@ -83,6 +84,7 @@ const ThemeColours = () => {
           <div key={index}>{theme.render()}</div>
         ))}
       </div>
+      <ThemeDemo theme={themes[1]} />
     </div>
   )
 }
