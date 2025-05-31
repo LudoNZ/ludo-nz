@@ -52,3 +52,16 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+//layout
+.flex {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
