@@ -55,7 +55,11 @@ const Header = () => {
               </li>
             </>
           )}
-          {auth && !!auth.customClaims?.admin && <li>Admin</li>}
+          {auth && !!auth.customClaims?.admin && (
+            <li>
+              <Link href={"/admin-dashboard"}>Admin</Link>
+            </li>
+          )}
           <li>
             <Link href={"/elements"}>Components</Link>
           </li>

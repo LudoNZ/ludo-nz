@@ -7,6 +7,8 @@
   border-radius: var(--borderRadius);
   border: 2px solid $borderColor;
   background-color: $backgroundColor;
+  color: var(--foreground);
+  font-weight: 600;
 }
 
 // VARIANTS

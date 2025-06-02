@@ -1,0 +1,8 @@
+.themeTemplates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  .template {
+    width: clamp(300px, 45%, 500px);
+  }
+}

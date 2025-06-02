@@ -49,57 +49,57 @@ export class Theme {
     this.colorDanger = colorDanger
     this.borderRadius = borderRadius
   }
+}
 
-  private setTheme() {
-    const setProperties: { CssPropertyName: string; value: HexValue }[] = [
-      { CssPropertyName: "--color-primary", value: this.colorPrimary },
-      { CssPropertyName: "--color-secondary", value: this.colorSecondary },
-      { CssPropertyName: "--color-danger", value: this.colorDanger },
-      { CssPropertyName: "--background", value: this.background },
-      { CssPropertyName: "--foreground", value: this.foreground },
-    ]
+export function setTheme(theme: Theme) {
+  const setProperties: { CssPropertyName: string; value: HexValue }[] = [
+    { CssPropertyName: "--color-primary", value: theme.colorPrimary },
+    { CssPropertyName: "--color-secondary", value: theme.colorSecondary },
+    { CssPropertyName: "--color-danger", value: theme.colorDanger },
+    { CssPropertyName: "--background", value: theme.background },
+    { CssPropertyName: "--foreground", value: theme.foreground },
+  ]
 
-    setProperties.forEach((element) => {
-      document.documentElement.style.setProperty(
-        element.CssPropertyName,
-        element.value
-      )
-    })
-  }
+  setProperties.forEach((element) => {
+    document.documentElement.style.setProperty(
+      element.CssPropertyName,
+      element.value
+    )
+  })
+}
 
-  public render(): ReactNode {
-    return (
-      <div
-        className={styles.themeSample}
+export const RenderThemePallete: React.FC<{ theme: Theme }> = ({ theme }) => {
+  return (
+    <div
+      className={styles.themeSample}
+      style={{
+        backgroundColor: theme.background,
+        color: theme.foreground,
+        outline: `2px solid ${theme.colorSecondary}`,
+      }}
+    >
+      <h4>{theme.name}</h4>
+      <ColourSample colour={theme.colorPrimary} label="primary" />
+      <ColourSample colour={theme.colorSecondary} label="secondary" />
+      <ColourSample colour={theme.colorDanger} label="danger" />
+      <ColourSample colour={theme.background} label="background" />
+      <ColourSample
+        colour={theme.foreground}
+        label="foreground"
         style={{
-          backgroundColor: this.background,
-          color: this.foreground,
-          outline: `2px solid ${this.colorSecondary}`,
+          width: "100px",
+          height: "40px",
+          backgroundColor: theme.foreground,
+          color: theme.background,
+        }}
+      />
+      <Button
+        onClick={() => {
+          setTheme(theme)
         }}
       >
-        <h4>{this.name}</h4>
-        <ColourSample colour={this.colorPrimary} label="primary" />
-        <ColourSample colour={this.colorSecondary} label="secondary" />
-        <ColourSample colour={this.colorDanger} label="danger" />
-        <ColourSample colour={this.background} label="background" />
-        <ColourSample
-          colour={this.foreground}
-          label="foreground"
-          style={{
-            width: "100px",
-            height: "40px",
-            backgroundColor: this.foreground,
-            color: this.background,
-          }}
-        />
-        <Button
-          onClick={() => {
-            this.setTheme()
-          }}
-        >
-          Select Theme
-        </Button>
-      </div>
-    )
-  }
+        Select Theme
+      </Button>
+    </div>
+  )
 }
