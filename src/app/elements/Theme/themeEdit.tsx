@@ -7,7 +7,8 @@ import Button from "@/components/button/button"
 export const ThemeEdit: React.FC<{
   theme: Theme
   dispatch: React.Dispatch<ThemeReducerActions>
-}> = ({ theme, dispatch }) => {
+  addTheme: () => void
+}> = ({ theme, dispatch, addTheme }) => {
   const ColourProperty: React.FC<{
     propertyName: string
     hexValue: string
@@ -33,8 +34,22 @@ export const ThemeEdit: React.FC<{
   return (
     <div className={styles.themeEdit}>
       <h2>Theme Editor</h2>
-      <h3>{theme.name}</h3>
+
       <div className={styles.themeColours}>
+        <div className={styles.nameProperty}>
+          <span>name:</span>
+          <input
+            type="text"
+            value={theme.name}
+            onChange={(e) =>
+              dispatch({
+                property: "name",
+                type: "update",
+                value: e.target.value,
+              })
+            }
+          />
+        </div>
         <ColourProperty
           propertyName="primary"
           hexValue={theme.colorPrimary}
@@ -76,6 +91,7 @@ export const ThemeEdit: React.FC<{
         />
       </div>
       <Button onClick={() => setTheme(theme)}>Test Theme</Button>
+      <Button onClick={() => addTheme()}>Save Theme</Button>
     </div>
   )
 }

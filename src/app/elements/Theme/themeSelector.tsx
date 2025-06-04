@@ -1,4 +1,4 @@
-import { useReducer } from "react"
+import { useReducer, useState } from "react"
 import { themes } from "./savedThemes"
 import { ThemeDemo } from "./themeDemo"
 import { ThemeEdit } from "./themeEdit"
@@ -7,12 +7,13 @@ import { themeReducer } from "./themeReducer"
 
 export const ThemeSelector = () => {
   const [state, dispatch] = useReducer(themeReducer, themes[0])
+  const [themeSelection, setThemes] = useState(themes)
 
   return (
     <div>
       <h2>Theme Selector</h2>
       <div className={styles.themeTemplates}>
-        {themes.map((theme) => (
+        {themeSelection.map((theme) => (
           <div key={theme.name} className={styles.template}>
             <ThemeDemo
               theme={theme}
@@ -21,7 +22,11 @@ export const ThemeSelector = () => {
           </div>
         ))}
       </div>
-      <ThemeEdit theme={state} dispatch={dispatch} />
+      <ThemeEdit
+        theme={state}
+        dispatch={dispatch}
+        addTheme={() => setThemes((currentThemes) => [...currentThemes, state])}
+      />
     </div>
   )
 }
