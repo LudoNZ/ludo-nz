@@ -54,9 +54,8 @@ const ElementsPage = () => {
     <div className={styles.elementsPage}>
       <h2>Components</h2>
       <br />
-
       <Buttons />
-      {/* <ThemeColours /> */}
+      <br />
       <ThemeSelector />
     </div>
   )

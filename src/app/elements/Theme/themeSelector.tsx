@@ -22,6 +22,7 @@ export const ThemeSelector = () => {
           </div>
         ))}
       </div>
+      <br />
       <ThemeEdit
         theme={state}
         dispatch={dispatch}

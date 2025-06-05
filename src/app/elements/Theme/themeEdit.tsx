@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { setTheme, Theme } from "./Theme"
 import styles from "./themeEdit.module.scss"
 import { ThemeReducerActions } from "./themeReducer"
@@ -37,33 +37,33 @@ export const ThemeEdit: React.FC<{
     const [editingName, setEditingName] = useState(false)
     const [formString, setFormString] = useState(theme.name)
 
+    const closeModal = () => {
+      setEditingName(false)
+      setFormString(theme.name)
+    }
+
     return (
       <>
-        <div className={styles.nameProperty}>
+        <div
+          className={styles.nameProperty}
+          onClick={() => {
+            setEditingName(true)
+          }}
+        >
           <span>name:</span>
-          <span
-            className={styles.name}
-            onClick={() => {
-              setEditingName(true)
-            }}
-          >
+          <span className={styles.name}>
             {theme.name}
             <span className={styles.pencilBox}>
               <SvgPencil />
             </span>
           </span>
         </div>
-        <Modal
-          closeModal={() => {
-            setEditingName(false)
-            setFormString(theme.name)
-          }}
-          isActive={editingName}
-        >
+        <Modal closeModal={() => closeModal()} isActive={editingName}>
           <form
             className={styles.editNameModalContent}
             onSubmit={(e) => {
               e.preventDefault()
+              if (!editingName) return //negate inactive 'Enter' action
               dispatch({
                 property: "name",
                 type: "update",

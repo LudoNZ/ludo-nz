@@ -28,6 +28,12 @@ const IndexPage: React.FC = () => {
       </div>
 
       <h4>Website currently in construction..... Content to come</h4>
+
+      <p>
+        check out the theme Editor im currently working on{" "}
+        <Link href={"/elements"}>Here</Link>. soon to be connected to firestore
+        database
+      </p>
     </div>
   )
 }

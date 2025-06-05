@@ -1,6 +1,5 @@
-import React, { JSX, useState } from "react"
+import React, { JSX, useEffect } from "react"
 import styles from "./modal.module.scss"
-import Button from "@/components/button/button"
 
 interface ModalParams {
   isActive: boolean
@@ -13,6 +12,22 @@ export const Modal: React.FC<ModalParams> = ({
   closeModal,
   children,
 }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key == "Escape") {
+        closeModal()
+      }
+    }
+
+    if (isActive) {
+      window.addEventListener("keydown", handleKeyDown)
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isActive])
+
   return (
     <div
       className={styles.modalPosition}

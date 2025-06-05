@@ -47,7 +47,11 @@ export const Buttons = () => {
           <HeightSetter />
           <VariantSetter />
         </div>
-        <Button size={showcaseSize} variant={showcaseVariant}>
+        <Button
+          size={showcaseSize}
+          variant={showcaseVariant}
+          onClick={() => {}}
+        >
           {`${showcaseSize} ${showcaseVariant}`}
         </Button>
       </div>
