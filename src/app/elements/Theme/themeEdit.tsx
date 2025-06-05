@@ -3,6 +3,8 @@ import { setTheme, Theme } from "./Theme"
 import styles from "./themeEdit.module.scss"
 import { ThemeReducerActions } from "./themeReducer"
 import Button from "@/components/button/button"
+import { Modal } from "../Modal/modal"
+import { SvgPencil } from "@/icons/pencil-solid"
 
 export const ThemeEdit: React.FC<{
   theme: Theme
@@ -31,25 +33,69 @@ export const ThemeEdit: React.FC<{
     )
   }
 
+  const EditNameProperty: React.FC = () => {
+    const [editingName, setEditingName] = useState(false)
+    const [formString, setFormString] = useState(theme.name)
+
+    return (
+      <>
+        <div className={styles.nameProperty}>
+          <span>name:</span>
+          <span
+            className={styles.name}
+            onClick={() => {
+              setEditingName(true)
+            }}
+          >
+            {theme.name}
+            <span className={styles.pencilBox}>
+              <SvgPencil />
+            </span>
+          </span>
+        </div>
+        <Modal
+          closeModal={() => {
+            setEditingName(false)
+            setFormString(theme.name)
+          }}
+          isActive={editingName}
+        >
+          <form
+            className={styles.editNameModalContent}
+            onSubmit={(e) => {
+              e.preventDefault()
+              dispatch({
+                property: "name",
+                type: "update",
+                value: formString,
+              })
+              setEditingName(false)
+            }}
+          >
+            <h4>Edit Name:</h4>
+            <div className="flex">
+              <input
+                type="text"
+                value={formString}
+                onChange={(e) => setFormString(e.target.value)}
+              />
+              <Button type="submit" onClick={() => {}}>
+                Save
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      </>
+    )
+  }
+
   return (
     <div className={styles.themeEdit}>
       <h2>Theme Editor</h2>
 
       <div className={styles.themeColours}>
-        <div className={styles.nameProperty}>
-          <span>name:</span>
-          <input
-            type="text"
-            value={theme.name}
-            onChange={(e) =>
-              dispatch({
-                property: "name",
-                type: "update",
-                value: e.target.value,
-              })
-            }
-          />
-        </div>
+        <EditNameProperty />
+
         <ColourProperty
           propertyName="primary"
           hexValue={theme.colorPrimary}
@@ -89,9 +135,11 @@ export const ThemeEdit: React.FC<{
             dispatch({ type: "update", property: "colorDanger", value: value })
           }
         />
+        <div className={styles.editorButtons}>
+          <Button onClick={() => setTheme(theme)}>Test Theme</Button>
+          <Button onClick={() => addTheme()}>Save Theme</Button>
+        </div>
       </div>
-      <Button onClick={() => setTheme(theme)}>Test Theme</Button>
-      <Button onClick={() => addTheme()}>Save Theme</Button>
     </div>
   )
 }

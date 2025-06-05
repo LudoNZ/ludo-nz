@@ -9,6 +9,13 @@
     }
     gap: 0.5rem;
   }
+  .editorButtons {
+    margin-top: 1rem;
+    grid-column: span 3;
+    display: flex;
+    justify-content: end;
+    gap: 1rem;
+  }
 }
 
 .nameProperty {
@@ -19,6 +26,25 @@
   span {
     text-align: right;
   }
+  .name {
+    grid-column: span 2;
+    text-align: start;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+  }
+  .pencilBox {
+    display: inline-block;
+    position: relative;
+    height: 2rem;
+    width: 2rem;
+    svg {
+      fill: var(--foreground);
+    }
+  }
+}
+.editNameModalContent {
+  padding: 1rem;
 }
 .colourProperty {
   width: max-content;

@@ -30,7 +30,7 @@ export const ThemeDemo: React.FC<{ theme: Theme; editTheme: () => void }> = ({
         <Button variant="secondary" onClick={() => editTheme()}>
           Edit
         </Button>
-        <Button variant="danger" disabled={true}>
+        <Button variant="danger" onClick={() => {}} disabled={true}>
           Delete
         </Button>
       </div>

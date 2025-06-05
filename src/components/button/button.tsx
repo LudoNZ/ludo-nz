@@ -8,7 +8,7 @@ export type Size = "small" | "medium" | "large"
 
 type ButtonProps = {
   children: React.ReactNode
-  onClick?: () => void
+  onClick: () => void
   type?: "button" | "submit" | "reset"
   disabled?: boolean
   variant?: Variant
@@ -40,7 +40,7 @@ const Button: React.FC<ButtonProps> = ({
   return (
     <button
       className={`${variantClassMap[variant]} ${sizeClassMap[size]} ${className}`}
-      onClick={onClick}
+      onClick={() => onClick()}
       type={type}
       disabled={disabled}
     >
