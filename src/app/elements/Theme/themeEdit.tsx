@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { setTheme, Theme } from "./Theme"
 import styles from "./themeEdit.module.scss"
 import { ThemeReducerActions } from "./themeReducer"
@@ -36,19 +36,24 @@ export const ThemeEdit: React.FC<{
   const EditNameProperty: React.FC = () => {
     const [editingName, setEditingName] = useState(false)
     const [formString, setFormString] = useState(theme.name)
+    const inputRef = useRef<HTMLInputElement>(null)
 
     const closeModal = () => {
       setEditingName(false)
       setFormString(theme.name)
     }
 
+    useEffect(() => {
+      if (editingName && inputRef.current) {
+        inputRef.current.focus()
+      }
+    }, [editingName])
+
     return (
       <>
         <div
           className={styles.nameProperty}
-          onClick={() => {
-            setEditingName(true)
-          }}
+          onClick={() => setEditingName(true)}
         >
           <span>name:</span>
           <span className={styles.name}>
@@ -58,12 +63,14 @@ export const ThemeEdit: React.FC<{
             </span>
           </span>
         </div>
-        <Modal closeModal={() => closeModal()} isActive={editingName}>
+
+        <Modal closeModal={closeModal} isActive={editingName}>
           <form
             className={styles.editNameModalContent}
             onSubmit={(e) => {
               e.preventDefault()
-              if (!editingName) return //negate inactive 'Enter' action
+              if (!editingName) return
+
               dispatch({
                 property: "name",
                 type: "update",
@@ -75,6 +82,7 @@ export const ThemeEdit: React.FC<{
             <h4>Edit Name:</h4>
             <div className="flex">
               <input
+                ref={inputRef}
                 type="text"
                 value={formString}
                 onChange={(e) => setFormString(e.target.value)}

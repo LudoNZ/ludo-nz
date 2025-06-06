@@ -6,7 +6,6 @@ import styles from "./themeSelector.module.scss"
 import { themeReducer } from "./themeReducer"
 import { Theme } from "./Theme"
 import Button from "@/components/button/button"
-import { stringify } from "querystring"
 
 export const ThemeSelector = () => {
   const [state, dispatch] = useReducer(themeReducer, themes[0])

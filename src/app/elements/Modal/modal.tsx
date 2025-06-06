@@ -26,7 +26,7 @@ export const Modal: React.FC<ModalParams> = ({
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [isActive])
+  }, [isActive, closeModal])
 
   return (
     <div
