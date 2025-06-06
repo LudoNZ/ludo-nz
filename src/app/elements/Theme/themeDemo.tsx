@@ -4,10 +4,11 @@ import Button from "@/components/button/button"
 import { setTheme, Theme } from "./Theme"
 import styles from "./themeDemo.module.scss"
 
-export const ThemeDemo: React.FC<{ theme: Theme; editTheme: () => void }> = ({
-  theme,
-  editTheme,
-}) => {
+export const ThemeDemo: React.FC<{
+  theme: Theme
+  editTheme: () => void
+  deleteTheme: () => void
+}> = ({ theme, editTheme, deleteTheme }) => {
   const themeStyles: React.CSSProperties = {
     color: theme.foreground,
     // These are custom CSS variables
@@ -30,7 +31,12 @@ export const ThemeDemo: React.FC<{ theme: Theme; editTheme: () => void }> = ({
         <Button variant="secondary" onClick={() => editTheme()}>
           Edit
         </Button>
-        <Button variant="danger" onClick={() => {}} disabled={true}>
+        <Button
+          variant="danger"
+          onClick={() => {
+            deleteTheme()
+          }}
+        >
           Delete
         </Button>
       </div>
