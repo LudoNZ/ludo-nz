@@ -79,7 +79,7 @@ export const ThemeEdit: React.FC<{
               setEditingName(false)
             }}
           >
-            <h4>Edit Name:</h4>
+            <h4>Edit Theme Name:</h4>
             <div className="flex">
               <input
                 ref={inputRef}

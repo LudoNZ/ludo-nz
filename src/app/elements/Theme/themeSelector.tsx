@@ -32,7 +32,7 @@ export const ThemeSelector = () => {
               editTheme={() => dispatch({ type: "set", value: theme })}
               deleteTheme={() =>
                 setThemes((themes) =>
-                  themes.filter((t) => t.name != state.name)
+                  themes.filter((t) => t.name != theme.name)
                 )
               }
             />
