@@ -191,7 +191,7 @@ const ContactForm: React.FC = () => {
 
         {submitStatus === "success" && (
           <div className={styles.successMessage}>
-            ✓ Thank you! Your message has been sent. I'll get back to you soon.
+            ✓ Thank you! Your message has been sent. I&apos;ll get back to you soon.
           </div>
         )}
 

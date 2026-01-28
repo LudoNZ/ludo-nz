@@ -17,7 +17,7 @@ const AboutPage: React.FC = () => {
         <div className={styles.bio}>
           <h2>Who I Am</h2>
           <p>
-            I'm a front-end web developer passionate about building modern, user-friendly 
+            I&apos;m a front-end web developer passionate about building modern, user-friendly 
             web applications. With a background in construction, I bring a unique perspective 
             to software development, understanding the real-world challenges that industries 
             face and how technology can solve them.
@@ -76,14 +76,14 @@ const AboutPage: React.FC = () => {
             practical, efficient, and tailored to real-world use cases.
           </p>
           <p>
-            I'm always learning and staying up-to-date with the latest web technologies and 
-            best practices. Whether it's exploring new frameworks, optimizing performance, 
-            or improving user experience, I'm committed to delivering high-quality solutions.
+            I&apos;m always learning and staying up-to-date with the latest web technologies and 
+            best practices. Whether it&apos;s exploring new frameworks, optimizing performance, 
+            or improving user experience, I&apos;m committed to delivering high-quality solutions.
           </p>
         </div>
 
         <div className={styles.cta}>
-          <h2>Let's Work Together</h2>
+          <h2>Let&apos;s Work Together</h2>
           <p>
             Interested in collaborating on a project or have a question? 
             Feel free to <a href="/contact">get in touch</a>.

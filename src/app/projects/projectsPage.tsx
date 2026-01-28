@@ -43,7 +43,7 @@ const ProjectsPage: React.FC = () => {
       <section className={styles.hero}>
         <h1 className={styles.title}>My Projects</h1>
         <p className={styles.subtitle}>
-          A collection of web applications and tools I've built
+          A collection of web applications and tools I&apos;ve built
         </p>
       </section>
 

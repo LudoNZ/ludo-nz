@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { firestore } from "@/firebase/server"
+import { firestore } from "../../../../firebase/server"
 import { FieldValue } from "firebase-admin/firestore"
 
 export async function POST(request: NextRequest) {
@@ -67,7 +67,7 @@ This message was sent from the contact form on ludo.co.nz
       name,
       email,
       subject,
-      message,
+      formMessage: message,
       // Timestamp for tracking
       timestamp: FieldValue.serverTimestamp(),
       // Status field (as specified in plan)

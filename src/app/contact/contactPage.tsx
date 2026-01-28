@@ -10,7 +10,7 @@ const ContactPage: React.FC = () => {
       <section className={styles.hero}>
         <h1 className={styles.title}>Get In Touch</h1>
         <p className={styles.subtitle}>
-          Have a question or want to work together? I'd love to hear from you.
+          Have a question or want to work together? I&apos;d love to hear from you.
         </p>
       </section>
 

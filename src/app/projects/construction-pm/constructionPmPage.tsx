@@ -70,7 +70,7 @@ const ConstructionPmPage: React.FC = () => {
           <p>
             The application streamlines construction workflows by centralizing project information, 
             facilitating communication between stakeholders, and providing real-time visibility 
-            into project status. It's designed to reduce administrative overhead and improve 
+            into project status. It&apos;s designed to reduce administrative overhead and improve 
             project coordination efficiency.
           </p>
         </div>
@@ -103,7 +103,7 @@ const ConstructionPmPage: React.FC = () => {
         <h2>Construction Industry Focus</h2>
         <div className={styles.focusContent}>
           <p>
-            Understanding the construction industry's specific needs, this application addresses:
+            Understanding the construction industry&apos;s specific needs, this application addresses:
           </p>
           <ul>
             <li>Multi-project coordination and resource allocation</li>
