@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ContactUs collection - only server-side writes via API route
+    // Client-side access is restricted for security
+    match /ContactUs/{document} {
+      // Deny all client-side reads and writes
+      // Only server-side (admin SDK) can access this collection
+      allow read: if false;
+      allow write: if false;
+    }
+    
+    // Allow authenticated admin users to read ContactUs (optional)
+    // Uncomment and adjust if you want admin dashboard access
+    // match /ContactUs/{document} {
+    //   allow read: if request.auth != null && 
+    //                  request.auth.token.admin == true;
+    //   allow write: if false;
+    // }
+    
+    // Default: deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

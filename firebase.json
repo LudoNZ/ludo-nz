@@ -1,4 +1,7 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "site": "ludos-website",

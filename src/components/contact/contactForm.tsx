@@ -83,11 +83,20 @@ const ContactForm: React.FC = () => {
     setSubmitStatus("idle")
 
     try {
-      // TODO: Integrate with email service (EmailJS, Formspree, or Firebase Functions)
-      // For now, simulate form submission
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
 
-      // Simulate success
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit form")
+      }
+
       setSubmitStatus("success")
       setFormData({
         name: "",
