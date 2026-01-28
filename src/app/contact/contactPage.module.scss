@@ -1,0 +1,43 @@
+.contactPage {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  .hero {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+
+    .title {
+      font-size: clamp(2rem, 5vw, 3rem);
+      color: var(--color-primary);
+      margin-bottom: 1rem;
+      font-family: "Orbitron", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .subtitle {
+      font-size: clamp(1.2rem, 3vw, 1.5rem);
+      color: var(--foreground);
+      opacity: 0.9;
+    }
+  }
+
+  .content {
+    max-width: 700px;
+    margin: 0 auto;
+
+    .formSection {
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 1rem 0.5rem;
+
+    .infoSection .infoCard {
+      padding: 1.25rem;
+    }
+  }
+}

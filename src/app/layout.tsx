@@ -6,11 +6,37 @@ import styles from "./layout.module.scss"
 import { AuthProvider } from "../context/auth"
 import Header from "@/components/layout/header"
 import { Share_Tech_Mono } from "next/font/google"
-import Head from "next/head"
 
 export const metadata: Metadata = {
-  title: "Ludo",
-  description: "web developer",
+  title: "Ludo Bourneville - Front-end Web Developer",
+  description:
+    "Front-end web developer specializing in React, Next.js, and TypeScript. Building modern web applications and construction project management solutions.",
+  keywords: [
+    "web developer",
+    "front-end developer",
+    "React",
+    "Next.js",
+    "TypeScript",
+    "construction software",
+    "project management",
+    "Firebase",
+  ],
+  authors: [{ name: "Ludo Bourneville" }],
+  creator: "Ludo Bourneville",
+  openGraph: {
+    title: "Ludo Bourneville - Front-end Web Developer",
+    description:
+      "Front-end web developer specializing in React, Next.js, and TypeScript. Building modern web applications and construction project management solutions.",
+    type: "website",
+    locale: "en_NZ",
+    siteName: "Ludo.co.nz",
+  },
+  twitter: {
+    card: "summary",
+    title: "Ludo Bourneville - Front-end Web Developer",
+    description:
+      "Front-end web developer specializing in React, Next.js, and TypeScript.",
+  },
   icons: {
     icon: "/icons/icon-192.png",
   },
@@ -29,11 +55,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <Head>
+      <head>
         <link rel="icon" href="/favicon.ico" type="image/x-icon" />
         <meta name="theme-color" content="#1bb12f" />
         <link rel="manifest" href="/manifest.json" />
-      </Head>
+      </head>
       <body className={`${styles.layout} ${shareTechMono.className}`}>
         <AuthProvider>
           <Header />

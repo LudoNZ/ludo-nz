@@ -1,0 +1,203 @@
+.projectsPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  .hero {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+
+    .title {
+      font-size: clamp(2rem, 5vw, 3rem);
+      color: var(--color-primary);
+      margin-bottom: 1rem;
+      font-family: "Orbitron", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .subtitle {
+      font-size: clamp(1.2rem, 3vw, 1.5rem);
+      color: var(--foreground);
+      opacity: 0.9;
+    }
+  }
+
+  .sectionTitle {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    color: var(--color-primary);
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+
+  .featuredSection {
+    margin-bottom: 4rem;
+
+    .featuredGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+    }
+
+    .featuredCard {
+      padding: 2rem;
+      background-color: var(--background);
+      border: 2px solid var(--color-primary);
+      border-radius: var(--borderRadius);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+      &:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(27, 177, 47, 0.3);
+      }
+
+      .projectTitle {
+        font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+        color: var(--foreground);
+        margin-bottom: 1rem;
+      }
+
+      .projectDescription {
+        font-size: 1rem;
+        line-height: 1.6;
+        color: var(--foreground);
+        opacity: 0.9;
+        margin-bottom: 1.5rem;
+      }
+
+      .techTags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+
+        .techTag {
+          padding: 0.4rem 0.8rem;
+          background-color: var(--color-primary);
+          color: var(--background);
+          border-radius: var(--borderRadius);
+          font-size: 0.85rem;
+          font-weight: 500;
+        }
+      }
+
+      .projectLink {
+        color: var(--color-primary);
+        font-weight: 500;
+        text-decoration: none;
+        font-size: 1.1rem;
+        transition: opacity 0.3s ease;
+
+        &:hover {
+          opacity: 0.7;
+        }
+      }
+    }
+  }
+
+  .projectsSection {
+    margin-bottom: 3rem;
+
+    .projectsGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+    }
+
+    .projectCard {
+      padding: 1.5rem;
+      background-color: var(--background);
+      border: 1px solid var(--color-primary);
+      border-radius: var(--borderRadius);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+      &:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(27, 177, 47, 0.2);
+      }
+
+      .projectTitle {
+        font-size: 1.3rem;
+        color: var(--foreground);
+        margin-bottom: 1rem;
+      }
+
+      .projectDescription {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: var(--foreground);
+        opacity: 0.9;
+        margin-bottom: 1rem;
+      }
+
+      .techTags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+
+        .techTag {
+          padding: 0.35rem 0.7rem;
+          background-color: var(--color-primary);
+          color: var(--background);
+          border-radius: var(--borderRadius);
+          font-size: 0.8rem;
+          font-weight: 500;
+        }
+      }
+
+      .projectLink {
+        color: var(--color-primary);
+        font-weight: 500;
+        text-decoration: none;
+        transition: opacity 0.3s ease;
+
+        &:hover {
+          opacity: 0.7;
+        }
+      }
+    }
+  }
+
+  .cta {
+    text-align: center;
+    padding: 2rem;
+    background-color: var(--background);
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    margin-top: 3rem;
+
+    p {
+      font-size: 1.1rem;
+      color: var(--foreground);
+      margin: 0;
+
+      a {
+        color: var(--color-primary);
+        text-decoration: underline;
+        font-weight: 500;
+        transition: opacity 0.3s ease;
+
+        &:hover {
+          opacity: 0.7;
+        }
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 1rem 0.5rem;
+
+    .featuredSection .featuredGrid,
+    .projectsSection .projectsGrid {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    .featuredCard,
+    .projectCard {
+      padding: 1.5rem;
+    }
+  }
+}

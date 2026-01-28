@@ -1,0 +1,236 @@
+.constructionPmPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  .hero {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+
+    .title {
+      font-size: clamp(2rem, 5vw, 3rem);
+      color: var(--color-primary);
+      margin-bottom: 1rem;
+      font-family: "Orbitron", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .subtitle {
+      font-size: clamp(1.2rem, 3vw, 1.5rem);
+      color: var(--foreground);
+      opacity: 0.9;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+  }
+
+  section {
+    margin-bottom: 3rem;
+
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      color: var(--color-primary);
+      margin-bottom: 1.5rem;
+    }
+
+    h3 {
+      font-size: 1.3rem;
+      color: var(--foreground);
+      margin-bottom: 0.75rem;
+    }
+
+    p {
+      font-size: 1rem;
+      line-height: 1.8;
+      color: var(--foreground);
+      opacity: 0.9;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .overview {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+
+    .overviewContent {
+      p {
+        margin-bottom: 1.5rem;
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+    }
+  }
+
+  .features {
+    .featuresGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+
+      .featureCard {
+        padding: 1.5rem;
+        background-color: var(--background);
+        border: 1px solid var(--color-primary);
+        border-radius: var(--borderRadius);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+        &:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 5px 15px rgba(27, 177, 47, 0.2);
+        }
+
+        h3 {
+          color: var(--color-primary);
+        }
+
+        p {
+          margin: 0;
+          font-size: 0.95rem;
+        }
+      }
+    }
+  }
+
+  .techStack {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+
+    .techList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+
+      .techTag {
+        padding: 0.5rem 1rem;
+        background-color: var(--color-primary);
+        color: var(--background);
+        border-radius: var(--borderRadius);
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+    }
+  }
+
+  .industryFocus {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+
+    .focusContent {
+      ul {
+        list-style: none;
+        padding: 0;
+        margin-top: 1rem;
+
+        li {
+          padding: 0.75rem 0;
+          padding-left: 1.5rem;
+          color: var(--foreground);
+          opacity: 0.9;
+          position: relative;
+
+          &::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--color-primary);
+            font-weight: bold;
+          }
+
+          &:not(:last-child) {
+            border-bottom: 1px solid rgba(27, 177, 47, 0.1);
+          }
+        }
+      }
+    }
+  }
+
+  .demo {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    text-align: center;
+
+    .demoContent {
+      p {
+        margin-bottom: 1.5rem;
+      }
+
+      .links {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+
+        .linkButton {
+          padding: 0.75rem 2rem;
+          background-color: var(--color-primary);
+          color: var(--background);
+          border-radius: var(--borderRadius);
+          text-decoration: none;
+          font-weight: 500;
+          transition: opacity 0.3s ease;
+
+          &:hover:not([style*="cursor: not-allowed"]) {
+            opacity: 0.8;
+          }
+        }
+      }
+    }
+  }
+
+  .backLink {
+    text-align: center;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-primary);
+
+    a {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: opacity 0.3s ease;
+
+      &:hover {
+        opacity: 0.7;
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 1rem 0.5rem;
+
+    .overview,
+    .techStack,
+    .industryFocus,
+    .demo {
+      padding: 1.5rem;
+    }
+
+    .features .featuresGrid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .demo .demoContent .links {
+      flex-direction: column;
+      align-items: stretch;
+
+      .linkButton {
+        width: 100%;
+      }
+    }
+  }
+}

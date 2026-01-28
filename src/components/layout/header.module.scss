@@ -1,16 +1,88 @@
 .header {
   padding: 1rem;
   background-color: var(--color-primary);
+  
   .navigation {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+
     .logoBox {
       position: relative;
-      height: 100px;
-      width: 120px;
+      height: 80px;
+      width: 100px;
+      transition: transform 0.3s ease;
+
+      &:hover {
+        transform: scale(1.05);
+      }
     }
-    .logout {
-      cursor: pointer;
+
+    .navLinks {
+      display: flex;
+      list-style: none;
+      gap: 1.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 0;
+      padding: 0;
+
+      li {
+        a {
+          color: var(--background);
+          text-decoration: none;
+          font-weight: 500;
+          transition: opacity 0.3s ease;
+          text-transform: capitalize;
+
+          &:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+          }
+        }
+
+        &.authLink {
+          margin-left: 1rem;
+          padding-left: 1rem;
+          border-left: 1px solid rgba(255, 255, 255, 0.3);
+        }
+      }
+
+      .logout {
+        cursor: pointer;
+        color: var(--background);
+        font-weight: 500;
+        transition: opacity 0.3s ease;
+
+        &:hover {
+          opacity: 0.8;
+        }
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 0.75rem;
+
+    .navigation {
+      .logoBox {
+        height: 60px;
+        width: 75px;
+      }
+
+      .navLinks {
+        gap: 1rem;
+        font-size: 0.9rem;
+
+        li.authLink {
+          margin-left: 0.5rem;
+          padding-left: 0.5rem;
+        }
+      }
     }
   }
 }

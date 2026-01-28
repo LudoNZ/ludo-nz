@@ -1,0 +1,136 @@
+.contactForm {
+  padding: 2rem;
+  background-color: var(--background);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h2 {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    color: var(--color-primary);
+    margin-bottom: 1.5rem;
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+
+    .formGroup {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      label {
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--foreground);
+        opacity: 0.9;
+
+        .required {
+          color: var(--color-danger);
+        }
+      }
+
+      input,
+      textarea {
+        padding: 0.75rem;
+        border: 1px solid var(--color-primary);
+        border-radius: var(--borderRadius);
+        background-color: var(--background);
+        color: var(--foreground);
+        font-size: 1rem;
+        font-family: inherit;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
+        }
+
+        &:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        &.inputError {
+          border-color: var(--color-danger);
+        }
+
+        &::placeholder {
+          color: var(--foreground);
+          opacity: 0.5;
+        }
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 120px;
+      }
+
+      .error {
+        color: var(--color-danger);
+        font-size: 0.85rem;
+        margin-top: -0.25rem;
+      }
+    }
+
+    .successMessage,
+    .errorMessage {
+      padding: 1rem;
+      border-radius: var(--borderRadius);
+      font-size: 0.95rem;
+      text-align: center;
+    }
+
+    .successMessage {
+      background-color: rgba(27, 177, 47, 0.1);
+      color: var(--color-primary);
+      border: 1px solid var(--color-primary);
+    }
+
+    .errorMessage {
+      background-color: rgba(177, 27, 27, 0.1);
+      color: var(--color-danger);
+      border: 1px solid var(--color-danger);
+    }
+
+    .submitButton {
+      padding: 0.75rem 2rem;
+      background-color: var(--color-primary);
+      color: var(--background);
+      border: 2px solid var(--color-primary);
+      border-radius: var(--borderRadius);
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      align-self: flex-start;
+
+      &:hover:not(:disabled) {
+        background-color: transparent;
+        color: var(--color-primary);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .contactForm {
+    padding: 1.5rem;
+
+    .form {
+      gap: 1.25rem;
+
+      .submitButton {
+        width: 100%;
+        align-self: stretch;
+      }
+    }
+  }
+}

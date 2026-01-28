@@ -37,32 +37,38 @@ const Header = () => {
           ></Image>
         </Link>
 
-        <ul>
+        <ul className={styles.navLinks}>
+          <li>
+            <Link href={"/"}>Home</Link>
+          </li>
+          <li>
+            <Link href={"/about"}>About</Link>
+          </li>
+          <li>
+            <Link href={"/projects"}>Projects</Link>
+          </li>
+          <li>
+            <Link href={"/contact"}>Contact</Link>
+          </li>
           {!!auth &&
             !!auth.currentUser && ( //user loged in
               <>
-                <li>{`Hi ${auth.currentUser.displayName}`}</li>
+                <li className={styles.authLink}>{`Hi ${auth.currentUser.displayName}`}</li>
                 <LogoutButton />
               </>
             )}
           {!auth?.currentUser && ( // anonymous visitor
             <>
-              <li>
-                <Link href={"/login"}>login</Link>
-              </li>
-              <li>
-                <Link href={"/register"}>register</Link>
+              <li className={styles.authLink}>
+                <Link href={"/login"}>Login</Link>
               </li>
             </>
           )}
           {auth && !!auth.customClaims?.admin && (
-            <li>
+            <li className={styles.authLink}>
               <Link href={"/admin-dashboard"}>Admin</Link>
             </li>
           )}
-          <li>
-            <Link href={"/elements"}>Components</Link>
-          </li>
         </ul>
       </nav>
     </header>
