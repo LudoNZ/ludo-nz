@@ -127,9 +127,6 @@ const ConstructionPmPage: React.FC = () => {
             <a href="#" className={styles.linkButton} style={{ opacity: 0.5, cursor: "not-allowed" }}>
               Live Demo (Coming Soon)
             </a>
-            <a href="#" className={styles.linkButton} style={{ opacity: 0.5, cursor: "not-allowed" }}>
-              Source Code (Coming Soon)
-            </a>
           </div>
         </div>
       </section>
