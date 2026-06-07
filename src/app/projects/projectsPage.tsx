@@ -25,6 +25,15 @@ const ProjectsPage: React.FC = () => {
       link: "/projects/construction-pm",
     },
     {
+      id: "cooking",
+      title: "Weekly Meal Planner",
+      description:
+        "A smart meal planning app that generates a randomised weekly menu, sources recipes from an open food API, and helps you build a shopping list with the right ingredients.",
+      tech: ["React", "Next.js", "TypeScript", "TheMealDB API", "Firebase"],
+      featured: false,
+      link: "/projects/cooking",
+    },
+    {
       id: "theme-editor",
       title: "Theme Editor",
       description:

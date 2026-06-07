@@ -1,0 +1,233 @@
+.cookingPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  .hero {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding: 2rem 0;
+
+    .title {
+      font-size: clamp(2rem, 5vw, 3rem);
+      color: var(--color-primary);
+      margin-bottom: 1rem;
+      font-family: "Orbitron", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .subtitle {
+      font-size: clamp(1.2rem, 3vw, 1.5rem);
+      color: var(--foreground);
+      opacity: 0.9;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+  }
+
+  section {
+    margin-bottom: 3rem;
+
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      color: var(--color-primary);
+      margin-bottom: 1.5rem;
+    }
+
+    h3 {
+      font-size: 1.4rem;
+      color: var(--foreground);
+      margin-bottom: 0.75rem;
+    }
+
+    p {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      color: var(--foreground);
+      opacity: 0.9;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .overview {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+
+    .overviewContent p:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .generator {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    text-align: center;
+
+    .generatorSubtitle {
+      opacity: 0.7;
+      margin-bottom: 1.5rem;
+    }
+
+    .generateButton {
+      padding: 0.9rem 2.5rem;
+      background-color: var(--color-primary);
+      color: var(--background);
+      border: none;
+      border-radius: var(--borderRadius);
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+      margin-bottom: 2rem;
+
+      &:hover:not(:disabled) {
+        opacity: 0.85;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+
+    .planGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+      text-align: left;
+      margin-top: 1rem;
+
+      .dayCard {
+        padding: 1.25rem;
+        border: 1px solid var(--color-primary);
+        border-radius: var(--borderRadius);
+        background-color: var(--background);
+
+        .dayName {
+          font-size: 1.1rem;
+          color: var(--color-primary);
+          margin-bottom: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .meal {
+          display: flex;
+          flex-direction: column;
+          margin-bottom: 0.6rem;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+
+          .mealLabel {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--color-primary);
+            opacity: 0.7;
+          }
+
+          .mealName {
+            font-size: 1rem;
+            color: var(--foreground);
+          }
+        }
+      }
+    }
+  }
+
+  .features {
+    .featuresGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+
+      .featureCard {
+        padding: 1.5rem;
+        background-color: var(--background);
+        border: 1px solid var(--color-primary);
+        border-radius: var(--borderRadius);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+
+        &:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 5px 15px rgba(27, 177, 47, 0.2);
+        }
+
+        h3 {
+          color: var(--color-primary);
+        }
+
+        p {
+          margin: 0;
+        }
+      }
+    }
+  }
+
+  .techStack {
+    padding: 2rem;
+    background-color: var(--background);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+
+    .techList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+
+      .techTag {
+        padding: 0.5rem 1rem;
+        background-color: var(--color-primary);
+        color: var(--background);
+        border-radius: var(--borderRadius);
+        font-size: 1rem;
+        font-weight: 500;
+      }
+    }
+  }
+
+  .backLink {
+    text-align: center;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-primary);
+
+    a {
+      color: var(--color-primary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: opacity 0.3s ease;
+
+      &:hover {
+        opacity: 0.7;
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    padding: 1rem 0.5rem;
+
+    .overview,
+    .generator,
+    .techStack {
+      padding: 1.5rem;
+    }
+
+    .features .featuresGrid {
+      grid-template-columns: 1fr;
+    }
+
+    .generator .planGrid {
+      grid-template-columns: 1fr;
+    }
+  }
+}
