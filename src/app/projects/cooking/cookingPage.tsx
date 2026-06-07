@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react"
 import styles from "./cookingPage.module.scss"
 import Link from "next/link"
+import Image from "next/image"
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -216,7 +217,7 @@ const CookingPage: React.FC = () => {
               <>
                 <div className={styles.modalHeader}>
                   {mealDetails.strMealThumb && (
-                    <img src={mealDetails.strMealThumb} alt={mealDetails.strMeal} className={styles.modalImage} />
+                    <Image src={mealDetails.strMealThumb} alt={mealDetails.strMeal} className={styles.modalImage} width={600} height={220} style={{ objectFit: "cover" }} />
                   )}
                   <h2 className={styles.modalTitle}>{mealDetails.strMeal}</h2>
                   <div className={styles.modalMeta}>
