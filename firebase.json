@@ -18,16 +18,11 @@
       "node_modules",
       ".git",
       ".firebase",
+      ".next",
       "firebase-debug.log",
       "firebase-debug.*.log",
       "functions"
     ],
     "alwaysDeployFromSource": true
-  },
-  "functions": [
-    {
-      "source": ".firebase/ludos-website/functions",
-      "codebase": "firebase-frameworks-ludos-website"
-    }
-  ]
+  }
 }
