@@ -48,7 +48,7 @@ env:
 
   # Sensitive server-side vars — set via: firebase apphosting:secrets:set <name>
   - variable: FIREBASE_PRIVATE_KEY_ID
-    secret: FIREBASE_PRIVATE_KEY_ID
+    secret: FIREBASE_PRIVATE_kEY_ID
 
   - variable: FIREBASE_PRIVATE_KEY
     secret: FIREBASE_PRIVATE_KEY
