@@ -1,15 +1,15 @@
 {
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "database": "(default)"
   },
   "hosting": {
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
-    ],
-    "site": "ludos-website",
-    "source": "."
+    ]
   },
   "apphosting": {
     "backendId": "ludo-web-app",
@@ -20,6 +20,13 @@
       "firebase-debug.log",
       "firebase-debug.*.log",
       "functions"
-    ]
-  }
+    ],
+    "alwaysDeployFromSource": true
+  },
+  "functions": [
+    {
+      "source": ".firebase/ludos-website/functions",
+      "codebase": "firebase-frameworks-ludos-website"
+    }
+  ]
 }
