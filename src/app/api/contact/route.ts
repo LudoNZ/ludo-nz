@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { firestore } from "../../../../firebase/server"
+import { getFirestoreAdmin } from "../../../../firebase/server"
 import { FieldValue } from "firebase-admin/firestore"
 
 export async function POST(request: NextRequest) {
@@ -77,9 +77,7 @@ This message was sent from the contact form on ludo.co.nz
       read: false,
     }
 
-    // Add document to ContactUs collection
-    // This will trigger the Firebase Trigger Email extension
-    const docRef = await firestore.collection("ContactUs").add(contactData)
+    const docRef = await getFirestoreAdmin().collection("ContactUs").add(contactData)
 
     return NextResponse.json(
       {

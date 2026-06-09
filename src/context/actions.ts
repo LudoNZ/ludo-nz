@@ -1,7 +1,7 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { auth } from "../../firebase/server"
+import { getAuthAdmin } from "../../firebase/server"
 
 export const removeToken = async () => {
   const cookieStore = await cookies()
@@ -17,6 +17,7 @@ export const setToken = async ({
   refreshToken: string
 }) => {
   try {
+    const auth = getAuthAdmin()
     const verifiedToken = await auth.verifyIdToken(token)
 
     if (!verifiedToken) {
@@ -24,10 +25,7 @@ export const setToken = async ({
     }
 
     const userRecord = await auth.getUser(verifiedToken.uid)
-    if (
-      process.env.ADMIN_EMAIL === userRecord.email &&
-      !userRecord.customClaims?.admin
-    )
+    if (process.env.ADMIN_EMAIL === userRecord.email && !userRecord.customClaims?.admin)
       auth.setCustomUserClaims(verifiedToken.uid, {
         admin: true,
       })
