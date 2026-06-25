@@ -12,6 +12,54 @@ interface DiceRollerProps {
 
 const DIE_VALUES = [1, 2, 3, 4, 5, 6]
 
+function DieDots({ value }: { value: number }) {
+  return (
+    <svg viewBox="0 0 100 100" className={styles.dieSvg}>
+      {value === 1 && <circle cx="50" cy="50" r="10" />}
+      {value === 2 && (
+        <>
+          <circle cx="30" cy="30" r="9" />
+          <circle cx="70" cy="70" r="9" />
+        </>
+      )}
+      {value === 3 && (
+        <>
+          <circle cx="30" cy="30" r="9" />
+          <circle cx="50" cy="50" r="9" />
+          <circle cx="70" cy="70" r="9" />
+        </>
+      )}
+      {value === 4 && (
+        <>
+          <circle cx="30" cy="30" r="9" />
+          <circle cx="70" cy="30" r="9" />
+          <circle cx="30" cy="70" r="9" />
+          <circle cx="70" cy="70" r="9" />
+        </>
+      )}
+      {value === 5 && (
+        <>
+          <circle cx="30" cy="30" r="8" />
+          <circle cx="70" cy="30" r="8" />
+          <circle cx="50" cy="50" r="8" />
+          <circle cx="30" cy="70" r="8" />
+          <circle cx="70" cy="70" r="8" />
+        </>
+      )}
+      {value === 6 && (
+        <>
+          <circle cx="30" cy="26" r="8" />
+          <circle cx="70" cy="26" r="8" />
+          <circle cx="30" cy="50" r="8" />
+          <circle cx="70" cy="50" r="8" />
+          <circle cx="30" cy="74" r="8" />
+          <circle cx="70" cy="74" r="8" />
+        </>
+      )}
+    </svg>
+  )
+}
+
 const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled }) => {
   const [die1, setDie1] = useState<number | null>(null)
   const [die2, setDie2] = useState<number | null>(null)
@@ -51,7 +99,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
               onClick={() => setDie1(v)}
               disabled={disabled}
             >
-              {v}
+              <DieDots value={v} />
             </button>
           ))}
         </div>
@@ -65,7 +113,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
               onClick={() => setDie2(v)}
               disabled={disabled}
             >
-              {v}
+              <DieDots value={v} />
             </button>
           ))}
         </div>
@@ -84,7 +132,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
       </div>
 
       <Button onClick={handleRandomRoll} disabled={disabled} variant="secondary" size="medium">
-        Quick Roll
+        Roll
       </Button>
     </div>
   )
