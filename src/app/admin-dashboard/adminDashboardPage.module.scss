@@ -1,2 +1,157 @@
+@import "/src/styles/config";
+
 .adminDashboardPage {
+  max-width: $MAX_WIDESCREEN;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+
+  h1 {
+    margin-bottom: 2rem;
+  }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+
+  h2 {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+}
+
+.filterToggle {
+  display: flex;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+}
+
+.filterBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  opacity: 0.5;
+  text-transform: uppercase;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  &.filterActive {
+    background: var(--color-primary);
+    color: var(--background);
+    opacity: 1;
+  }
+}
+
+.error {
+  color: var(--color-danger);
+  padding: 0.5rem;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.loading,
+.empty {
+  opacity: 0.5;
+  text-align: center;
+  padding: 2rem 0;
+  font-size: 0.85rem;
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+}
+
+.tableHeader {
+  display: flex;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  opacity: 0.5;
+  border-bottom: 1px solid var(--foreground);
+  gap: 0.5rem;
+}
+
+.tableRow {
+  display: flex;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  color: var(--foreground);
+  gap: 0.5rem;
+  transition: background 0.15s;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+
+  &:not(:last-child) {
+    border-bottom: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+}
+
+.colCode {
+  min-width: 80px;
+  color: var(--color-primary);
+  letter-spacing: 0.1em;
+  font-weight: bold;
+}
+
+.colCreator {
+  min-width: 80px;
+  flex: 1;
+}
+
+.colPlayers {
+  flex: 2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  @media (max-width: $MAX_PHONE) {
+    display: none;
+  }
+}
+
+.colGames {
+  min-width: 50px;
+  text-align: center;
+}
+
+.colRolls {
+  min-width: 50px;
+  text-align: center;
+}
+
+.colDate {
+  min-width: 100px;
+  text-align: right;
+  opacity: 0.6;
+  font-size: 0.75rem;
+
+  @media (max-width: $MAX_TABLET) {
+    display: none;
+  }
 }
