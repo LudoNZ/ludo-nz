@@ -34,6 +34,15 @@ const ProjectsPage: React.FC = () => {
       link: "/projects/cooking",
     },
     {
+      id: "dice-tracker",
+      title: "Dice Roll Tracker",
+      description:
+        "A real-time dice roll tracker for board games like Catan. Create sessions with shareable codes, track rolls, view statistics, and manage custom house rules with automated triggers.",
+      tech: ["React", "Next.js", "TypeScript", "Firebase", "Firestore"],
+      featured: false,
+      link: "/dice",
+    },
+    {
       id: "theme-editor",
       title: "Theme Editor",
       description:

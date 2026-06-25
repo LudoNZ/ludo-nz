@@ -1,0 +1,97 @@
+@import "/src/styles/config";
+
+.roller {
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.rollerHeader {
+  text-align: center;
+}
+
+.playerLabel {
+  font-size: 0.85rem;
+  opacity: 0.7;
+
+  strong {
+    color: var(--color-primary);
+    opacity: 1;
+  }
+}
+
+.manualSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dieLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.dieRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.dieFace {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex: 1;
+
+  &:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &.selected {
+    background: var(--color-primary);
+    color: var(--background);
+    border-color: var(--color-primary);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.divider {
+  text-align: center;
+  position: relative;
+  opacity: 0.5;
+  font-size: 0.85rem;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: var(--foreground);
+    opacity: 0.3;
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
+  }
+}

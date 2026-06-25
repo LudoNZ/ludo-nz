@@ -1,0 +1,129 @@
+@import "/src/styles/config";
+
+.history {
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 200px;
+}
+
+.heading {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.empty {
+  opacity: 0.5;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.entry {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--borderRadius);
+  border: 1px solid transparent;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--foreground);
+    opacity: 0.05;
+  }
+
+  &.hasAlert {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  }
+}
+
+.entryMain {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.player {
+  font-size: 0.85rem;
+  min-width: 60px;
+  opacity: 0.8;
+}
+
+.dice {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.die {
+  width: 1.6rem;
+  height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--foreground);
+  border-radius: 3px;
+  font-size: 0.85rem;
+}
+
+.plus, .equals {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.total {
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--color-primary);
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+
+.randomTag {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.time {
+  white-space: nowrap;
+}
+
+.alertList {
+  margin-top: 0.3rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.alert {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+}

@@ -18,6 +18,30 @@ service cloud.firestore {
     //   allow write: if false;
     // }
     
+    // Dice Roll Tracker sessions
+    match /diceSessions/{sessionId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.resource.data.keys().hasAll(['createdAt', 'creatorName', 'players', 'customRules'])
+        && request.resource.data.creatorName is string
+        && request.resource.data.players is list
+        && request.resource.data.customRules is list;
+      allow update: if request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.creatorName == resource.data.creatorName;
+      allow delete: if false;
+
+      match /rolls/{rollId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['player', 'die1', 'die2', 'total', 'isRandom', 'timestamp'])
+          && request.resource.data.die1 is int
+          && request.resource.data.die2 is int
+          && request.resource.data.die1 >= 1 && request.resource.data.die1 <= 6
+          && request.resource.data.die2 >= 1 && request.resource.data.die2 <= 6
+          && request.resource.data.total == request.resource.data.die1 + request.resource.data.die2;
+        allow update, delete: if false;
+      }
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

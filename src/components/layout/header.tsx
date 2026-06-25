@@ -50,6 +50,9 @@ const Header = () => {
           <li>
             <Link href={"/contact"}>Contact</Link>
           </li>
+          <li>
+            <Link href={"/dice"}>Dice</Link>
+          </li>
           {!!auth &&
             !!auth.currentUser && ( //user loged in
               <>
