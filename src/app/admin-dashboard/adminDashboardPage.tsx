@@ -41,8 +41,8 @@ export const AdminDashboardPage = () => {
         const data = await res.json()
         if (!res.ok) throw new Error(data.detail || data.error || "Failed to fetch")
         setSessions(data.sessions)
-      } catch {
-        setError("Failed to load sessions")
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load sessions")
       } finally {
         setLoading(false)
       }

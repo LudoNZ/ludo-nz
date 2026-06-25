@@ -37,10 +37,12 @@ export const setToken = async ({
     cookieStore.set("firebaseAuthToken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      path: "/",
     })
     cookieStore.set("firebaseAuthRefreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      path: "/",
     })
 
     return { claimsUpdated }
