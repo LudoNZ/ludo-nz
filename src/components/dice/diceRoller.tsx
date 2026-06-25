@@ -63,10 +63,14 @@ function DieDots({ value }: { value: number }) {
 const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled }) => {
   const [die1, setDie1] = useState<number | null>(null)
   const [die2, setDie2] = useState<number | null>(null)
+  const [lastDie1, setLastDie1] = useState<number | null>(null)
+  const [lastDie2, setLastDie2] = useState<number | null>(null)
   const [rolling, setRolling] = useState(false)
 
   const handleManualRoll = () => {
     if (die1 === null || die2 === null) return
+    setLastDie1(die1)
+    setLastDie2(die2)
     onRoll(die1, die2, false)
     setDie1(null)
     setDie2(null)
@@ -80,11 +84,21 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
     setDie2(d2)
     setRolling(true)
     setTimeout(() => {
+      setLastDie1(d1)
+      setLastDie2(d2)
       onRoll(d1, d2, true)
       setDie1(null)
       setDie2(null)
       setRolling(false)
     }, 1200)
+  }
+
+  const getDieClass = (dieNum: 1 | 2, v: number) => {
+    const current = dieNum === 1 ? die1 : die2
+    const last = dieNum === 1 ? lastDie1 : lastDie2
+    if (current === v) return styles.selected
+    if (current === null && last === v) return styles.lastRoll
+    return ""
   }
 
   return (
@@ -99,7 +113,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
           {DIE_VALUES.map((v) => (
             <button
               key={`d1-${v}`}
-              className={`${styles.dieFace} ${die1 === v ? styles.selected : ""}`}
+              className={`${styles.dieFace} ${getDieClass(1, v)}`}
               onClick={() => setDie1(v)}
               disabled={disabled || rolling}
             >
@@ -113,7 +127,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
           {DIE_VALUES.map((v) => (
             <button
               key={`d2-${v}`}
-              className={`${styles.dieFace} ${die2 === v ? styles.selected : ""}`}
+              className={`${styles.dieFace} ${getDieClass(2, v)}`}
               onClick={() => setDie2(v)}
               disabled={disabled || rolling}
             >
