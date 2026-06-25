@@ -96,6 +96,8 @@ const DicePage: React.FC = () => {
         createdAt: serverTimestamp(),
         creatorName: name.trim(),
         players: [name.trim()],
+        inactivePlayers: [],
+        currentTurnIndex: 0,
         customRules: [],
       })
 

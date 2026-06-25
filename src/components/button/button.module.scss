@@ -9,6 +9,12 @@
   background-color: $backgroundColor;
   color: var(--foreground);
   font-weight: 600;
+  transition: opacity 0.15s;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
 }
 
 // VARIANTS

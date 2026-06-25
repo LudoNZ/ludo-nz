@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef } from "react"
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import styles from "./diceSessionPage.module.scss"
 import Link from "next/link"
 import { firestore } from "../../../../firebase/client"
@@ -11,6 +11,7 @@ import {
   addDoc,
   updateDoc,
   arrayUnion,
+  arrayRemove,
   serverTimestamp,
   query,
   orderBy,
@@ -36,15 +37,22 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [alerts, setAlerts] = useState<RollAlert[]>([])
   const [activeTab, setActiveTab] = useState<"history" | "stats">("history")
   const sessionRef = useRef<DiceSession | null>(null)
-  const rollsRef = useRef<DiceRoll[]>([])
 
   useEffect(() => {
     sessionRef.current = session
   }, [session])
 
-  useEffect(() => {
-    rollsRef.current = rolls
-  }, [rolls])
+  const activePlayers = useMemo(() => {
+    if (!session) return []
+    const inactive = new Set(session.inactivePlayers || [])
+    return session.players.filter((p) => !inactive.has(p))
+  }, [session])
+
+  const currentPlayer = useMemo(() => {
+    if (activePlayers.length === 0) return null
+    const index = (session?.currentTurnIndex ?? 0) % activePlayers.length
+    return activePlayers[index]
+  }, [activePlayers, session?.currentTurnIndex])
 
   useEffect(() => {
     const stored = localStorage.getItem(`diceTracker_playerName_${code}`)
@@ -58,7 +66,12 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         setNotFound(true)
         return
       }
-      setSession(snap.data() as DiceSession)
+      const data = snap.data()
+      setSession({
+        ...data,
+        inactivePlayers: data.inactivePlayers || [],
+        currentTurnIndex: data.currentTurnIndex ?? 0,
+      } as DiceSession)
     })
 
     const rollsQuery = query(
@@ -72,7 +85,6 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
       })
       setRolls(newRolls)
 
-      // Check triggers for the most recent roll
       snap.docChanges().forEach((change) => {
         if (change.type === "added" && sessionRef.current) {
           const roll = { id: change.doc.id, ...change.doc.data() } as DiceRoll
@@ -112,23 +124,69 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code])
 
+  const advanceTurn = useCallback(async () => {
+    if (!session) return
+    const nextIndex = (session.currentTurnIndex ?? 0) + 1
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), {
+        currentTurnIndex: nextIndex,
+      })
+    } catch { /* ignore */ }
+  }, [code, session])
+
   const handleRoll = useCallback(async (die1: number, die2: number, isRandom: boolean) => {
-    if (!playerName) return
+    if (!currentPlayer) return
     setError("")
 
     try {
       await addDoc(collection(firestore, "diceSessions", code, "rolls"), {
-        player: playerName,
+        player: currentPlayer,
         die1,
         die2,
         total: die1 + die2,
         isRandom,
         timestamp: serverTimestamp(),
       })
+
+      if (session && !session.players.includes(currentPlayer)) {
+        await updateDoc(doc(firestore, "diceSessions", code), {
+          players: arrayUnion(currentPlayer),
+        })
+      }
+
+      await advanceTurn()
     } catch {
       setError("Failed to log roll. Please try again.")
     }
-  }, [code, playerName])
+  }, [code, currentPlayer, session, advanceTurn])
+
+  const handleReorder = useCallback(async (newOrder: string[]) => {
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), {
+        players: newOrder,
+      })
+    } catch {
+      setError("Failed to reorder players")
+    }
+  }, [code])
+
+  const handleToggleActive = useCallback(async (player: string) => {
+    if (!session) return
+    const inactive = new Set(session.inactivePlayers || [])
+    try {
+      if (inactive.has(player)) {
+        await updateDoc(doc(firestore, "diceSessions", code), {
+          inactivePlayers: arrayRemove(player),
+        })
+      } else {
+        await updateDoc(doc(firestore, "diceSessions", code), {
+          inactivePlayers: arrayUnion(player),
+        })
+      }
+    } catch {
+      setError("Failed to update player status")
+    }
+  }, [code, session])
 
   const handleAddRule = useCallback(async (rule: CustomRule) => {
     if (!session) return
@@ -187,15 +245,21 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     <div className={styles.sessionPage}>
       {!playerName && <PlayerJoinForm onJoin={handleJoin} />}
 
-      <SessionHeader code={code} session={session} />
+      <SessionHeader
+        code={code}
+        session={session}
+        currentPlayer={currentPlayer}
+        onReorder={handleReorder}
+        onToggleActive={handleToggleActive}
+      />
 
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.layout}>
         <div className={styles.leftCol}>
-          {playerName && (
+          {currentPlayer && (
             <DiceRoller
-              playerName={playerName}
+              currentPlayer={currentPlayer}
               onRoll={handleRoll}
             />
           )}

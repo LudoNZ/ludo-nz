@@ -64,10 +64,53 @@
 }
 
 .playerTag {
-  padding: 0.2rem 0.6rem;
+  padding: 0.25rem 0.4rem 0.25rem 0.6rem;
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: grab;
+  transition: all 0.15s;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+    opacity: 0.6;
+  }
+
+  &.current {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  }
+
+  &.inactive {
+    opacity: 0.35;
+    border-style: dashed;
+  }
+}
+
+.playerName {
+  pointer-events: none;
+}
+
+.toggleBtn {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.55rem;
+  padding: 0.1rem 0.25rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  opacity: 0.6;
+  line-height: 1;
+
+  &:hover {
+    opacity: 1;
+  }
 }
 
 .age {

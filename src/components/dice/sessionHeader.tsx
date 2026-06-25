@@ -1,16 +1,27 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import styles from "./sessionHeader.module.scss"
 import { DiceSession } from "./types"
 
 interface SessionHeaderProps {
   code: string
   session: DiceSession
+  currentPlayer: string | null
+  onReorder: (players: string[]) => void
+  onToggleActive: (player: string) => void
 }
 
-const SessionHeader: React.FC<SessionHeaderProps> = ({ code, session }) => {
+const SessionHeader: React.FC<SessionHeaderProps> = ({
+  code,
+  session,
+  currentPlayer,
+  onReorder,
+  onToggleActive,
+}) => {
   const [copied, setCopied] = useState(false)
+  const dragItem = useRef<number | null>(null)
+  const dragOver = useRef<number | null>(null)
 
   const handleCopy = async () => {
     try {
@@ -22,9 +33,32 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({ code, session }) => {
     }
   }
 
+  const handleDragStart = (index: number) => {
+    dragItem.current = index
+  }
+
+  const handleDragEnter = (index: number) => {
+    dragOver.current = index
+  }
+
+  const handleDragEnd = () => {
+    if (dragItem.current === null || dragOver.current === null) return
+    if (dragItem.current === dragOver.current) return
+
+    const reordered = [...session.players]
+    const [moved] = reordered.splice(dragItem.current, 1)
+    reordered.splice(dragOver.current, 0, moved)
+
+    dragItem.current = null
+    dragOver.current = null
+    onReorder(reordered)
+  }
+
   const sessionAge = session.createdAt?.toDate
     ? getRelativeTime(session.createdAt.toDate())
     : "just now"
+
+  const inactive = new Set(session.inactivePlayers || [])
 
   return (
     <div className={styles.header}>
@@ -36,11 +70,32 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({ code, session }) => {
         </button>
       </div>
       <div className={styles.players}>
-        <span className={styles.label}>Players</span>
+        <span className={styles.label}>Players (drag to reorder)</span>
         <div className={styles.playerList}>
-          {session.players.map((p) => (
-            <span key={p} className={styles.playerTag}>{p}</span>
-          ))}
+          {session.players.map((p, i) => {
+            const isInactive = inactive.has(p)
+            const isCurrent = p === currentPlayer && !isInactive
+            return (
+              <div
+                key={p}
+                className={`${styles.playerTag} ${isInactive ? styles.inactive : ""} ${isCurrent ? styles.current : ""}`}
+                draggable
+                onDragStart={() => handleDragStart(i)}
+                onDragEnter={() => handleDragEnter(i)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                <span className={styles.playerName}>{p}</span>
+                <button
+                  className={styles.toggleBtn}
+                  onClick={() => onToggleActive(p)}
+                  title={isInactive ? "Activate" : "Deactivate"}
+                >
+                  {isInactive ? "OFF" : "ON"}
+                </button>
+              </div>
+            )
+          })}
         </div>
       </div>
       <div className={styles.age}>

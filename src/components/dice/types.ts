@@ -15,6 +15,8 @@ export interface DiceSession {
   createdAt: Timestamp
   creatorName: string
   players: string[]
+  inactivePlayers: string[]
+  currentTurnIndex: number
   customRules: CustomRule[]
 }
 

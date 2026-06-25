@@ -5,7 +5,7 @@ import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
 
 interface DiceRollerProps {
-  playerName: string
+  currentPlayer: string
   onRoll: (die1: number, die2: number, isRandom: boolean) => void
   disabled?: boolean
 }
@@ -60,9 +60,10 @@ function DieDots({ value }: { value: number }) {
   )
 }
 
-const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled }) => {
+const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled }) => {
   const [die1, setDie1] = useState<number | null>(null)
   const [die2, setDie2] = useState<number | null>(null)
+  const [rolling, setRolling] = useState(false)
 
   const handleManualRoll = () => {
     if (die1 === null || die2 === null) return
@@ -72,21 +73,24 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
   }
 
   const handleRandomRoll = () => {
+    if (rolling) return
     const d1 = Math.floor(Math.random() * 6) + 1
     const d2 = Math.floor(Math.random() * 6) + 1
     setDie1(d1)
     setDie2(d2)
+    setRolling(true)
     setTimeout(() => {
       onRoll(d1, d2, true)
       setDie1(null)
       setDie2(null)
-    }, 400)
+      setRolling(false)
+    }, 1200)
   }
 
   return (
     <div className={styles.roller}>
       <div className={styles.rollerHeader}>
-        <span className={styles.playerLabel}>Rolling as <strong>{playerName}</strong></span>
+        <span className={styles.turnLabel}>{currentPlayer}&apos;s turn</span>
       </div>
 
       <div className={styles.manualSection}>
@@ -97,7 +101,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
               key={`d1-${v}`}
               className={`${styles.dieFace} ${die1 === v ? styles.selected : ""}`}
               onClick={() => setDie1(v)}
-              disabled={disabled}
+              disabled={disabled || rolling}
             >
               <DieDots value={v} />
             </button>
@@ -111,7 +115,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
               key={`d2-${v}`}
               className={`${styles.dieFace} ${die2 === v ? styles.selected : ""}`}
               onClick={() => setDie2(v)}
-              disabled={disabled}
+              disabled={disabled || rolling}
             >
               <DieDots value={v} />
             </button>
@@ -120,7 +124,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
 
         <Button
           onClick={handleManualRoll}
-          disabled={disabled || die1 === null || die2 === null}
+          disabled={disabled || rolling || die1 === null || die2 === null}
           size="medium"
         >
           Log Roll ({die1 !== null && die2 !== null ? die1 + die2 : "?"})
@@ -131,7 +135,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
         <span>or</span>
       </div>
 
-      <Button onClick={handleRandomRoll} disabled={disabled} variant="secondary" size="medium">
+      <Button onClick={handleRandomRoll} disabled={disabled || rolling} variant="secondary" size="medium">
         Roll
       </Button>
     </div>
