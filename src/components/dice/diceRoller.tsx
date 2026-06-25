@@ -1,9 +1,9 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
-import { DiceConfig, DEFAULT_DICE_CONFIG } from "./types"
+import { DiceConfig, DEFAULT_DICE_CONFIG, formatDiceConfig } from "./types"
 
 interface DiceRollerProps {
   currentPlayer: string
@@ -62,11 +62,15 @@ function DieDots({ value }: { value: number }) {
 
 const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRoll, disabled }) => {
   const config = diceConfig || DEFAULT_DICE_CONFIG
-  const { count, sides } = config
-  const values = Array.from({ length: sides }, (_, i) => i + 1)
+  const diceCount = config.dice.length
 
-  const [selected, setSelected] = useState<(number | null)[]>(Array(count).fill(null))
-  const [lastRoll, setLastRoll] = useState<(number | null)[]>(Array(count).fill(null))
+  const [selected, setSelected] = useState<(number | null)[]>(Array(diceCount).fill(null))
+  const [lastRoll, setLastRoll] = useState<(number | null)[]>(Array(diceCount).fill(null))
+
+  useEffect(() => {
+    setSelected(Array(diceCount).fill(null))
+    setLastRoll(Array(diceCount).fill(null))
+  }, [diceCount])
 
   const allSelected = selected.every((v) => v !== null)
   const total = allSelected ? selected.reduce((s, v) => s + (v ?? 0), 0) : null
@@ -83,13 +87,13 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     if (!allSelected) return
     setLastRoll([...selected])
     onRoll(selected as number[], false)
-    setSelected(Array(count).fill(null))
+    setSelected(Array(diceCount).fill(null))
   }
 
   const handleRandomRoll = () => {
-    const dice = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
+    const dice = config.dice.map((sides) => Math.floor(Math.random() * sides) + 1)
     setLastRoll(dice)
-    setSelected(Array(count).fill(null))
+    setSelected(Array(diceCount).fill(null))
     onRoll(dice, true)
   }
 
@@ -103,27 +107,30 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     <div className={styles.roller}>
       <div className={styles.rollerHeader}>
         <span className={styles.turnLabel}>{currentPlayer}&apos;s turn</span>
-        <span className={styles.configLabel}>{count}d{sides}</span>
+        <span className={styles.configLabel}>{formatDiceConfig(config)}</span>
       </div>
 
       <div className={styles.manualSection}>
-        {Array.from({ length: count }, (_, dieIndex) => (
-          <div key={dieIndex}>
-            <span className={styles.dieLabel}>Die {dieIndex + 1}</span>
-            <div className={styles.dieRow}>
-              {values.map((v) => (
-                <button
-                  key={`d${dieIndex}-${v}`}
-                  className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""}`}
-                  onClick={() => handleSelect(dieIndex, v)}
-                  disabled={disabled}
-                >
-                  {sides <= 6 ? <DieDots value={v} /> : v}
-                </button>
-              ))}
+        {config.dice.map((sides, dieIndex) => {
+          const values = Array.from({ length: sides }, (_, i) => i + 1)
+          return (
+            <div key={dieIndex}>
+              <span className={styles.dieLabel}>Die {dieIndex + 1} (d{sides})</span>
+              <div className={styles.dieRow}>
+                {values.map((v) => (
+                  <button
+                    key={`d${dieIndex}-${v}`}
+                    className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""}`}
+                    onClick={() => handleSelect(dieIndex, v)}
+                    disabled={disabled}
+                  >
+                    {sides <= 6 ? <DieDots value={v} /> : v}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         <Button
           onClick={handleManualRoll}

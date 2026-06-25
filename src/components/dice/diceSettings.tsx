@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import styles from "./diceSettings.module.scss"
 import Button from "@/components/button/button"
-import { DiceConfig, DICE_SIDES_OPTIONS } from "./types"
+import { DiceConfig, DICE_SIDES_OPTIONS, formatDiceConfig } from "./types"
 
 interface DiceSettingsProps {
   config: DiceConfig
@@ -12,18 +12,35 @@ interface DiceSettingsProps {
 
 const DiceSettings: React.FC<DiceSettingsProps> = ({ config, onSave }) => {
   const [open, setOpen] = useState(false)
-  const [count, setCount] = useState(config.count)
-  const [sides, setSides] = useState(config.sides)
+  const [dice, setDice] = useState<number[]>(config.dice)
 
   const handleOpen = () => {
-    setCount(config.count)
-    setSides(config.sides)
+    setDice([...config.dice])
     setOpen(true)
   }
 
   const handleSave = () => {
-    onSave({ count, sides })
+    if (dice.length === 0) return
+    onSave({ dice })
     setOpen(false)
+  }
+
+  const setDieSides = (index: number, sides: number) => {
+    setDice((prev) => {
+      const next = [...prev]
+      next[index] = sides
+      return next
+    })
+  }
+
+  const addDie = () => {
+    if (dice.length >= 6) return
+    setDice((prev) => [...prev, 6])
+  }
+
+  const removeDie = (index: number) => {
+    if (dice.length <= 1) return
+    setDice((prev) => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -39,37 +56,40 @@ const DiceSettings: React.FC<DiceSettingsProps> = ({ config, onSave }) => {
           <div className={styles.panel}>
             <h3>Dice Settings</h3>
 
-            <div className={styles.field}>
-              <label className={styles.label}>Number of Dice</label>
-              <div className={styles.options}>
-                {[1, 2, 3, 4].map((n) => (
+            <div className={styles.diceList}>
+              {dice.map((sides, i) => (
+                <div key={i} className={styles.dieRow}>
+                  <span className={styles.dieNum}>Die {i + 1}</span>
+                  <div className={styles.options}>
+                    {DICE_SIDES_OPTIONS.map((s) => (
+                      <button
+                        key={s}
+                        className={`${styles.optionBtn} ${sides === s ? styles.optionActive : ""}`}
+                        onClick={() => setDieSides(i, s)}
+                      >
+                        d{s}
+                      </button>
+                    ))}
+                  </div>
                   <button
-                    key={n}
-                    className={`${styles.optionBtn} ${count === n ? styles.optionActive : ""}`}
-                    onClick={() => setCount(n)}
+                    className={styles.removeBtn}
+                    onClick={() => removeDie(i)}
+                    disabled={dice.length <= 1}
+                    title="Remove die"
                   >
-                    {n}
+                    ×
                   </button>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
 
-            <div className={styles.field}>
-              <label className={styles.label}>Die Type</label>
-              <div className={styles.options}>
-                {DICE_SIDES_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    className={`${styles.optionBtn} ${sides === s ? styles.optionActive : ""}`}
-                    onClick={() => setSides(s)}
-                  >
-                    d{s}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {dice.length < 6 && (
+              <button className={styles.addDieBtn} onClick={addDie}>
+                + Add Die
+              </button>
+            )}
 
-            <p className={styles.preview}>{count}d{sides}</p>
+            <p className={styles.preview}>{formatDiceConfig({ dice })}</p>
 
             <div className={styles.actions}>
               <Button onClick={handleSave} size="small">Save</Button>

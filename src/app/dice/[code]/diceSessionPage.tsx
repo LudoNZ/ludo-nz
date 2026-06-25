@@ -17,7 +17,7 @@ import {
   query,
   orderBy,
 } from "firebase/firestore"
-import { DiceSession, DiceRoll, CustomRule, DiceConfig, DEFAULT_DICE_CONFIG } from "@/components/dice/types"
+import { DiceSession, DiceRoll, CustomRule, DiceConfig, normalizeDiceConfig } from "@/components/dice/types"
 import PlayerJoinForm from "@/components/dice/playerJoinForm"
 import SessionHeader from "@/components/dice/sessionHeader"
 import DiceRoller from "@/components/dice/diceRoller"
@@ -96,7 +96,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         currentTurnIndex: data.currentTurnIndex ?? 0,
         currentGame: data.currentGame ?? 1,
         games: data.games || [],
-        diceConfig: data.diceConfig || DEFAULT_DICE_CONFIG,
+        diceConfig: normalizeDiceConfig(data.diceConfig),
       } as DiceSession)
     })
 
@@ -331,7 +331,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           onAddPlayer={handleAddPlayer}
         />
         <DiceSettings
-          config={session.diceConfig || DEFAULT_DICE_CONFIG}
+          config={session.diceConfig}
           onSave={handleDiceConfigChange}
         />
       </div>
@@ -353,7 +353,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           {currentPlayer && (
             <DiceRoller
               currentPlayer={currentPlayer}
-              diceConfig={session.diceConfig || DEFAULT_DICE_CONFIG}
+              diceConfig={session.diceConfig}
               onRoll={handleRoll}
             />
           )}

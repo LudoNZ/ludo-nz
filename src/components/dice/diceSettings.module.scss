@@ -34,12 +34,14 @@
   background: var(--background);
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
-  padding: 2rem;
-  max-width: 360px;
+  padding: 1.5rem;
+  max-width: 420px;
   width: 90%;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
+  max-height: 90vh;
+  overflow-y: auto;
 
   h3 {
     margin: 0;
@@ -47,36 +49,46 @@
   }
 }
 
-.field {
+.diceList {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.label {
-  font-size: 0.75rem;
+.dieRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: var(--borderRadius);
+}
+
+.dieNum {
+  font-size: 0.7rem;
   text-transform: uppercase;
   opacity: 0.5;
+  min-width: 35px;
+  flex-shrink: 0;
 }
 
 .options {
   display: flex;
-  gap: 0.4rem;
+  gap: 0.3rem;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .optionBtn {
-  padding: 0.5rem 0.75rem;
+  padding: 0.3rem 0.5rem;
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   background: none;
   color: var(--foreground);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.15s;
-  min-width: 2.5rem;
-  text-align: center;
 
   &:hover {
     border-color: var(--color-primary);
@@ -90,9 +102,47 @@
   }
 }
 
+.removeBtn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+
+  &:disabled {
+    opacity: 0.2;
+    cursor: default;
+  }
+
+  &:hover:not(:disabled) {
+    opacity: 0.7;
+  }
+}
+
+.addDieBtn {
+  background: none;
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--borderRadius);
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0.7;
+  text-align: center;
+
+  &:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+}
+
 .preview {
   text-align: center;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: bold;
   color: var(--color-primary);
 }
