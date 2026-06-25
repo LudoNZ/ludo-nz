@@ -53,20 +53,24 @@
   justify-content: center;
   aspect-ratio: 1;
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.selected) {
     border-color: var(--color-primary);
   }
 
-  &:hover:not(:disabled) .dieSvg {
+  &:hover:not(:disabled):not(.selected) .dieSvg {
     fill: var(--color-primary);
   }
 
-  &.selected {
+  &.selected,
+  &.selected:hover,
+  &.selected:focus {
     background: var(--color-primary);
     border-color: var(--color-primary);
   }
 
-  &.selected .dieSvg {
+  &.selected .dieSvg,
+  &.selected:hover .dieSvg,
+  &.selected:focus .dieSvg {
     fill: var(--background);
   }
 
