@@ -5,7 +5,7 @@ export interface CustomRule {
   text: string
   enabled: boolean
   trigger?: {
-    type: "total" | "doubles" | "streak"
+    type: "rollSum" | "doubles" | "drought" | "hotNumber"
     value: number
   }
   action: string

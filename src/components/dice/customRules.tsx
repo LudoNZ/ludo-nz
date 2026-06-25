@@ -12,12 +12,14 @@ interface CustomRulesProps {
   onRemove: (ruleId: string) => void
 }
 
-type TriggerType = "total" | "doubles" | "streak"
+type TriggerType = "rollSum" | "doubles" | "drought" | "hotNumber"
+
+const DOUBLES_OPTIONS = [0, 1, 2, 3, 4, 5, 6]
 
 const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRemove }) => {
   const [expanded, setExpanded] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [triggerType, setTriggerType] = useState<TriggerType>("total")
+  const [triggerType, setTriggerType] = useState<TriggerType>("rollSum")
   const [triggerValue, setTriggerValue] = useState(7)
   const [action, setAction] = useState("")
 
@@ -35,6 +37,12 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
     onAdd(rule)
     setAction("")
     setShowForm(false)
+  }
+
+  const resetForm = () => {
+    setTriggerType("rollSum")
+    setTriggerValue(7)
+    setAction("")
   }
 
   return (
@@ -75,28 +83,82 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
                 <label className={styles.formLabel}>When</label>
                 <select
                   value={triggerType}
-                  onChange={(e) => setTriggerType(e.target.value as TriggerType)}
+                  onChange={(e) => {
+                    const t = e.target.value as TriggerType
+                    setTriggerType(t)
+                    if (t === "rollSum") setTriggerValue(7)
+                    else if (t === "doubles") setTriggerValue(0)
+                    else if (t === "drought") setTriggerValue(10)
+                    else if (t === "hotNumber") setTriggerValue(3)
+                  }}
                   className={styles.select}
                 >
-                  <option value="total">Total equals...</option>
+                  <option value="rollSum">Roll sum equals...</option>
                   <option value="doubles">Doubles rolled</option>
-                  <option value="streak">Same total streak of...</option>
+                  <option value="drought">Drought (no 7s for...)</option>
+                  <option value="hotNumber">Hot number (same total × in a row)</option>
                 </select>
               </div>
 
-              {triggerType !== "doubles" && (
+              {triggerType === "rollSum" && (
                 <div className={styles.formRow}>
-                  <label className={styles.formLabel}>
-                    {triggerType === "total" ? "Value" : "Streak count"}
-                  </label>
+                  <label className={styles.formLabel}>Sum</label>
                   <input
                     type="number"
-                    min={triggerType === "total" ? 2 : 2}
-                    max={triggerType === "total" ? 12 : 10}
+                    min={2}
+                    max={12}
                     value={triggerValue}
                     onChange={(e) => setTriggerValue(Number(e.target.value))}
                     className={styles.numberInput}
                   />
+                </div>
+              )}
+
+              {triggerType === "doubles" && (
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>Which</label>
+                  <div className={styles.doublesGrid}>
+                    {DOUBLES_OPTIONS.map((v) => (
+                      <button
+                        key={v}
+                        className={`${styles.doublesBtn} ${triggerValue === v ? styles.doublesActive : ""}`}
+                        onClick={() => setTriggerValue(v)}
+                        type="button"
+                      >
+                        {v === 0 ? "Any" : `${v}+${v}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {triggerType === "drought" && (
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>Rolls</label>
+                  <input
+                    type="number"
+                    min={3}
+                    max={50}
+                    value={triggerValue}
+                    onChange={(e) => setTriggerValue(Number(e.target.value))}
+                    className={styles.numberInput}
+                  />
+                  <span className={styles.formHint}>rolls without a 7</span>
+                </div>
+              )}
+
+              {triggerType === "hotNumber" && (
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>Count</label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={triggerValue}
+                    onChange={(e) => setTriggerValue(Number(e.target.value))}
+                    className={styles.numberInput}
+                  />
+                  <span className={styles.formHint}>same total in a row</span>
                 </div>
               )}
 
@@ -117,13 +179,13 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
                 <Button onClick={handleAdd} disabled={!action.trim()} size="small">
                   Add Rule
                 </Button>
-                <Button onClick={() => setShowForm(false)} variant="secondary" size="small">
+                <Button onClick={() => { setShowForm(false); resetForm() }} variant="secondary" size="small">
                   Cancel
                 </Button>
               </div>
             </div>
           ) : (
-            <Button onClick={() => setShowForm(true)} variant="secondary" size="small">
+            <Button onClick={() => { setShowForm(true); resetForm() }} variant="secondary" size="small">
               + Add Rule
             </Button>
           )}
@@ -135,12 +197,14 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
 
 function buildRuleText(type: TriggerType, value: number): string {
   switch (type) {
-    case "total":
-      return `When total = ${value}`
+    case "rollSum":
+      return `When roll sum = ${value}`
     case "doubles":
-      return `When doubles rolled`
-    case "streak":
-      return `When ${value}× same total in a row`
+      return value === 0 ? "When any doubles rolled" : `When double ${value}s rolled`
+    case "drought":
+      return `When ${value} rolls without a 7`
+    case "hotNumber":
+      return `When same total ${value}× in a row`
   }
 }
 

@@ -35,19 +35,31 @@ export function checkRollTriggers(
     if (!rule.enabled || !rule.trigger) continue
     const { type, value } = rule.trigger
 
-    if (type === "total" && roll.total === value) {
+    if (type === "rollSum" && roll.total === value) {
       alerts.push({ rollId: roll.id, message: `${rule.action}` })
     }
 
     if (type === "doubles" && roll.die1 === roll.die2) {
-      alerts.push({ rollId: roll.id, message: `${rule.action}` })
+      if (value === 0 || roll.die1 === value) {
+        alerts.push({ rollId: roll.id, message: `${rule.action}` })
+      }
     }
 
-    if (type === "streak" && value > 0) {
-      const recentRolls = [...rolls].reverse()
+    if (type === "drought" && value > 0) {
+      let countWithout7 = 0
+      for (let i = rolls.length - 1; i >= 0; i--) {
+        if (rolls[i].total === 7) break
+        countWithout7++
+      }
+      if (countWithout7 >= value && roll.total !== 7) {
+        alerts.push({ rollId: roll.id, message: `${rule.action}` })
+      }
+    }
+
+    if (type === "hotNumber" && value > 0) {
       let streakCount = 0
-      for (const r of recentRolls) {
-        if (r.total === roll.total) {
+      for (let i = rolls.length - 1; i >= 0; i--) {
+        if (rolls[i].total === roll.total) {
           streakCount++
         } else {
           break
