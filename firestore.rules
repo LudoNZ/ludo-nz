@@ -21,7 +21,7 @@ service cloud.firestore {
     // Dice Roll Tracker sessions
     match /diceSessions/{sessionId} {
       allow get: if true;
-      allow list: if false;
+      allow list: if request.auth != null && request.auth.token.admin == true;
       allow create: if request.resource.data.keys().hasAll(['createdAt', 'creatorName', 'players', 'customRules'])
         && request.resource.data.creatorName is string
         && request.resource.data.players is list

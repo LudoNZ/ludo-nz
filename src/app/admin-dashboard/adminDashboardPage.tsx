@@ -5,6 +5,8 @@ import styles from "./adminDashboardPage.module.scss"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
 import { useRouter } from "next/navigation"
+import { firestore } from "../../../firebase/client"
+import { collection, getDocs, getCountFromServer, query } from "firebase/firestore"
 
 interface SessionSummary {
   code: string
@@ -12,7 +14,7 @@ interface SessionSummary {
   players: string[]
   currentGame: number
   rollCount: number
-  createdAt: string | null
+  createdAt: Date | null
 }
 
 type Filter = "recent" | "popular"
@@ -37,10 +39,36 @@ export const AdminDashboardPage = () => {
       setLoading(true)
       setError("")
       try {
-        const res = await fetch(`/api/admin/dice-sessions?filter=${filter}`)
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.detail || data.error || "Failed to fetch")
-        setSessions(data.sessions)
+        const snap = await getDocs(collection(firestore, "diceSessions"))
+
+        const sessions: SessionSummary[] = await Promise.all(
+          snap.docs.map(async (doc) => {
+            const data = doc.data()
+            const rollsSnap = await getCountFromServer(
+              query(collection(firestore, "diceSessions", doc.id, "rolls"))
+            )
+            return {
+              code: doc.id,
+              creatorName: data.creatorName || "—",
+              players: data.players || [],
+              currentGame: data.currentGame ?? 1,
+              rollCount: rollsSnap.data().count,
+              createdAt: data.createdAt?.toDate?.() || null,
+            }
+          })
+        )
+
+        if (filter === "popular") {
+          sessions.sort((a, b) => b.rollCount - a.rollCount)
+        } else {
+          sessions.sort((a, b) => {
+            if (!a.createdAt || !b.createdAt) return 0
+            return b.createdAt.getTime() - a.createdAt.getTime()
+          })
+        }
+        sessions.length = Math.min(sessions.length, 10)
+
+        setSessions(sessions)
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load sessions")
       } finally {
@@ -110,7 +138,7 @@ export const AdminDashboardPage = () => {
                 <span className={styles.colRolls}>{s.rollCount}</span>
                 <span className={styles.colDate}>
                   {s.createdAt
-                    ? new Date(s.createdAt).toLocaleDateString(undefined, {
+                    ? s.createdAt.toLocaleDateString(undefined, {
                         day: "numeric",
                         month: "short",
                         hour: "2-digit",
