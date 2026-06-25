@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getFirestoreAdmin } from "../../../../../firebase/server"
+import { getFirestoreAdmin, getAuthAdmin } from "../../../../../firebase/server"
 import { cookies } from "next/headers"
-import { decodeJwt } from "jose"
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
@@ -11,8 +10,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const decoded = decodeJwt(token)
-    if (!decoded.admin) {
+    const auth = getAuthAdmin()
+    const verified = await auth.verifyIdToken(token)
+    const user = await auth.getUser(verified.uid)
+    if (!user.customClaims?.admin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
   } catch {
