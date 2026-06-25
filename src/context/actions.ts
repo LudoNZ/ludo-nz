@@ -16,38 +16,29 @@ export const setToken = async ({
   token: string
   refreshToken: string
 }): Promise<{ claimsUpdated: boolean }> => {
+  const cookieStore = await cookies()
+  cookieStore.set("firebaseAuthToken", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  })
+  cookieStore.set("firebaseAuthRefreshToken", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  })
+
   try {
     const auth = getAuthAdmin()
     const verifiedToken = await auth.verifyIdToken(token)
-
-    if (!verifiedToken) {
-      return { claimsUpdated: false }
-    }
-
-    let claimsUpdated = false
     const userRecord = await auth.getUser(verifiedToken.uid)
     if (process.env.ADMIN_EMAIL === userRecord.email && !userRecord.customClaims?.admin) {
-      await auth.setCustomUserClaims(verifiedToken.uid, {
-        admin: true,
-      })
-      claimsUpdated = true
+      await auth.setCustomUserClaims(verifiedToken.uid, { admin: true })
+      return { claimsUpdated: true }
     }
-
-    const cookieStore = await cookies()
-    cookieStore.set("firebaseAuthToken", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-    })
-    cookieStore.set("firebaseAuthRefreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-    })
-
-    return { claimsUpdated }
   } catch (e) {
-    console.log(e)
-    return { claimsUpdated: false }
+    console.log("Admin claim check failed:", e)
   }
+
+  return { claimsUpdated: false }
 }
