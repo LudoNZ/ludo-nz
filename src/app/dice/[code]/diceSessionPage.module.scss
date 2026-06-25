@@ -91,6 +91,61 @@
   }
 }
 
+.archive {
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.archiveHeading {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.archiveList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.archiveItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+
+  &.archiveActive {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  }
+}
+
+.archiveGameNum {
+  font-size: 0.9rem;
+  font-weight: bold;
+}
+
+.archiveMeta {
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+
 .backLink {
   color: var(--color-primary);
   font-size: 0.85rem;

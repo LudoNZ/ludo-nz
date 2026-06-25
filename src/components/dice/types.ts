@@ -14,6 +14,11 @@ export interface CustomRule {
   action: string
 }
 
+export interface GameRecord {
+  number: number
+  startedAt: Timestamp
+}
+
 export interface DiceSession {
   createdAt: Timestamp
   creatorName: string
@@ -21,6 +26,7 @@ export interface DiceSession {
   inactivePlayers: string[]
   currentTurnIndex: number
   currentGame: number
+  games: GameRecord[]
   customRules: CustomRule[]
 }
 

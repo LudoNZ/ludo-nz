@@ -35,7 +35,8 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState("")
   const [alerts, setAlerts] = useState<RollAlert[]>([])
-  const [activeTab, setActiveTab] = useState<"history" | "stats">("history")
+  const [activeTab, setActiveTab] = useState<"history" | "stats" | "archive">("history")
+  const [archiveGameView, setArchiveGameView] = useState<number | null>(null)
   const sessionRef = useRef<DiceSession | null>(null)
 
   useEffect(() => {
@@ -72,6 +73,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         inactivePlayers: data.inactivePlayers || [],
         currentTurnIndex: data.currentTurnIndex ?? 0,
         currentGame: data.currentGame ?? 1,
+        games: data.games || [],
       } as DiceSession)
     })
 
@@ -137,10 +139,13 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
 
   const handleNewGame = useCallback(async () => {
     if (!session) return
+    const nextGame = (session.currentGame ?? 1) + 1
+    const updatedGames = [...(session.games || []), { number: nextGame, startedAt: serverTimestamp() }]
     try {
       await updateDoc(doc(firestore, "diceSessions", code), {
-        currentGame: (session.currentGame ?? 1) + 1,
+        currentGame: nextGame,
         currentTurnIndex: 0,
+        games: updatedGames,
       })
     } catch {
       setError("Failed to start new game")
@@ -319,11 +324,19 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
             >
               Stats
             </button>
+            {(session.games || []).length > 1 && (
+              <button
+                className={`${styles.tab} ${activeTab === "archive" ? styles.activeTab : ""}`}
+                onClick={() => setActiveTab("archive")}
+              >
+                Archive
+              </button>
+            )}
           </div>
 
           {activeTab === "history" && (
             <RollHistory
-              rolls={rolls}
+              rolls={rolls.filter((r) => (r.game || 1) === (session.currentGame ?? 1))}
               alerts={alerts}
               currentGame={session.currentGame ?? 1}
               onNewGame={handleNewGame}
@@ -334,6 +347,46 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
               rolls={rolls}
               currentGame={session.currentGame ?? 1}
             />
+          )}
+          {activeTab === "archive" && (
+            <div className={styles.archive}>
+              <h3 className={styles.archiveHeading}>Archived Games</h3>
+              <div className={styles.archiveList}>
+                {(session.games || [])
+                  .filter((g) => g.number !== (session.currentGame ?? 1))
+                  .map((g) => {
+                    const gameRolls = rolls.filter((r) => (r.game || 1) === g.number)
+                    const startDate = g.startedAt?.toDate
+                      ? g.startedAt.toDate().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                      : "Unknown"
+                    return (
+                      <button
+                        key={g.number}
+                        className={`${styles.archiveItem} ${archiveGameView === g.number ? styles.archiveActive : ""}`}
+                        onClick={() => setArchiveGameView(archiveGameView === g.number ? null : g.number)}
+                      >
+                        <span className={styles.archiveGameNum}>Game {g.number}</span>
+                        <span className={styles.archiveMeta}>{startDate} · {gameRolls.length} rolls</span>
+                      </button>
+                    )
+                  })}
+              </div>
+              {archiveGameView !== null && (
+                <>
+                  <RollHistory
+                    rolls={rolls.filter((r) => (r.game || 1) === archiveGameView)}
+                    alerts={alerts}
+                    currentGame={archiveGameView}
+                    onNewGame={() => {}}
+                    readOnly
+                  />
+                  <RollStats
+                    rolls={rolls.filter((r) => (r.game || 1) === archiveGameView)}
+                    currentGame={archiveGameView}
+                  />
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -99,6 +99,7 @@ const DicePage: React.FC = () => {
         inactivePlayers: [],
         currentTurnIndex: 0,
         currentGame: 1,
+        games: [{ number: 1, startedAt: serverTimestamp() }],
         customRules: [],
       })
 

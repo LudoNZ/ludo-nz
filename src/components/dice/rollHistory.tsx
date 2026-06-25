@@ -10,6 +10,7 @@ interface RollHistoryProps {
   alerts: RollAlert[]
   currentGame: number
   onNewGame: () => void
+  readOnly?: boolean
 }
 
 export interface RollAlert {
@@ -83,7 +84,8 @@ export function checkRollTriggers(
   return alerts
 }
 
-const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame }) => {
+const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly }) => {
+  const [confirmNew, setConfirmNew] = React.useState(false)
   const reversed = [...rolls].reverse()
   const alertMap = new Map<string, string[]>()
   for (const a of alerts) {
@@ -100,9 +102,22 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
       <div className={styles.headerRow}>
         <h3 className={styles.heading}>Roll History</h3>
         <span className={styles.gameLabel}>Game {currentGame}</span>
-        <Button onClick={onNewGame} variant="secondary" size="small">
-          New Game
-        </Button>
+        {!readOnly && !confirmNew && (
+          <Button onClick={() => setConfirmNew(true)} variant="secondary" size="small">
+            New Game
+          </Button>
+        )}
+        {!readOnly && confirmNew && (
+          <div className={styles.confirmNew}>
+            <span className={styles.confirmNewText}>Archive current game?</span>
+            <button className={styles.confirmNewYes} onClick={() => { onNewGame(); setConfirmNew(false) }}>
+              Yes
+            </button>
+            <button className={styles.confirmNewNo} onClick={() => setConfirmNew(false)}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
       {reversed.length === 0 && (
         <p className={styles.empty}>No rolls yet. Start rolling!</p>
