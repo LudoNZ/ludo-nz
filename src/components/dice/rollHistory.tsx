@@ -44,7 +44,8 @@ export function checkRollTriggers(
     }
 
     if (type === "doubles" && roll.die1 === roll.die2) {
-      if (value === 0 || roll.die1 === value) {
+      const list = rule.trigger.doublesList
+      if (!list || list.length === 6 || list.includes(roll.die1)) {
         alerts.push({ rollId: roll.id, message: `${rule.action}` })
       }
     }

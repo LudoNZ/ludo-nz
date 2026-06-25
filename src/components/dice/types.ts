@@ -8,6 +8,7 @@ export interface CustomRule {
     type: "rollSum" | "doubles" | "drought" | "hotNumber"
     value: number
     droughtNumber?: number
+    doublesList?: number[]
   }
   action: string
 }
