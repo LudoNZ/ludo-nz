@@ -129,7 +129,7 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
             </div>
           ) : (
             <button className={styles.addBtn} onClick={() => setAdding(true)}>
-              + Add
+              + Player
             </button>
           )}
         </div>
