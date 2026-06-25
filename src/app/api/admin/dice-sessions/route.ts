@@ -24,14 +24,7 @@ export async function GET(request: NextRequest) {
   const db = getFirestoreAdmin()
 
   try {
-    let sessionsQuery
-    if (filter === "popular") {
-      sessionsQuery = db.collection("diceSessions").orderBy("createdAt", "desc").limit(100)
-    } else {
-      sessionsQuery = db.collection("diceSessions").orderBy("createdAt", "desc").limit(10)
-    }
-
-    const snapshot = await sessionsQuery.get()
+    const snapshot = await db.collection("diceSessions").get()
 
     const sessions = await Promise.all(
       snapshot.docs.map(async (doc) => {
@@ -57,8 +50,13 @@ export async function GET(request: NextRequest) {
 
     if (filter === "popular") {
       sessions.sort((a, b) => b.rollCount - a.rollCount)
-      sessions.length = Math.min(sessions.length, 10)
+    } else {
+      sessions.sort((a, b) => {
+        if (!a.createdAt || !b.createdAt) return 0
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })
     }
+    sessions.length = Math.min(sessions.length, 10)
 
     return NextResponse.json({ sessions })
   } catch (error) {
