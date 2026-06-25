@@ -13,6 +13,7 @@ import {
   arrayUnion,
   arrayRemove,
   serverTimestamp,
+  Timestamp,
   query,
   orderBy,
 } from "firebase/firestore"
@@ -149,7 +150,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const handleNewGame = useCallback(async () => {
     if (!session) return
     const nextGame = (session.currentGame ?? 1) + 1
-    const updatedGames = [...(session.games || []), { number: nextGame, startedAt: serverTimestamp() }]
+    const updatedGames = [...(session.games || []), { number: nextGame, startedAt: Timestamp.now() }]
     try {
       await updateDoc(doc(firestore, "diceSessions", code), {
         currentGame: nextGame,

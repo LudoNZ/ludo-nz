@@ -5,7 +5,7 @@ import styles from "./dicePage.module.scss"
 import { useRouter } from "next/navigation"
 import Button from "@/components/button/button"
 import { firestore } from "../../../firebase/client"
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
+import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore"
 import Link from "next/link"
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -99,7 +99,7 @@ const DicePage: React.FC = () => {
         inactivePlayers: [],
         currentTurnIndex: 0,
         currentGame: 1,
-        games: [{ number: 1, startedAt: serverTimestamp() }],
+        games: [{ number: 1, startedAt: Timestamp.now() }],
         customRules: [],
       })
 
