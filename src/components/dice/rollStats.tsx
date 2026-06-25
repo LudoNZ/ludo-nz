@@ -23,9 +23,9 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
   const hasMultipleGames = totalGames > 1
 
   const filteredRolls = useMemo(() => {
-    if (scope === "all" || !hasMultipleGames) return rolls
+    if (scope === "all") return rolls
     return rolls.filter((r) => (r.game || 1) === currentGame)
-  }, [rolls, scope, currentGame, hasMultipleGames])
+  }, [rolls, scope, currentGame])
 
   if (filteredRolls.length === 0) {
     return (
