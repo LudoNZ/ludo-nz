@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react"
 import styles from "./adminDashboardPage.module.scss"
 import Link from "next/link"
+import { useAuth } from "@/context/auth"
+import { useRouter } from "next/navigation"
 
 interface SessionSummary {
   code: string
@@ -16,12 +18,21 @@ interface SessionSummary {
 type Filter = "recent" | "popular"
 
 export const AdminDashboardPage = () => {
+  const auth = useAuth()
+  const router = useRouter()
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [filter, setFilter] = useState<Filter>("recent")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (auth && !auth.currentUser) {
+      router.push("/")
+    }
+  }, [auth, router])
+
+  useEffect(() => {
+    if (!auth?.customClaims?.admin) return
     const fetchSessions = async () => {
       setLoading(true)
       setError("")
@@ -37,7 +48,15 @@ export const AdminDashboardPage = () => {
       }
     }
     fetchSessions()
-  }, [filter])
+  }, [filter, auth?.customClaims?.admin])
+
+  if (!auth?.customClaims?.admin) {
+    return (
+      <div className={styles.adminDashboardPage}>
+        <p className={styles.loading}>Checking access...</p>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.adminDashboardPage}>
