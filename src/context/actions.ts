@@ -15,20 +15,23 @@ export const setToken = async ({
 }: {
   token: string
   refreshToken: string
-}) => {
+}): Promise<{ claimsUpdated: boolean }> => {
   try {
     const auth = getAuthAdmin()
     const verifiedToken = await auth.verifyIdToken(token)
 
     if (!verifiedToken) {
-      return
+      return { claimsUpdated: false }
     }
 
+    let claimsUpdated = false
     const userRecord = await auth.getUser(verifiedToken.uid)
-    if (process.env.ADMIN_EMAIL === userRecord.email && !userRecord.customClaims?.admin)
-      auth.setCustomUserClaims(verifiedToken.uid, {
+    if (process.env.ADMIN_EMAIL === userRecord.email && !userRecord.customClaims?.admin) {
+      await auth.setCustomUserClaims(verifiedToken.uid, {
         admin: true,
       })
+      claimsUpdated = true
+    }
 
     const cookieStore = await cookies()
     cookieStore.set("firebaseAuthToken", token, {
@@ -39,7 +42,10 @@ export const setToken = async ({
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
     })
+
+    return { claimsUpdated }
   } catch (e) {
     console.log(e)
+    return { claimsUpdated: false }
   }
 }

@@ -46,6 +46,11 @@ env:
       - BUILD
       - RUNTIME
 
+  - variable: ADMIN_EMAIL
+    value: ludobourneville@gmail.com
+    availability:
+      - RUNTIME
+
   # Sensitive server-side vars — set via: firebase apphosting:secrets:set <name>
   - variable: FIREBASE_PRIVATE_KEY_ID
     secret: FIREBASE_PRIVATE_kEY_ID

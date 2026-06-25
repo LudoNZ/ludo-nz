@@ -27,17 +27,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       setCurrentUser(user ?? null)
       if (user) {
-        const tokenResult = await user.getIdTokenResult()
-        const token = tokenResult.token
+        let tokenResult = await user.getIdTokenResult()
+        let token = tokenResult.token
         const refreshToken = user.refreshToken
-        const claims = tokenResult.claims
-        setCustomClaims(claims ?? null)
         if (token && refreshToken) {
-          await setToken({
-            token,
-            refreshToken,
-          })
+          const { claimsUpdated } = await setToken({ token, refreshToken })
+          if (claimsUpdated) {
+            tokenResult = await user.getIdTokenResult(true)
+            token = tokenResult.token
+            await setToken({ token, refreshToken })
+          }
         }
+        setCustomClaims(tokenResult.claims ?? null)
       } else {
         await removeToken()
       }
