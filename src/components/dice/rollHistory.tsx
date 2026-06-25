@@ -63,16 +63,19 @@ export function checkRollTriggers(
     }
 
     if (type === "hotNumber" && value > 0) {
-      let streakCount = 0
-      for (let i = gameRolls.length - 1; i >= 0; i--) {
-        if (gameRolls[i].total === roll.total) {
-          streakCount++
-        } else {
-          break
+      const watchTotals = rule.trigger.hotNumberTotals
+      if (!watchTotals || watchTotals.includes(roll.total)) {
+        let streakCount = 0
+        for (let i = gameRolls.length - 1; i >= 0; i--) {
+          if (gameRolls[i].total === roll.total) {
+            streakCount++
+          } else {
+            break
+          }
         }
-      }
-      if (streakCount >= value) {
-        alerts.push({ rollId: roll.id, message: `${rule.action}` })
+        if (streakCount >= value) {
+          alerts.push({ rollId: roll.id, message: `${rule.action}` })
+        }
       }
     }
   }

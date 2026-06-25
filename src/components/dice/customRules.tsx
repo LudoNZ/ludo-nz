@@ -14,6 +14,8 @@ interface CustomRulesProps {
 
 type TriggerType = "rollSum" | "doubles" | "drought" | "hotNumber"
 
+const ALL_TOTALS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
 const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRemove }) => {
   const [expanded, setExpanded] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -21,6 +23,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
   const [triggerValue, setTriggerValue] = useState(7)
   const [droughtNumber, setDroughtNumber] = useState(7)
   const [selectedDoubles, setSelectedDoubles] = useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6]))
+  const [selectedHotTotals, setSelectedHotTotals] = useState<Set<number>>(new Set(ALL_TOTALS))
   const [action, setAction] = useState("")
 
   const toggleDouble = (v: number) => {
@@ -38,21 +41,39 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
     }
   }
 
+  const toggleHotTotal = (v: number) => {
+    const next = new Set(selectedHotTotals)
+    if (next.has(v)) next.delete(v)
+    else next.add(v)
+    setSelectedHotTotals(next)
+  }
+
+  const toggleAllHotTotals = () => {
+    if (selectedHotTotals.size === ALL_TOTALS.length) {
+      setSelectedHotTotals(new Set())
+    } else {
+      setSelectedHotTotals(new Set(ALL_TOTALS))
+    }
+  }
+
   const handleAdd = () => {
     if (!action.trim()) return
     if (triggerType === "doubles" && selectedDoubles.size === 0) return
+    if (triggerType === "hotNumber" && selectedHotTotals.size === 0) return
 
     const doublesList = triggerType === "doubles" ? Array.from(selectedDoubles).sort() : undefined
+    const hotNumberTotals = triggerType === "hotNumber" ? Array.from(selectedHotTotals).sort((a, b) => a - b) : undefined
 
     const rule: CustomRule = {
       id: crypto.randomUUID(),
-      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList),
+      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals),
       enabled: true,
       trigger: {
         type: triggerType,
         value: triggerValue,
         ...(triggerType === "drought" ? { droughtNumber } : {}),
         ...(triggerType === "doubles" ? { doublesList } : {}),
+        ...(triggerType === "hotNumber" ? { hotNumberTotals } : {}),
       },
       action: action.trim(),
     }
@@ -67,6 +88,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
     setTriggerValue(7)
     setDroughtNumber(7)
     setSelectedDoubles(new Set([1, 2, 3, 4, 5, 6]))
+    setSelectedHotTotals(new Set(ALL_TOTALS))
     setAction("")
   }
 
@@ -194,18 +216,42 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
               )}
 
               {triggerType === "hotNumber" && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Count</label>
-                  <input
-                    type="number"
-                    min={2}
-                    max={10}
-                    value={triggerValue}
-                    onChange={(e) => setTriggerValue(Number(e.target.value))}
-                    className={styles.numberInput}
-                  />
-                  <span className={styles.formHint}>same total in a row</span>
-                </div>
+                <>
+                  <div className={styles.formRow}>
+                    <label className={styles.formLabel}>Totals</label>
+                    <div className={styles.doublesGrid}>
+                      <button
+                        className={`${styles.doublesBtn} ${selectedHotTotals.size === ALL_TOTALS.length ? styles.doublesActive : ""}`}
+                        onClick={toggleAllHotTotals}
+                        type="button"
+                      >
+                        All
+                      </button>
+                      {ALL_TOTALS.map((v) => (
+                        <button
+                          key={v}
+                          className={`${styles.doublesBtn} ${selectedHotTotals.has(v) ? styles.doublesActive : ""}`}
+                          onClick={() => toggleHotTotal(v)}
+                          type="button"
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.formRow}>
+                    <label className={styles.formLabel}>Count</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={10}
+                      value={triggerValue}
+                      onChange={(e) => setTriggerValue(Number(e.target.value))}
+                      className={styles.numberInput}
+                    />
+                    <span className={styles.formHint}>times in a row</span>
+                  </div>
+                </>
               )}
 
               <div className={styles.formRow}>
@@ -241,7 +287,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
   )
 }
 
-function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[]): string {
+function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[]): string {
   switch (type) {
     case "rollSum":
       return `When roll sum = ${value}`
@@ -251,7 +297,8 @@ function buildRuleText(type: TriggerType, value: number, droughtNum?: number, do
     case "drought":
       return `When ${value} rolls without a ${droughtNum ?? 7}`
     case "hotNumber":
-      return `When same total ${value}× in a row`
+      if (!hotTotals || hotTotals.length === ALL_TOTALS.length) return `When any total ${value}× in a row`
+      return `When ${hotTotals.join("/")} rolled ${value}× in a row`
   }
 }
 
