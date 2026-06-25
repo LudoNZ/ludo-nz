@@ -1,11 +1,12 @@
 "use client"
 
-import React from "react"
+import React, { useState, useMemo } from "react"
 import styles from "./rollStats.module.scss"
 import { DiceRoll } from "./types"
 
 interface RollStatsProps {
   rolls: DiceRoll[]
+  currentGame: number
 }
 
 const EXPECTED_DISTRIBUTION: Record<number, number> = {
@@ -13,24 +14,41 @@ const EXPECTED_DISTRIBUTION: Record<number, number> = {
   8: 5/36, 9: 4/36, 10: 3/36, 11: 2/36, 12: 1/36,
 }
 
-const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
-  if (rolls.length === 0) {
+type StatsScope = "current" | "all"
+
+const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
+  const [scope, setScope] = useState<StatsScope>("current")
+
+  const totalGames = Math.max(currentGame, ...rolls.map((r) => r.game || 1))
+  const hasMultipleGames = totalGames > 1
+
+  const filteredRolls = useMemo(() => {
+    if (scope === "all" || !hasMultipleGames) return rolls
+    return rolls.filter((r) => (r.game || 1) === currentGame)
+  }, [rolls, scope, currentGame, hasMultipleGames])
+
+  if (filteredRolls.length === 0) {
     return (
       <div className={styles.stats}>
-        <h3 className={styles.heading}>Statistics</h3>
-        <p className={styles.empty}>Roll some dice to see stats</p>
+        <div className={styles.headerRow}>
+          <h3 className={styles.heading}>Statistics</h3>
+          {hasMultipleGames && <ScopeToggle scope={scope} onToggle={setScope} />}
+        </div>
+        <p className={styles.empty}>
+          {scope === "current" ? "No rolls in this game yet" : "Roll some dice to see stats"}
+        </p>
       </div>
     )
   }
 
   const distribution: Record<number, number> = {}
   for (let i = 2; i <= 12; i++) distribution[i] = 0
-  for (const r of rolls) distribution[r.total]++
+  for (const r of filteredRolls) distribution[r.total]++
 
   const maxCount = Math.max(...Object.values(distribution))
 
   const playerStats = new Map<string, { count: number; sum: number; totals: number[] }>()
-  for (const r of rolls) {
+  for (const r of filteredRolls) {
     const ps = playerStats.get(r.player) || { count: 0, sum: 0, totals: [] }
     ps.count++
     ps.sum += r.total
@@ -39,21 +57,32 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
   }
 
   let streakWithout7 = 0
-  for (let i = rolls.length - 1; i >= 0; i--) {
-    if (rolls[i].total === 7) break
+  for (let i = filteredRolls.length - 1; i >= 0; i--) {
+    if (filteredRolls[i].total === 7) break
     streakWithout7++
   }
 
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
+  const faceCounts: Record<number, number> = {}
+  for (let i = 1; i <= 6; i++) faceCounts[i] = 0
+  for (const r of filteredRolls) {
+    faceCounts[r.die1]++
+    faceCounts[r.die2]++
+  }
+  const maxFace = Math.max(...Object.values(faceCounts))
+
   return (
     <div className={styles.stats}>
-      <h3 className={styles.heading}>Statistics</h3>
+      <div className={styles.headerRow}>
+        <h3 className={styles.heading}>Statistics</h3>
+        {hasMultipleGames && <ScopeToggle scope={scope} onToggle={setScope} />}
+      </div>
 
       <div className={styles.quickStats}>
         <div className={styles.stat}>
-          <span className={styles.statValue}>{rolls.length}</span>
+          <span className={styles.statValue}>{filteredRolls.length}</span>
           <span className={styles.statLabel}>Total Rolls</span>
         </div>
         <div className={styles.stat}>
@@ -64,10 +93,16 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
           <span className={styles.statValue}>{streakWithout7}</span>
           <span className={styles.statLabel}>Since Last 7</span>
         </div>
+        {hasMultipleGames && scope === "all" && (
+          <div className={styles.stat}>
+            <span className={styles.statValue}>{totalGames}</span>
+            <span className={styles.statLabel}>Games</span>
+          </div>
+        )}
       </div>
 
       <div className={styles.chart}>
-        <span className={styles.chartLabel}>Distribution</span>
+        <span className={styles.chartLabel}>Sum Distribution</span>
         {Object.entries(distribution).map(([total, count]) => {
           const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
           const expectedPct = EXPECTED_DISTRIBUTION[Number(total)] * 100
@@ -86,28 +121,19 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
 
       <div className={styles.chart}>
         <span className={styles.chartLabel}>Die Face Frequency</span>
-        {(() => {
-          const faceCounts: Record<number, number> = {}
-          for (let i = 1; i <= 6; i++) faceCounts[i] = 0
-          for (const r of rolls) {
-            faceCounts[r.die1]++
-            faceCounts[r.die2]++
-          }
-          const maxFace = Math.max(...Object.values(faceCounts))
-          return Object.entries(faceCounts).map(([face, count]) => {
-            const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
-            return (
-              <div key={`face-${face}`} className={styles.bar}>
-                <span className={styles.barTotal}>{face}</span>
-                <div className={styles.barTrack}>
-                  <div className={styles.barExpected} style={{ width: "100%" }} />
-                  <div className={styles.barFill} style={{ width: `${pct}%` }} />
-                </div>
-                <span className={styles.barCount}>{count}</span>
+        {Object.entries(faceCounts).map(([face, count]) => {
+          const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
+          return (
+            <div key={`face-${face}`} className={styles.bar}>
+              <span className={styles.barTotal}>{face}</span>
+              <div className={styles.barTrack}>
+                <div className={styles.barExpected} style={{ width: "100%" }} />
+                <div className={styles.barFill} style={{ width: `${pct}%` }} />
               </div>
-            )
-          })
-        })()}
+              <span className={styles.barCount}>{count}</span>
+            </div>
+          )
+        })}
       </div>
 
       <div className={styles.playerSection}>
@@ -132,6 +158,25 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
           })}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ScopeToggle({ scope, onToggle }: { scope: StatsScope; onToggle: (s: StatsScope) => void }) {
+  return (
+    <div className={styles.scopeToggle}>
+      <button
+        className={`${styles.scopeBtn} ${scope === "current" ? styles.scopeActive : ""}`}
+        onClick={() => onToggle("current")}
+      >
+        This Game
+      </button>
+      <button
+        className={`${styles.scopeBtn} ${scope === "all" ? styles.scopeActive : ""}`}
+        onClick={() => onToggle("all")}
+      >
+        All Games
+      </button>
     </div>
   )
 }

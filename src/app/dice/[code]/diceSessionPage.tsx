@@ -71,6 +71,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         ...data,
         inactivePlayers: data.inactivePlayers || [],
         currentTurnIndex: data.currentTurnIndex ?? 0,
+        currentGame: data.currentGame ?? 1,
       } as DiceSession)
     })
 
@@ -134,6 +135,18 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     } catch { /* ignore */ }
   }, [code, session])
 
+  const handleNewGame = useCallback(async () => {
+    if (!session) return
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), {
+        currentGame: (session.currentGame ?? 1) + 1,
+        currentTurnIndex: 0,
+      })
+    } catch {
+      setError("Failed to start new game")
+    }
+  }, [code, session])
+
   const handleRoll = useCallback(async (die1: number, die2: number, isRandom: boolean) => {
     if (!currentPlayer) return
     setError("")
@@ -145,6 +158,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         die2,
         total: die1 + die2,
         isRandom,
+        game: session?.currentGame ?? 1,
         timestamp: serverTimestamp(),
       })
 
@@ -287,8 +301,20 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
             </button>
           </div>
 
-          {activeTab === "history" && <RollHistory rolls={rolls} alerts={alerts} />}
-          {activeTab === "stats" && <RollStats rolls={rolls} />}
+          {activeTab === "history" && (
+            <RollHistory
+              rolls={rolls}
+              alerts={alerts}
+              currentGame={session.currentGame ?? 1}
+              onNewGame={handleNewGame}
+            />
+          )}
+          {activeTab === "stats" && (
+            <RollStats
+              rolls={rolls}
+              currentGame={session.currentGame ?? 1}
+            />
+          )}
         </div>
       </div>
 

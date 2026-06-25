@@ -21,6 +21,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
   const [showForm, setShowForm] = useState(false)
   const [triggerType, setTriggerType] = useState<TriggerType>("rollSum")
   const [triggerValue, setTriggerValue] = useState(7)
+  const [droughtNumber, setDroughtNumber] = useState(7)
   const [action, setAction] = useState("")
 
   const handleAdd = () => {
@@ -28,9 +29,13 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
 
     const rule: CustomRule = {
       id: crypto.randomUUID(),
-      text: buildRuleText(triggerType, triggerValue),
+      text: buildRuleText(triggerType, triggerValue, droughtNumber),
       enabled: true,
-      trigger: { type: triggerType, value: triggerValue },
+      trigger: {
+        type: triggerType,
+        value: triggerValue,
+        ...(triggerType === "drought" ? { droughtNumber } : {}),
+      },
       action: action.trim(),
     }
 
@@ -42,6 +47,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
   const resetForm = () => {
     setTriggerType("rollSum")
     setTriggerValue(7)
+    setDroughtNumber(7)
     setAction("")
   }
 
@@ -95,7 +101,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
                 >
                   <option value="rollSum">Roll sum equals...</option>
                   <option value="doubles">Doubles rolled</option>
-                  <option value="drought">Drought (no 7s for...)</option>
+                  <option value="drought">Drought (no number for...)</option>
                   <option value="hotNumber">Hot number (same total × in a row)</option>
                 </select>
               </div>
@@ -133,18 +139,32 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
               )}
 
               {triggerType === "drought" && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Rolls</label>
-                  <input
-                    type="number"
-                    min={3}
-                    max={50}
-                    value={triggerValue}
-                    onChange={(e) => setTriggerValue(Number(e.target.value))}
-                    className={styles.numberInput}
-                  />
-                  <span className={styles.formHint}>rolls without a 7</span>
-                </div>
+                <>
+                  <div className={styles.formRow}>
+                    <label className={styles.formLabel}>Number</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={12}
+                      value={droughtNumber}
+                      onChange={(e) => setDroughtNumber(Number(e.target.value))}
+                      className={styles.numberInput}
+                    />
+                    <span className={styles.formHint}>the sum to watch for</span>
+                  </div>
+                  <div className={styles.formRow}>
+                    <label className={styles.formLabel}>Rolls</label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={50}
+                      value={triggerValue}
+                      onChange={(e) => setTriggerValue(Number(e.target.value))}
+                      className={styles.numberInput}
+                    />
+                    <span className={styles.formHint}>rolls without it</span>
+                  </div>
+                </>
               )}
 
               {triggerType === "hotNumber" && (
@@ -195,14 +215,14 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
   )
 }
 
-function buildRuleText(type: TriggerType, value: number): string {
+function buildRuleText(type: TriggerType, value: number, droughtNum?: number): string {
   switch (type) {
     case "rollSum":
       return `When roll sum = ${value}`
     case "doubles":
       return value === 0 ? "When any doubles rolled" : `When double ${value}s rolled`
     case "drought":
-      return `When ${value} rolls without a 7`
+      return `When ${value} rolls without a ${droughtNum ?? 7}`
     case "hotNumber":
       return `When same total ${value}× in a row`
   }

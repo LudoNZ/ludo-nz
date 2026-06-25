@@ -7,6 +7,7 @@ export interface CustomRule {
   trigger?: {
     type: "rollSum" | "doubles" | "drought" | "hotNumber"
     value: number
+    droughtNumber?: number
   }
   action: string
 }
@@ -17,6 +18,7 @@ export interface DiceSession {
   players: string[]
   inactivePlayers: string[]
   currentTurnIndex: number
+  currentGame: number
   customRules: CustomRule[]
 }
 
@@ -27,5 +29,6 @@ export interface DiceRoll {
   die2: number
   total: number
   isRandom: boolean
+  game: number
   timestamp: Timestamp
 }

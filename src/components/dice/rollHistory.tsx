@@ -2,11 +2,14 @@
 
 import React from "react"
 import styles from "./rollHistory.module.scss"
+import Button from "@/components/button/button"
 import { DiceRoll, CustomRule } from "./types"
 
 interface RollHistoryProps {
   rolls: DiceRoll[]
   alerts: RollAlert[]
+  currentGame: number
+  onNewGame: () => void
 }
 
 export interface RollAlert {
@@ -30,6 +33,7 @@ export function checkRollTriggers(
   rolls: DiceRoll[],
   rules: CustomRule[]
 ): RollAlert[] {
+  const gameRolls = rolls.filter((r) => r.game === roll.game)
   const alerts: RollAlert[] = []
   for (const rule of rules) {
     if (!rule.enabled || !rule.trigger) continue
@@ -46,20 +50,21 @@ export function checkRollTriggers(
     }
 
     if (type === "drought" && value > 0) {
-      let countWithout7 = 0
-      for (let i = rolls.length - 1; i >= 0; i--) {
-        if (rolls[i].total === 7) break
-        countWithout7++
+      const watchNum = rule.trigger.droughtNumber ?? 7
+      let countWithout = 0
+      for (let i = gameRolls.length - 1; i >= 0; i--) {
+        if (gameRolls[i].total === watchNum) break
+        countWithout++
       }
-      if (countWithout7 >= value && roll.total !== 7) {
+      if (countWithout >= value && roll.total !== watchNum) {
         alerts.push({ rollId: roll.id, message: `${rule.action}` })
       }
     }
 
     if (type === "hotNumber" && value > 0) {
       let streakCount = 0
-      for (let i = rolls.length - 1; i >= 0; i--) {
-        if (rolls[i].total === roll.total) {
+      for (let i = gameRolls.length - 1; i >= 0; i--) {
+        if (gameRolls[i].total === roll.total) {
           streakCount++
         } else {
           break
@@ -73,7 +78,7 @@ export function checkRollTriggers(
   return alerts
 }
 
-const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts }) => {
+const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame }) => {
   const reversed = [...rolls].reverse()
   const alertMap = new Map<string, string[]>()
   for (const a of alerts) {
@@ -82,41 +87,65 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts }) => {
     alertMap.set(a.rollId, existing)
   }
 
+  const totalGames = Math.max(currentGame, ...rolls.map((r) => r.game || 1))
+  let lastGameSeen: number | null = null
+
   return (
     <div className={styles.history}>
-      <h3 className={styles.heading}>Roll History</h3>
+      <div className={styles.headerRow}>
+        <h3 className={styles.heading}>Roll History</h3>
+        <span className={styles.gameLabel}>Game {currentGame}</span>
+        <Button onClick={onNewGame} variant="secondary" size="small">
+          New Game
+        </Button>
+      </div>
       {reversed.length === 0 && (
         <p className={styles.empty}>No rolls yet. Start rolling!</p>
       )}
       <div className={styles.list}>
         {reversed.map((roll) => {
+          const rollGame = roll.game || 1
           const rollAlerts = alertMap.get(roll.id)
+          let showDivider = false
+          if (lastGameSeen !== null && rollGame !== lastGameSeen) {
+            showDivider = true
+          }
+          lastGameSeen = rollGame
+
           return (
-            <div key={roll.id} className={`${styles.entry} ${rollAlerts ? styles.hasAlert : ""}`}>
-              <div className={styles.entryMain}>
-                <span className={styles.player}>{roll.player}</span>
-                <span className={styles.dice}>
-                  <span className={styles.die}>{roll.die1}</span>
-                  <span className={styles.plus}>+</span>
-                  <span className={styles.die}>{roll.die2}</span>
-                  <span className={styles.equals}>=</span>
-                  <span className={styles.total}>{roll.total}</span>
-                </span>
-                <span className={styles.meta}>
-                  {roll.isRandom && <span className={styles.randomTag}>digital</span>}
-                  <span className={styles.time}>
-                    {roll.timestamp?.toDate ? getRelativeTime(roll.timestamp.toDate()) : "..."}
-                  </span>
-                </span>
-              </div>
-              {rollAlerts && (
-                <div className={styles.alertList}>
-                  {rollAlerts.map((msg, i) => (
-                    <span key={i} className={styles.alert}>{msg}</span>
-                  ))}
+            <React.Fragment key={roll.id}>
+              {showDivider && (
+                <div className={styles.gameDivider}>
+                  <span>Game {rollGame}</span>
                 </div>
               )}
-            </div>
+              <div className={`${styles.entry} ${rollAlerts ? styles.hasAlert : ""}`}>
+                <div className={styles.entryMain}>
+                  <span className={styles.player}>{roll.player}</span>
+                  <span className={styles.dice}>
+                    <span className={styles.die}>{roll.die1}</span>
+                    <span className={styles.plus}>+</span>
+                    <span className={styles.die}>{roll.die2}</span>
+                    <span className={styles.equals}>=</span>
+                    <span className={styles.total}>{roll.total}</span>
+                  </span>
+                  <span className={styles.meta}>
+                    {roll.isRandom && <span className={styles.randomTag}>digital</span>}
+                    {totalGames > 1 && <span className={styles.gameTag}>G{rollGame}</span>}
+                    <span className={styles.time}>
+                      {roll.timestamp?.toDate ? getRelativeTime(roll.timestamp.toDate()) : "..."}
+                    </span>
+                  </span>
+                </div>
+                {rollAlerts && (
+                  <div className={styles.alertList}>
+                    {rollAlerts.map((msg, i) => (
+                      <span key={i} className={styles.alert}>{msg}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </React.Fragment>
           )
         })}
       </div>

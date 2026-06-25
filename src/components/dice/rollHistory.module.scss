@@ -10,11 +10,53 @@
   min-height: 200px;
 }
 
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .heading {
   font-size: 0.9rem;
   text-transform: uppercase;
   opacity: 0.7;
   margin: 0;
+}
+
+.gameLabel {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  margin-right: auto;
+}
+
+.gameDivider {
+  text-align: center;
+  padding: 0.4rem 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  opacity: 0.4;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 30%;
+    height: 1px;
+    background: var(--foreground);
+    opacity: 0.3;
+  }
+
+  &::before { left: 0; }
+  &::after { right: 0; }
+}
+
+.gameTag {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 0.6rem;
 }
 
 .empty {

@@ -32,12 +32,13 @@ service cloud.firestore {
 
       match /rolls/{rollId} {
         allow read: if true;
-        allow create: if request.resource.data.keys().hasAll(['player', 'die1', 'die2', 'total', 'isRandom', 'timestamp'])
+        allow create: if request.resource.data.keys().hasAll(['player', 'die1', 'die2', 'total', 'isRandom', 'game', 'timestamp'])
           && request.resource.data.die1 is int
           && request.resource.data.die2 is int
           && request.resource.data.die1 >= 1 && request.resource.data.die1 <= 6
           && request.resource.data.die2 >= 1 && request.resource.data.die2 <= 6
-          && request.resource.data.total == request.resource.data.die1 + request.resource.data.die2;
+          && request.resource.data.total == request.resource.data.die1 + request.resource.data.die2
+          && request.resource.data.game is int;
         allow update, delete: if false;
       }
     }

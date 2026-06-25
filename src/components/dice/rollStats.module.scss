@@ -9,11 +9,45 @@
   gap: 1rem;
 }
 
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .heading {
   font-size: 0.9rem;
   text-transform: uppercase;
   opacity: 0.7;
   margin: 0;
+}
+
+.scopeToggle {
+  margin-left: auto;
+  display: flex;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+}
+
+.scopeBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.65rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.5;
+  text-transform: uppercase;
+
+  &:hover { opacity: 0.8; }
+
+  &.scopeActive {
+    background: var(--color-primary);
+    color: var(--background);
+    opacity: 1;
+  }
 }
 
 .empty {
