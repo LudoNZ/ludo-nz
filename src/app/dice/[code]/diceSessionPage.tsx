@@ -402,6 +402,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
             <RollStats
               rolls={rolls}
               currentGame={session.currentGame ?? 1}
+              diceConfig={session.diceConfig}
             />
           )}
           {activeTab === "archive" && (
@@ -439,6 +440,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
                   <RollStats
                     rolls={rolls.filter((r) => (r.game || 1) === archiveGameView)}
                     currentGame={archiveGameView}
+                    diceConfig={session.diceConfig}
                   />
                 </>
               )}

@@ -2,11 +2,12 @@
 
 import React, { useState, useMemo } from "react"
 import styles from "./rollStats.module.scss"
-import { DiceRoll, getRollDice } from "./types"
+import { DiceRoll, DiceConfig, DEFAULT_DICE_CONFIG, getRollDice } from "./types"
 
 interface RollStatsProps {
   rolls: DiceRoll[]
   currentGame: number
+  diceConfig?: DiceConfig
 }
 
 const EXPECTED_DISTRIBUTION: Record<number, number> = {
@@ -16,7 +17,8 @@ const EXPECTED_DISTRIBUTION: Record<number, number> = {
 
 type StatsScope = "current" | "all"
 
-const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
+const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig }) => {
+  const config = diceConfig || DEFAULT_DICE_CONFIG
   const [scope, setScope] = useState<StatsScope>("current")
 
   const totalGames = Math.max(currentGame, ...rolls.map((r) => r.game || 1))
@@ -65,13 +67,22 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
-  const faceCounts: Record<number, number> = {}
-  for (const r of filteredRolls) {
-    for (const d of getRollDice(r)) {
-      faceCounts[d] = (faceCounts[d] || 0) + 1
-    }
+  const dieTypes = new Set(config.dice)
+  const faceCountsByType: Record<number, Record<number, number>> = {}
+  for (const sides of dieTypes) {
+    const counts: Record<number, number> = {}
+    for (let i = 1; i <= sides; i++) counts[i] = 0
+    faceCountsByType[sides] = counts
   }
-  const maxFace = Math.max(...Object.values(faceCounts))
+  for (const r of filteredRolls) {
+    const dice = getRollDice(r)
+    dice.forEach((value, i) => {
+      const sides = config.dice[i] || 6
+      if (faceCountsByType[sides]) {
+        faceCountsByType[sides][value] = (faceCountsByType[sides][value] || 0) + 1
+      }
+    })
+  }
 
   return (
     <div className={styles.stats}>
@@ -119,22 +130,31 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
         })}
       </div>
 
-      <div className={styles.chart}>
-        <span className={styles.chartLabel}>Die Face Frequency</span>
-        {Object.entries(faceCounts).map(([face, count]) => {
-          const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
-          return (
-            <div key={`face-${face}`} className={styles.bar}>
-              <span className={styles.barTotal}>{face}</span>
-              <div className={styles.barTrack}>
-                <div className={styles.barExpected} style={{ width: "100%" }} />
-                <div className={styles.barFill} style={{ width: `${pct}%` }} />
-              </div>
-              <span className={styles.barCount}>{count}</span>
-            </div>
-          )
-        })}
-      </div>
+      {Array.from(dieTypes).sort((a, b) => a - b).map((sides) => {
+        const counts = faceCountsByType[sides]
+        const maxFace = Math.max(...Object.values(counts), 1)
+        const dieCount = config.dice.filter((s) => s === sides).length
+        return (
+          <div key={`face-d${sides}`} className={styles.chart}>
+            <span className={styles.chartLabel}>
+              d{sides} Face Frequency{dieCount > 1 ? ` (×${dieCount})` : ""}
+            </span>
+            {Object.entries(counts).map(([face, count]) => {
+              const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
+              return (
+                <div key={`face-d${sides}-${face}`} className={styles.bar}>
+                  <span className={styles.barTotal}>{face}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barExpected} style={{ width: "100%" }} />
+                    <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={styles.barCount}>{count}</span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
 
       <div className={styles.playerSection}>
         <span className={styles.chartLabel}>Per Player</span>
