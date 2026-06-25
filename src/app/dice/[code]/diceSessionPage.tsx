@@ -25,6 +25,24 @@ import RollHistory, { RollAlert, checkRollTriggers } from "@/components/dice/rol
 import RollStats from "@/components/dice/rollStats"
 import CustomRules from "@/components/dice/customRules"
 
+function playAlertSound() {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15)
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.3)
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.5)
+    osc.onended = () => ctx.close()
+  } catch { /* audio not available */ }
+}
+
 interface DiceSessionPageProps {
   code: string
 }
@@ -97,6 +115,8 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           const newAlerts = checkRollTriggers(roll, newRolls, sessionRef.current.customRules)
           if (newAlerts.length > 0) {
             setAlerts((prev) => [...prev, ...newAlerts])
+            playAlertSound()
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200])
             for (const a of newAlerts) {
               const id = ++toastIdRef.current
               setToasts((prev) => [...prev, { id, message: a.message }])

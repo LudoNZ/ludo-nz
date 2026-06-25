@@ -14,6 +14,7 @@ interface SessionSummary {
   players: string[]
   currentGame: number
   rollCount: number
+  rulesCount: number
   createdAt: Date | null
 }
 
@@ -53,6 +54,7 @@ export const AdminDashboardPage = () => {
               players: data.players || [],
               currentGame: data.currentGame ?? 1,
               rollCount: rollsSnap.data().count,
+              rulesCount: (data.customRules || []).length,
               createdAt: data.createdAt?.toDate?.() || null,
             }
           })
@@ -123,6 +125,7 @@ export const AdminDashboardPage = () => {
               <span className={styles.colPlayers}>Players</span>
               <span className={styles.colGames}>Games</span>
               <span className={styles.colRolls}>Rolls</span>
+              <span className={styles.colRules}>Rules</span>
               <span className={styles.colDate}>Created</span>
             </div>
             {sessions.map((s) => (
@@ -136,6 +139,7 @@ export const AdminDashboardPage = () => {
                 <span className={styles.colPlayers}>{s.players.join(", ")}</span>
                 <span className={styles.colGames}>{s.currentGame}</span>
                 <span className={styles.colRolls}>{s.rollCount}</span>
+                <span className={styles.colRules}>{s.rulesCount}</span>
                 <span className={styles.colDate}>
                   {s.createdAt
                     ? s.createdAt.toLocaleDateString(undefined, {
