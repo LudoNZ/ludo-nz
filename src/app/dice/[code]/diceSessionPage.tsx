@@ -245,6 +245,14 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code, session])
 
+  const triggerCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const a of alerts) {
+      counts.set(a.ruleId, (counts.get(a.ruleId) || 0) + 1)
+    }
+    return counts
+  }, [alerts])
+
   if (notFound) {
     return (
       <div className={styles.sessionPage}>
@@ -290,6 +298,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           )}
           <CustomRules
             rules={session.customRules}
+            triggerCounts={triggerCounts}
             onAdd={handleAddRule}
             onToggle={handleToggleRule}
             onRemove={handleRemoveRule}

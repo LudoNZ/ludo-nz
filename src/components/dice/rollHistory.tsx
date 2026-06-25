@@ -14,6 +14,7 @@ interface RollHistoryProps {
 
 export interface RollAlert {
   rollId: string
+  ruleId: string
   message: string
 }
 
@@ -40,13 +41,13 @@ export function checkRollTriggers(
     const { type, value } = rule.trigger
 
     if (type === "rollSum" && roll.total === value) {
-      alerts.push({ rollId: roll.id, message: `${rule.action}` })
+      alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
     }
 
     if (type === "doubles" && roll.die1 === roll.die2) {
       const list = rule.trigger.doublesList
       if (!list || list.length === 6 || list.includes(roll.die1)) {
-        alerts.push({ rollId: roll.id, message: `${rule.action}` })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
       }
     }
 
@@ -58,7 +59,7 @@ export function checkRollTriggers(
         countWithout++
       }
       if (countWithout >= value && roll.total !== watchNum) {
-        alerts.push({ rollId: roll.id, message: `${rule.action}` })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
       }
     }
 
@@ -74,7 +75,7 @@ export function checkRollTriggers(
           }
         }
         if (streakCount >= value) {
-          alerts.push({ rollId: roll.id, message: `${rule.action}` })
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
         }
       }
     }

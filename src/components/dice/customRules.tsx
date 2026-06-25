@@ -7,6 +7,7 @@ import { CustomRule } from "./types"
 
 interface CustomRulesProps {
   rules: CustomRule[]
+  triggerCounts: Map<string, number>
   onAdd: (rule: CustomRule) => void
   onToggle: (ruleId: string) => void
   onRemove: (ruleId: string) => void
@@ -16,9 +17,10 @@ type TriggerType = "rollSum" | "doubles" | "drought" | "hotNumber"
 
 const ALL_TOTALS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
-const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRemove }) => {
+const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, onAdd, onToggle, onRemove }) => {
   const [expanded, setExpanded] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [triggerType, setTriggerType] = useState<TriggerType>("rollSum")
   const [triggerValue, setTriggerValue] = useState(7)
   const [droughtNumber, setDroughtNumber] = useState(7)
@@ -118,9 +120,32 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, onAdd, onToggle, onRem
               </button>
               <div className={styles.ruleText}>
                 <span className={styles.ruleCondition}>{rule.text}</span>
-                <span className={styles.ruleAction}>{rule.action}</span>
+                <span className={styles.ruleAction}>
+                  {rule.action}
+                  {(triggerCounts.get(rule.id) ?? 0) > 0 && (
+                    <span className={styles.triggerCount}>×{triggerCounts.get(rule.id)}</span>
+                  )}
+                </span>
               </div>
-              <button className={styles.removeBtn} onClick={() => onRemove(rule.id)}>×</button>
+              {confirmDeleteId === rule.id ? (
+                <div className={styles.confirmDelete}>
+                  <span className={styles.confirmLabel}>Delete?</span>
+                  <button
+                    className={styles.confirmYes}
+                    onClick={() => { onRemove(rule.id); setConfirmDeleteId(null) }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    className={styles.confirmNo}
+                    onClick={() => setConfirmDeleteId(null)}
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button className={styles.removeBtn} onClick={() => setConfirmDeleteId(rule.id)}>×</button>
+              )}
             </div>
           ))}
 
