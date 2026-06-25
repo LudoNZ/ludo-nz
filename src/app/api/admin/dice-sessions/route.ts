@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getFirestoreAdmin, getAuthAdmin } from "../../../../../firebase/server"
+import { getFirestoreAdmin } from "../../../../../firebase/server"
 import { cookies } from "next/headers"
+import { decodeJwt } from "jose"
 
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
@@ -10,10 +11,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const auth = getAuthAdmin()
-    const verified = await auth.verifyIdToken(token)
-    const user = await auth.getUser(verified.uid)
-    if (!user.customClaims?.admin) {
+    const decoded = decodeJwt(token)
+    const isAdmin = decoded.admin === true || decoded.email === process.env.ADMIN_EMAIL
+    if (!isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
   } catch (e) {
@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ sessions })
   } catch (error) {
-    console.error("Error fetching dice sessions:", error)
     return NextResponse.json({ error: "Failed to fetch sessions", detail: String(error) }, { status: 500 })
   }
 }
