@@ -64,21 +64,14 @@
 }
 
 .playerTag {
-  padding: 0.25rem 0.4rem 0.25rem 0.6rem;
+  padding: 0.25rem 0.4rem;
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   font-size: 0.85rem;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  cursor: grab;
+  gap: 0.3rem;
   transition: all 0.15s;
-  user-select: none;
-
-  &:active {
-    cursor: grabbing;
-    opacity: 0.6;
-  }
 
   &.current {
     border-color: var(--color-primary);
@@ -91,8 +84,35 @@
   }
 }
 
+.moveButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.moveBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 0.7rem;
+  line-height: 0.6;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.3;
+
+  &:hover:not(:disabled) {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+
+  &:disabled {
+    opacity: 0.1;
+    cursor: default;
+  }
+}
+
 .playerName {
-  pointer-events: none;
+  font-size: 0.85rem;
 }
 
 .toggleBtn {

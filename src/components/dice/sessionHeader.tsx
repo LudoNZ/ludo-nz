@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState } from "react"
 import styles from "./sessionHeader.module.scss"
 import { DiceSession } from "./types"
 
@@ -24,8 +24,6 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
   const [copied, setCopied] = useState(false)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState("")
-  const dragItem = useRef<number | null>(null)
-  const dragOver = useRef<number | null>(null)
 
   const handleCopy = async () => {
     try {
@@ -37,24 +35,13 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
     }
   }
 
-  const handleDragStart = (index: number) => {
-    dragItem.current = index
-  }
-
-  const handleDragEnter = (index: number) => {
-    dragOver.current = index
-  }
-
-  const handleDragEnd = () => {
-    if (dragItem.current === null || dragOver.current === null) return
-    if (dragItem.current === dragOver.current) return
-
+  const movePlayer = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= session.players.length) return
     const reordered = [...session.players]
-    const [moved] = reordered.splice(dragItem.current, 1)
-    reordered.splice(dragOver.current, 0, moved)
-
-    dragItem.current = null
-    dragOver.current = null
+    const temp = reordered[index]
+    reordered[index] = reordered[target]
+    reordered[target] = temp
     onReorder(reordered)
   }
 
@@ -83,7 +70,7 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
         </button>
       </div>
       <div className={styles.players}>
-        <span className={styles.label}>Players (drag to reorder)</span>
+        <span className={styles.label}>Players</span>
         <div className={styles.playerList}>
           {session.players.map((p, i) => {
             const isInactive = inactive.has(p)
@@ -92,12 +79,25 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
               <div
                 key={p}
                 className={`${styles.playerTag} ${isInactive ? styles.inactive : ""} ${isCurrent ? styles.current : ""}`}
-                draggable
-                onDragStart={() => handleDragStart(i)}
-                onDragEnter={() => handleDragEnter(i)}
-                onDragEnd={handleDragEnd}
-                onDragOver={(e) => e.preventDefault()}
               >
+                <div className={styles.moveButtons}>
+                  <button
+                    className={styles.moveBtn}
+                    onClick={() => movePlayer(i, -1)}
+                    disabled={i === 0}
+                    title="Move left"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    className={styles.moveBtn}
+                    onClick={() => movePlayer(i, 1)}
+                    disabled={i === session.players.length - 1}
+                    title="Move right"
+                  >
+                    ›
+                  </button>
+                </div>
                 <span className={styles.playerName}>{p}</span>
                 <button
                   className={styles.toggleBtn}

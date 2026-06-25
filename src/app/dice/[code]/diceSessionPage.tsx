@@ -35,6 +35,8 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState("")
   const [alerts, setAlerts] = useState<RollAlert[]>([])
+  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([])
+  const toastIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<"history" | "stats" | "archive">("history")
   const [archiveGameView, setArchiveGameView] = useState<number | null>(null)
   const sessionRef = useRef<DiceSession | null>(null)
@@ -94,6 +96,13 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           const newAlerts = checkRollTriggers(roll, newRolls, sessionRef.current.customRules)
           if (newAlerts.length > 0) {
             setAlerts((prev) => [...prev, ...newAlerts])
+            for (const a of newAlerts) {
+              const id = ++toastIdRef.current
+              setToasts((prev) => [...prev, { id, message: a.message }])
+              setTimeout(() => {
+                setToasts((prev) => prev.filter((t) => t.id !== id))
+              }, 4000)
+            }
           }
         }
       })
@@ -290,6 +299,16 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         onToggleActive={handleToggleActive}
         onAddPlayer={handleAddPlayer}
       />
+
+      {toasts.length > 0 && (
+        <div className={styles.toastContainer}>
+          {toasts.map((t) => (
+            <div key={t.id} className={styles.toast}>
+              {t.message}
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <p className={styles.error}>{error}</p>}
 
