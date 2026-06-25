@@ -12,7 +12,7 @@
     ]
   },
   "apphosting": {
-    "backendId": "ludo-web-app",
+    "backendId": "ludo-web",
     "rootDir": "/",
     "ignore": [
       "node_modules",
