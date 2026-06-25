@@ -3,7 +3,7 @@
 import React from "react"
 import styles from "./rollHistory.module.scss"
 import Button from "@/components/button/button"
-import { DiceRoll, CustomRule } from "./types"
+import { DiceRoll, CustomRule, getRollDice } from "./types"
 
 interface RollHistoryProps {
   rolls: DiceRoll[]
@@ -45,9 +45,10 @@ export function checkRollTriggers(
       alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
     }
 
-    if (type === "doubles" && roll.die1 === roll.die2) {
+    const dice = getRollDice(roll)
+    if (type === "doubles" && dice.length >= 2 && dice.every((d) => d === dice[0])) {
       const list = rule.trigger.doublesList
-      if (!list || list.length === 6 || list.includes(roll.die1)) {
+      if (!list || list.length === 6 || list.includes(dice[0])) {
         alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
       }
     }
@@ -143,9 +144,12 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
                 <div className={styles.entryMain}>
                   <span className={styles.player}>{roll.player}</span>
                   <span className={styles.dice}>
-                    <span className={styles.die}>{roll.die1}</span>
-                    <span className={styles.plus}>+</span>
-                    <span className={styles.die}>{roll.die2}</span>
+                    {getRollDice(roll).map((d, i) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && <span className={styles.plus}>+</span>}
+                        <span className={styles.die}>{d}</span>
+                      </React.Fragment>
+                    ))}
                     <span className={styles.equals}>=</span>
                     <span className={styles.total}>{roll.total}</span>
                   </span>

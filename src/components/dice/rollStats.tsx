@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react"
 import styles from "./rollStats.module.scss"
-import { DiceRoll } from "./types"
+import { DiceRoll, getRollDice } from "./types"
 
 interface RollStatsProps {
   rolls: DiceRoll[]
@@ -66,10 +66,10 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame }) => {
     .sort(([, a], [, b]) => b - a)[0][0]
 
   const faceCounts: Record<number, number> = {}
-  for (let i = 1; i <= 6; i++) faceCounts[i] = 0
   for (const r of filteredRolls) {
-    faceCounts[r.die1]++
-    faceCounts[r.die2]++
+    for (const d of getRollDice(r)) {
+      faceCounts[d] = (faceCounts[d] || 0) + 1
+    }
   }
   const maxFace = Math.max(...Object.values(faceCounts))
 

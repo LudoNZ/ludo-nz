@@ -3,14 +3,14 @@
 import React, { useState } from "react"
 import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
+import { DiceConfig, DEFAULT_DICE_CONFIG } from "./types"
 
 interface DiceRollerProps {
   currentPlayer: string
-  onRoll: (die1: number, die2: number, isRandom: boolean) => void
+  diceConfig?: DiceConfig
+  onRoll: (dice: number[], isRandom: boolean) => void
   disabled?: boolean
 }
-
-const DIE_VALUES = [1, 2, 3, 4, 5, 6]
 
 function DieDots({ value }: { value: number }) {
   return (
@@ -60,36 +60,42 @@ function DieDots({ value }: { value: number }) {
   )
 }
 
-const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled }) => {
-  const [die1, setDie1] = useState<number | null>(null)
-  const [die2, setDie2] = useState<number | null>(null)
-  const [lastDie1, setLastDie1] = useState<number | null>(null)
-  const [lastDie2, setLastDie2] = useState<number | null>(null)
+const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRoll, disabled }) => {
+  const config = diceConfig || DEFAULT_DICE_CONFIG
+  const { count, sides } = config
+  const values = Array.from({ length: sides }, (_, i) => i + 1)
+
+  const [selected, setSelected] = useState<(number | null)[]>(Array(count).fill(null))
+  const [lastRoll, setLastRoll] = useState<(number | null)[]>(Array(count).fill(null))
+
+  const allSelected = selected.every((v) => v !== null)
+  const total = allSelected ? selected.reduce((s, v) => s + (v ?? 0), 0) : null
+
+  const handleSelect = (dieIndex: number, value: number) => {
+    setSelected((prev) => {
+      const next = [...prev]
+      next[dieIndex] = value
+      return next
+    })
+  }
 
   const handleManualRoll = () => {
-    if (die1 === null || die2 === null) return
-    setLastDie1(die1)
-    setLastDie2(die2)
-    onRoll(die1, die2, false)
-    setDie1(null)
-    setDie2(null)
+    if (!allSelected) return
+    setLastRoll([...selected])
+    onRoll(selected as number[], false)
+    setSelected(Array(count).fill(null))
   }
 
   const handleRandomRoll = () => {
-    const d1 = Math.floor(Math.random() * 6) + 1
-    const d2 = Math.floor(Math.random() * 6) + 1
-    setLastDie1(d1)
-    setLastDie2(d2)
-    setDie1(null)
-    setDie2(null)
-    onRoll(d1, d2, true)
+    const dice = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
+    setLastRoll(dice)
+    setSelected(Array(count).fill(null))
+    onRoll(dice, true)
   }
 
-  const getDieClass = (dieNum: 1 | 2, v: number) => {
-    const current = dieNum === 1 ? die1 : die2
-    const last = dieNum === 1 ? lastDie1 : lastDie2
-    if (current === v) return styles.selected
-    if (current === null && last === v) return styles.lastRoll
+  const getDieClass = (dieIndex: number, v: number) => {
+    if (selected[dieIndex] === v) return styles.selected
+    if (selected[dieIndex] === null && lastRoll[dieIndex] === v) return styles.lastRoll
     return ""
   }
 
@@ -97,43 +103,34 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
     <div className={styles.roller}>
       <div className={styles.rollerHeader}>
         <span className={styles.turnLabel}>{currentPlayer}&apos;s turn</span>
+        <span className={styles.configLabel}>{count}d{sides}</span>
       </div>
 
       <div className={styles.manualSection}>
-        <span className={styles.dieLabel}>Die 1</span>
-        <div className={styles.dieRow}>
-          {DIE_VALUES.map((v) => (
-            <button
-              key={`d1-${v}`}
-              className={`${styles.dieFace} ${getDieClass(1, v)}`}
-              onClick={() => setDie1(v)}
-              disabled={disabled}
-            >
-              <DieDots value={v} />
-            </button>
-          ))}
-        </div>
-
-        <span className={styles.dieLabel}>Die 2</span>
-        <div className={styles.dieRow}>
-          {DIE_VALUES.map((v) => (
-            <button
-              key={`d2-${v}`}
-              className={`${styles.dieFace} ${getDieClass(2, v)}`}
-              onClick={() => setDie2(v)}
-              disabled={disabled}
-            >
-              <DieDots value={v} />
-            </button>
-          ))}
-        </div>
+        {Array.from({ length: count }, (_, dieIndex) => (
+          <div key={dieIndex}>
+            <span className={styles.dieLabel}>Die {dieIndex + 1}</span>
+            <div className={styles.dieRow}>
+              {values.map((v) => (
+                <button
+                  key={`d${dieIndex}-${v}`}
+                  className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""}`}
+                  onClick={() => handleSelect(dieIndex, v)}
+                  disabled={disabled}
+                >
+                  {sides <= 6 ? <DieDots value={v} /> : v}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
 
         <Button
           onClick={handleManualRoll}
-          disabled={disabled || die1 === null || die2 === null}
+          disabled={disabled || !allSelected}
           size="medium"
         >
-          Log Roll ({die1 !== null && die2 !== null ? die1 + die2 : "?"})
+          Log Roll ({total ?? "?"})
         </Button>
       </div>
 

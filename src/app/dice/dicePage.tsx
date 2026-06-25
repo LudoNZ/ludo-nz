@@ -7,6 +7,7 @@ import Button from "@/components/button/button"
 import { firestore } from "../../../firebase/client"
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore"
 import Link from "next/link"
+import { DEFAULT_DICE_CONFIG } from "@/components/dice/types"
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -100,6 +101,7 @@ const DicePage: React.FC = () => {
         currentTurnIndex: 0,
         currentGame: 1,
         games: [{ number: 1, startedAt: Timestamp.now() }],
+        diceConfig: DEFAULT_DICE_CONFIG,
         customRules: [],
       })
 

@@ -17,13 +17,14 @@ import {
   query,
   orderBy,
 } from "firebase/firestore"
-import { DiceSession, DiceRoll, CustomRule } from "@/components/dice/types"
+import { DiceSession, DiceRoll, CustomRule, DiceConfig, DEFAULT_DICE_CONFIG } from "@/components/dice/types"
 import PlayerJoinForm from "@/components/dice/playerJoinForm"
 import SessionHeader from "@/components/dice/sessionHeader"
 import DiceRoller from "@/components/dice/diceRoller"
 import RollHistory, { RollAlert, checkRollTriggers } from "@/components/dice/rollHistory"
 import RollStats from "@/components/dice/rollStats"
 import CustomRules from "@/components/dice/customRules"
+import DiceSettings from "@/components/dice/diceSettings"
 
 function playAlertSound() {
   try {
@@ -95,6 +96,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         currentTurnIndex: data.currentTurnIndex ?? 0,
         currentGame: data.currentGame ?? 1,
         games: data.games || [],
+        diceConfig: data.diceConfig || DEFAULT_DICE_CONFIG,
       } as DiceSession)
     })
 
@@ -182,16 +184,23 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code, session])
 
-  const handleRoll = useCallback(async (die1: number, die2: number, isRandom: boolean) => {
+  const handleDiceConfigChange = useCallback(async (config: DiceConfig) => {
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), { diceConfig: config })
+    } catch {
+      setError("Failed to update dice settings")
+    }
+  }, [code])
+
+  const handleRoll = useCallback(async (dice: number[], isRandom: boolean) => {
     if (!currentPlayer) return
     setError("")
 
     try {
       await addDoc(collection(firestore, "diceSessions", code, "rolls"), {
         player: currentPlayer,
-        die1,
-        die2,
-        total: die1 + die2,
+        dice,
+        total: dice.reduce((s, v) => s + v, 0),
         isRandom,
         game: session?.currentGame ?? 1,
         timestamp: serverTimestamp(),
@@ -312,14 +321,20 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     <div className={styles.sessionPage}>
       {!playerName && <PlayerJoinForm onJoin={handleJoin} />}
 
-      <SessionHeader
-        code={code}
-        session={session}
-        currentPlayer={currentPlayer}
-        onReorder={handleReorder}
-        onToggleActive={handleToggleActive}
-        onAddPlayer={handleAddPlayer}
-      />
+      <div className={styles.headerBar}>
+        <SessionHeader
+          code={code}
+          session={session}
+          currentPlayer={currentPlayer}
+          onReorder={handleReorder}
+          onToggleActive={handleToggleActive}
+          onAddPlayer={handleAddPlayer}
+        />
+        <DiceSettings
+          config={session.diceConfig || DEFAULT_DICE_CONFIG}
+          onSave={handleDiceConfigChange}
+        />
+      </div>
 
       {toasts.length > 0 && (
         <div className={styles.toastContainer}>
@@ -338,6 +353,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           {currentPlayer && (
             <DiceRoller
               currentPlayer={currentPlayer}
+              diceConfig={session.diceConfig || DEFAULT_DICE_CONFIG}
               onRoll={handleRoll}
             />
           )}

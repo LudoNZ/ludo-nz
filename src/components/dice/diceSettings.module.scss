@@ -1,0 +1,104 @@
+.gearBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.gearIcon {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: var(--foreground);
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+}
+
+.panel {
+  background: var(--background);
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 2rem;
+  max-width: 360px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+
+  h3 {
+    margin: 0;
+    text-align: center;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.options {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.optionBtn {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 2.5rem;
+  text-align: center;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &.optionActive {
+    background: var(--color-primary);
+    color: var(--background);
+    border-color: var(--color-primary);
+  }
+}
+
+.preview {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--color-primary);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}

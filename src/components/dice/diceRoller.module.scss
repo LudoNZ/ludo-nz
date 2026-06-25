@@ -11,12 +11,22 @@
 
 .rollerHeader {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
 }
 
 .turnLabel {
   font-size: 1.1rem;
   color: var(--color-primary);
   font-weight: bold;
+}
+
+.configLabel {
+  font-size: 0.7rem;
+  opacity: 0.4;
+  text-transform: uppercase;
 }
 
 .manualSection {
@@ -34,6 +44,7 @@
 .dieRow {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .dieFace {
@@ -82,6 +93,26 @@
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  &.numberFace {
+    width: 2.2rem;
+    height: 2.2rem;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--foreground);
+  }
+
+  &.numberFace.selected,
+  &.numberFace.selected:hover,
+  &.numberFace.selected:focus {
+    color: var(--background);
+  }
+
+  &.numberFace:hover:not(:disabled):not(.selected) {
+    color: var(--color-primary);
   }
 }
 
