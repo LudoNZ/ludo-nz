@@ -38,8 +38,8 @@ export const AdminDashboardPage = () => {
       setError("")
       try {
         const res = await fetch(`/api/admin/dice-sessions?filter=${filter}`)
-        if (!res.ok) throw new Error("Failed to fetch")
         const data = await res.json()
+        if (!res.ok) throw new Error(data.detail || data.error || "Failed to fetch")
         setSessions(data.sessions)
       } catch {
         setError("Failed to load sessions")

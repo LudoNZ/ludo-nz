@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
     if (!user.customClaims?.admin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
-  } catch {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+  } catch (e) {
+    return NextResponse.json({ error: "Invalid token", detail: String(e) }, { status: 401 })
   }
 
   const filter = request.nextUrl.searchParams.get("filter") || "recent"
@@ -63,6 +63,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sessions })
   } catch (error) {
     console.error("Error fetching dice sessions:", error)
-    return NextResponse.json({ error: "Failed to fetch sessions" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch sessions", detail: String(error) }, { status: 500 })
   }
 }
