@@ -174,6 +174,16 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code, currentPlayer, session, advanceTurn])
 
+  const handleAddPlayer = useCallback(async (name: string) => {
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), {
+        players: arrayUnion(name),
+      })
+    } catch {
+      setError("Failed to add player")
+    }
+  }, [code])
+
   const handleReorder = useCallback(async (newOrder: string[]) => {
     try {
       await updateDoc(doc(firestore, "diceSessions", code), {
@@ -265,6 +275,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         currentPlayer={currentPlayer}
         onReorder={handleReorder}
         onToggleActive={handleToggleActive}
+        onAddPlayer={handleAddPlayer}
       />
 
       {error && <p className={styles.error}>{error}</p>}
