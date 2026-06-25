@@ -65,7 +65,6 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
   const [die2, setDie2] = useState<number | null>(null)
   const [lastDie1, setLastDie1] = useState<number | null>(null)
   const [lastDie2, setLastDie2] = useState<number | null>(null)
-  const [rolling, setRolling] = useState(false)
 
   const handleManualRoll = () => {
     if (die1 === null || die2 === null) return
@@ -77,20 +76,13 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
   }
 
   const handleRandomRoll = () => {
-    if (rolling) return
     const d1 = Math.floor(Math.random() * 6) + 1
     const d2 = Math.floor(Math.random() * 6) + 1
-    setDie1(d1)
-    setDie2(d2)
-    setRolling(true)
-    setTimeout(() => {
-      setLastDie1(d1)
-      setLastDie2(d2)
-      onRoll(d1, d2, true)
-      setDie1(null)
-      setDie2(null)
-      setRolling(false)
-    }, 1200)
+    setLastDie1(d1)
+    setLastDie2(d2)
+    setDie1(null)
+    setDie2(null)
+    onRoll(d1, d2, true)
   }
 
   const getDieClass = (dieNum: 1 | 2, v: number) => {
@@ -115,7 +107,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
               key={`d1-${v}`}
               className={`${styles.dieFace} ${getDieClass(1, v)}`}
               onClick={() => setDie1(v)}
-              disabled={disabled || rolling}
+              disabled={disabled}
             >
               <DieDots value={v} />
             </button>
@@ -129,7 +121,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
               key={`d2-${v}`}
               className={`${styles.dieFace} ${getDieClass(2, v)}`}
               onClick={() => setDie2(v)}
-              disabled={disabled || rolling}
+              disabled={disabled}
             >
               <DieDots value={v} />
             </button>
@@ -138,7 +130,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
 
         <Button
           onClick={handleManualRoll}
-          disabled={disabled || rolling || die1 === null || die2 === null}
+          disabled={disabled || die1 === null || die2 === null}
           size="medium"
         >
           Log Roll ({die1 !== null && die2 !== null ? die1 + die2 : "?"})
@@ -149,8 +141,8 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, onRoll, disabled
         <span>or</span>
       </div>
 
-      <Button onClick={handleRandomRoll} disabled={disabled || rolling} variant="secondary" size="medium">
-        Roll
+      <Button onClick={handleRandomRoll} disabled={disabled} variant="secondary" size="medium">
+        Quick Roll
       </Button>
     </div>
   )
