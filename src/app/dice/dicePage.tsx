@@ -1,11 +1,12 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import styles from "./dicePage.module.scss"
 import { useRouter } from "next/navigation"
 import Button from "@/components/button/button"
 import { firestore } from "../../../firebase/client"
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"
+import Link from "next/link"
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -17,31 +18,75 @@ function generateSessionCode(): string {
   return code
 }
 
+interface SessionHistory {
+  code: string
+  name: string
+  joinedAt: number
+  isCreator: boolean
+}
+
+function getSessionHistory(): SessionHistory[] {
+  try {
+    const raw = localStorage.getItem("diceTracker_sessions")
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveSessionToHistory(code: string, name: string, isCreator: boolean) {
+  const history = getSessionHistory().filter((s) => s.code !== code)
+  history.unshift({ code, name, joinedAt: Date.now(), isCreator })
+  if (history.length > 20) history.length = 20
+  localStorage.setItem("diceTracker_sessions", JSON.stringify(history))
+}
+
+type Mode = "create" | "join"
+
 const DicePage: React.FC = () => {
   const router = useRouter()
-  const [createName, setCreateName] = useState("")
-  const [joinCode, setJoinCode] = useState("")
+  const [mode, setMode] = useState<Mode>("create")
+  const [name, setName] = useState("")
+  const [sessionCode, setSessionCode] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState<SessionHistory[]>([])
+
+  useEffect(() => {
+    const lastName = localStorage.getItem("diceTracker_lastPlayerName") || ""
+    setName(lastName)
+    setHistory(getSessionHistory())
+  }, [])
 
   const handleCreate = async () => {
-    if (!createName.trim()) {
-      setError("Enter your name to create a session")
+    if (!name.trim()) {
+      setError("Enter your name")
       return
     }
     setError("")
     setLoading(true)
 
     try {
-      let code = generateSessionCode()
-      let exists = true
-      let attempts = 0
+      let code = sessionCode.trim().toUpperCase()
 
-      while (exists && attempts < 5) {
+      if (code) {
+        if (code.length !== 6) {
+          setError("Session code must be 6 characters")
+          setLoading(false)
+          return
+        }
         const snap = await getDoc(doc(firestore, "diceSessions", code))
-        if (!snap.exists()) {
-          exists = false
-        } else {
+        if (snap.exists()) {
+          setError("That code is already in use. Leave it blank to auto-generate.")
+          setLoading(false)
+          return
+        }
+      } else {
+        code = generateSessionCode()
+        let attempts = 0
+        while (attempts < 5) {
+          const snap = await getDoc(doc(firestore, "diceSessions", code))
+          if (!snap.exists()) break
           code = generateSessionCode()
           attempts++
         }
@@ -49,13 +94,14 @@ const DicePage: React.FC = () => {
 
       await setDoc(doc(firestore, "diceSessions", code), {
         createdAt: serverTimestamp(),
-        creatorName: createName.trim(),
-        players: [createName.trim()],
+        creatorName: name.trim(),
+        players: [name.trim()],
         customRules: [],
       })
 
-      localStorage.setItem(`diceTracker_playerName_${code}`, createName.trim())
-      localStorage.setItem("diceTracker_lastPlayerName", createName.trim())
+      localStorage.setItem(`diceTracker_playerName_${code}`, name.trim())
+      localStorage.setItem("diceTracker_lastPlayerName", name.trim())
+      saveSessionToHistory(code, name.trim(), true)
       router.push(`/dice/${code}`)
     } catch {
       setError("Failed to create session. Please try again.")
@@ -65,9 +111,13 @@ const DicePage: React.FC = () => {
   }
 
   const handleJoin = async () => {
-    const code = joinCode.trim().toUpperCase()
+    if (!name.trim()) {
+      setError("Enter your name")
+      return
+    }
+    const code = sessionCode.trim().toUpperCase()
     if (code.length !== 6) {
-      setError("Session code must be 6 characters")
+      setError("Enter a 6-character session code")
       return
     }
     setError("")
@@ -79,12 +129,20 @@ const DicePage: React.FC = () => {
         setError("Session not found. Check the code and try again.")
         return
       }
+      localStorage.setItem(`diceTracker_playerName_${code}`, name.trim())
+      localStorage.setItem("diceTracker_lastPlayerName", name.trim())
+      saveSessionToHistory(code, name.trim(), false)
       router.push(`/dice/${code}`)
     } catch {
       setError("Failed to join session. Please try again.")
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSubmit = () => {
+    if (mode === "create") handleCreate()
+    else handleJoin()
   }
 
   return (
@@ -96,45 +154,90 @@ const DicePage: React.FC = () => {
         </p>
       </section>
 
-      {error && <p className={styles.error}>{error}</p>}
-
-      <div className={styles.cards}>
-        <div className={styles.card}>
-          <h2>Create Session</h2>
-          <p>Start a new dice tracking session and share the code with your friends.</p>
-          <input
-            type="text"
-            placeholder="Your name"
-            value={createName}
-            onChange={(e) => setCreateName(e.target.value)}
-            className={styles.input}
-            maxLength={20}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-          />
-          <Button onClick={handleCreate} disabled={loading}>
-            {loading ? "Creating..." : "Create Session"}
-          </Button>
+      <div className={styles.card}>
+        <div className={styles.toggle}>
+          <button
+            className={`${styles.toggleBtn} ${mode === "create" ? styles.active : ""}`}
+            onClick={() => { setMode("create"); setError("") }}
+          >
+            Create Session
+          </button>
+          <button
+            className={`${styles.toggleBtn} ${mode === "join" ? styles.active : ""}`}
+            onClick={() => { setMode("join"); setError("") }}
+          >
+            Join Session
+          </button>
         </div>
 
-        <div className={styles.card}>
-          <h2>Join Session</h2>
-          <p>Enter a session code to join an existing dice tracking session.</p>
-          <input
-            type="text"
-            placeholder="Session code (e.g. A7K2M9)"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            className={styles.input}
-            maxLength={6}
-            onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-          />
-          <Button onClick={handleJoin} disabled={loading}>
-            {loading ? "Joining..." : "Join Session"}
-          </Button>
-        </div>
+        <p className={styles.description}>
+          {mode === "create"
+            ? "Start a new session. You can set a custom code or leave it blank to auto-generate one."
+            : "Enter the session code shared by your friend to join their game."}
+        </p>
+
+        {error && <p className={styles.error}>{error}</p>}
+
+        <input
+          type="text"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={styles.input}
+          maxLength={20}
+        />
+
+        <input
+          type="text"
+          placeholder={mode === "create" ? "Session code (optional, auto-generated)" : "Session code (e.g. A7K2M9)"}
+          value={sessionCode}
+          onChange={(e) => setSessionCode(e.target.value.toUpperCase())}
+          className={styles.input}
+          maxLength={6}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+        />
+
+        <Button onClick={handleSubmit} disabled={loading}>
+          {loading
+            ? (mode === "create" ? "Creating..." : "Joining...")
+            : (mode === "create" ? "Create Session" : "Join Session")}
+        </Button>
       </div>
+
+      {history.length > 0 && (
+        <div className={styles.historySection}>
+          <h2 className={styles.historyTitle}>Recent Sessions</h2>
+          <div className={styles.historyList}>
+            {history.map((s) => (
+              <div key={s.code} className={styles.historyItem}>
+                <div className={styles.historyInfo}>
+                  <span className={styles.historyCode}>{s.code}</span>
+                  <span className={styles.historyMeta}>
+                    {s.name} · {s.isCreator ? "created" : "joined"} · {formatAge(s.joinedAt)}
+                  </span>
+                </div>
+                <Link href={`/dice/${s.code}`} className={styles.historyLink}>
+                  {s.isCreator ? "Resume" : "Rejoin"}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+function formatAge(timestamp: number): string {
+  const diffMs = Date.now() - timestamp
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return "just now"
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays === 1) return "yesterday"
+  return `${diffDays}d ago`
 }
 
 export default DicePage

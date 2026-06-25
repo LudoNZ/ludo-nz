@@ -84,6 +84,32 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls }) => {
         })}
       </div>
 
+      <div className={styles.chart}>
+        <span className={styles.chartLabel}>Die Face Frequency</span>
+        {(() => {
+          const faceCounts: Record<number, number> = {}
+          for (let i = 1; i <= 6; i++) faceCounts[i] = 0
+          for (const r of rolls) {
+            faceCounts[r.die1]++
+            faceCounts[r.die2]++
+          }
+          const maxFace = Math.max(...Object.values(faceCounts))
+          return Object.entries(faceCounts).map(([face, count]) => {
+            const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
+            return (
+              <div key={`face-${face}`} className={styles.bar}>
+                <span className={styles.barTotal}>{face}</span>
+                <div className={styles.barTrack}>
+                  <div className={styles.barExpected} style={{ width: "100%" }} />
+                  <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                </div>
+                <span className={styles.barCount}>{count}</span>
+              </div>
+            )
+          })
+        })()}
+      </div>
+
       <div className={styles.playerSection}>
         <span className={styles.chartLabel}>Per Player</span>
         <div className={styles.playerTable}>

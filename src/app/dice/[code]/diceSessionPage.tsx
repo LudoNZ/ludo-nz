@@ -96,6 +96,14 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     setPlayerName(name)
 
     try {
+      const history = JSON.parse(localStorage.getItem("diceTracker_sessions") || "[]")
+        .filter((s: { code: string }) => s.code !== code)
+      history.unshift({ code, name, joinedAt: Date.now(), isCreator: false })
+      if (history.length > 20) history.length = 20
+      localStorage.setItem("diceTracker_sessions", JSON.stringify(history))
+    } catch { /* ignore */ }
+
+    try {
       await updateDoc(doc(firestore, "diceSessions", code), {
         players: arrayUnion(name),
       })

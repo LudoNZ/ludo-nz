@@ -26,7 +26,13 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ playerName, onRoll, disabled })
   const handleRandomRoll = () => {
     const d1 = Math.floor(Math.random() * 6) + 1
     const d2 = Math.floor(Math.random() * 6) + 1
-    onRoll(d1, d2, true)
+    setDie1(d1)
+    setDie2(d2)
+    setTimeout(() => {
+      onRoll(d1, d2, true)
+      setDie1(null)
+      setDie2(null)
+    }, 400)
   }
 
   return (
