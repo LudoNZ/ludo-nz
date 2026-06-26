@@ -112,8 +112,8 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   }
   for (const r of filteredRolls) {
     const dice = getRollDice(r)
+    if (dice.length !== config.dice.length) continue
     for (const idx of activeDiceIndices) {
-      if (idx >= dice.length) continue
       const d = dice[idx]
       const sides = config.dice[idx]
       if (d && faceCountsByType[sides]) {
