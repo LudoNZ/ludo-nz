@@ -5,7 +5,7 @@ import styles from "./dicePage.module.scss"
 import { useRouter } from "next/navigation"
 import Button from "@/components/button/button"
 import { firestore } from "../../../firebase/client"
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore"
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, serverTimestamp, Timestamp } from "firebase/firestore"
 import Link from "next/link"
 import { DEFAULT_DICE_CONFIG } from "@/components/dice/types"
 
@@ -147,6 +147,9 @@ const DicePage: React.FC = () => {
       localStorage.setItem(`diceTracker_playerName_${code}`, name.trim())
       localStorage.setItem("diceTracker_lastPlayerName", name.trim())
       saveSessionToHistory(code, name.trim(), false)
+      await updateDoc(doc(firestore, "diceSessions", code), {
+        players: arrayUnion(name.trim()),
+      })
       router.push(`/dice/${code}`)
     } catch {
       setError("Failed to join session. Please try again.")

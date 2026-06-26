@@ -102,12 +102,18 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
       collection(firestore, "diceSessions", code, "rolls"),
       orderBy("timestamp", "asc")
     )
+    let initialLoad = true
     const unsubRolls = onSnapshot(rollsQuery, (snap) => {
       const newRolls: DiceRoll[] = []
       snap.forEach((d) => {
         newRolls.push({ id: d.id, ...d.data() } as DiceRoll)
       })
       setRolls(newRolls)
+
+      if (initialLoad) {
+        initialLoad = false
+        return
+      }
 
       snap.docChanges().forEach((change) => {
         if (change.type === "added" && sessionRef.current) {
