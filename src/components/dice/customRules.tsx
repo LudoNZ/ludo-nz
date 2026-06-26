@@ -399,9 +399,9 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
                       {rule.sound && rule.sound !== "none" && (
                         <span className={styles.soundLabel}>{rule.sound}</span>
                       )}
-                      {(triggerCounts.get(rule.id) ?? 0) > 0 && (
-                        <span className={styles.triggerCount}>×{triggerCounts.get(rule.id)}</span>
-                      )}
+                      <span className={`${styles.triggerCount} ${(triggerCounts.get(rule.id) ?? 0) > 0 ? styles.triggerCountActive : ""}`}>
+                        ×{triggerCounts.get(rule.id) ?? 0}
+                      </span>
                     </span>
                   </div>
                   <div className={styles.ruleActions}>
