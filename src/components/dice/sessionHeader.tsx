@@ -2,7 +2,8 @@
 
 import React, { useState } from "react"
 import styles from "./sessionHeader.module.scss"
-import { DiceSession } from "./types"
+import { DiceSession, DiceConfig, formatDiceConfig } from "./types"
+import DiceSettings from "./diceSettings"
 
 interface SessionHeaderProps {
   code: string
@@ -11,6 +12,10 @@ interface SessionHeaderProps {
   onReorder: (players: string[]) => void
   onToggleActive: (player: string) => void
   onAddPlayer: (name: string) => void
+  diceConfig: DiceConfig
+  audioEnabled: boolean
+  onDiceConfigChange: (config: DiceConfig) => void
+  onToggleAudio: (enabled: boolean) => void
 }
 
 const SessionHeader: React.FC<SessionHeaderProps> = ({
@@ -20,6 +25,10 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
   onReorder,
   onToggleActive,
   onAddPlayer,
+  diceConfig,
+  audioEnabled,
+  onDiceConfigChange,
+  onToggleAudio,
 }) => {
   const [copied, setCopied] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -137,6 +146,18 @@ const SessionHeader: React.FC<SessionHeaderProps> = ({
       <div className={styles.age}>
         <span className={styles.label}>Started</span>
         <span>{sessionAge}</span>
+      </div>
+      <div className={styles.diceSection}>
+        <span className={styles.label}>Dice</span>
+        <div className={styles.diceDisplay}>
+          <span className={styles.diceLabel}>{formatDiceConfig(diceConfig)}</span>
+          <DiceSettings
+            config={diceConfig}
+            audioEnabled={audioEnabled}
+            onSave={onDiceConfigChange}
+            onToggleAudio={onToggleAudio}
+          />
+        </div>
       </div>
     </div>
   )

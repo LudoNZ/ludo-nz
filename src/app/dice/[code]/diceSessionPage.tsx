@@ -25,7 +25,6 @@ import DiceRoller from "@/components/dice/diceRoller"
 import RollHistory, { RollAlert, checkRollTriggers } from "@/components/dice/rollHistory"
 import RollStats from "@/components/dice/rollStats"
 import CustomRules from "@/components/dice/customRules"
-import DiceSettings from "@/components/dice/diceSettings"
 import { playSound } from "@/components/dice/sounds"
 
 interface DiceSessionPageProps {
@@ -377,22 +376,18 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     <div className={styles.sessionPage}>
       {!playerName && <PlayerJoinForm onJoin={handleJoin} />}
 
-      <div className={styles.headerBar}>
-        <SessionHeader
-          code={code}
-          session={session}
-          currentPlayer={currentPlayer}
-          onReorder={handleReorder}
-          onToggleActive={handleToggleActive}
-          onAddPlayer={handleAddPlayer}
-        />
-        <DiceSettings
-          config={session.diceConfig}
-          audioEnabled={audioEnabled}
-          onSave={handleDiceConfigChange}
-          onToggleAudio={handleToggleAudio}
-        />
-      </div>
+      <SessionHeader
+        code={code}
+        session={session}
+        currentPlayer={currentPlayer}
+        onReorder={handleReorder}
+        onToggleActive={handleToggleActive}
+        onAddPlayer={handleAddPlayer}
+        diceConfig={session.diceConfig}
+        audioEnabled={audioEnabled}
+        onDiceConfigChange={handleDiceConfigChange}
+        onToggleAudio={handleToggleAudio}
+      />
 
       {toasts.length > 0 && (
         <div className={styles.toastContainer}>

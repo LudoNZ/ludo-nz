@@ -194,3 +194,18 @@
   flex-shrink: 0;
   font-size: 0.85rem;
 }
+
+.diceSection {
+  flex-shrink: 0;
+}
+
+.diceDisplay {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.diceLabel {
+  font-size: 0.85rem;
+  color: var(--color-primary);
+}
