@@ -4,6 +4,26 @@ import React, { useState, useMemo } from "react"
 import styles from "./rollStats.module.scss"
 import { DiceRoll, DiceConfig, DEFAULT_DICE_CONFIG, getRollDice } from "./types"
 
+function computeExpectedDistribution(diceSides: number[]): Record<number, number> {
+  if (diceSides.length === 0) return {}
+  let dist: Record<number, number> = {}
+  for (let v = 1; v <= diceSides[0]; v++) {
+    dist[v] = 1 / diceSides[0]
+  }
+  for (let d = 1; d < diceSides.length; d++) {
+    const sides = diceSides[d]
+    const next: Record<number, number> = {}
+    for (const [sumStr, prob] of Object.entries(dist)) {
+      const sum = Number(sumStr)
+      for (let v = 1; v <= sides; v++) {
+        next[sum + v] = (next[sum + v] || 0) + prob / sides
+      }
+    }
+    dist = next
+  }
+  return dist
+}
+
 interface RollStatsProps {
   rolls: DiceRoll[]
   currentGame: number
@@ -81,6 +101,10 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   }
 
   const maxCount = Math.max(...Object.values(distribution), 1)
+
+  const activeDieSides = activeDiceIndices.map((i) => config.dice[i])
+  const expectedDist = computeExpectedDistribution(activeDieSides.length > 0 ? activeDieSides : [6])
+  const maxExpected = Math.max(...Object.values(expectedDist), 0.001)
 
   const playerStats = new Map<string, { count: number; sum: number; totals: number[] }>()
   for (const r of filteredRolls) {
@@ -178,10 +202,13 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         <span className={styles.chartLabel}>Sum Distribution</span>
         {Object.entries(distribution).map(([total, count]) => {
           const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
+          const exp = expectedDist[Number(total)] || 0
+          const expPct = maxExpected > 0 ? (exp / maxExpected) * 100 : 0
           return (
             <div key={total} className={styles.bar}>
               <span className={styles.barTotal}>{total}</span>
               <div className={styles.barTrack}>
+                <div className={styles.barExpected} style={{ width: `${expPct}%` }} />
                 <div className={styles.barFill} style={{ width: `${pct}%` }} />
               </div>
               <span className={styles.barCount}>{count}</span>
