@@ -35,10 +35,42 @@
   gap: 0.5rem;
 }
 
+.dieLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.2rem;
+}
+
 .dieLabel {
   font-size: 0.7rem;
   text-transform: uppercase;
   opacity: 0.5;
+}
+
+.rollSingleBtn {
+  background: none;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  opacity: 0.4;
+  text-transform: uppercase;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) {
+    opacity: 1;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+  }
 }
 
 .dieRow {

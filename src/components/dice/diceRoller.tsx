@@ -73,9 +73,23 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   }, [diceCount])
 
   const allSelected = selected.every((v) => v !== null)
-  const total = allSelected ? selected.reduce((s, v) => s + (v ?? 0), 0) : null
+  const someSelected = selected.some((v) => v !== null)
+  const noneSelected = !someSelected
+
+  const computeTotal = (dice: (number | null)[]) =>
+    dice.every((v) => v !== null) ? dice.reduce((s, v) => s + (v ?? 0), 0) : null
 
   const handleSelect = (dieIndex: number, value: number) => {
+    setSelected((prev) => {
+      const next = [...prev]
+      next[dieIndex] = next[dieIndex] === value ? null : value
+      return next
+    })
+  }
+
+  const handleRandomSingle = (dieIndex: number) => {
+    const sides = config.dice[dieIndex]
+    const value = Math.floor(Math.random() * sides) + 1
     setSelected((prev) => {
       const next = [...prev]
       next[dieIndex] = value
@@ -83,18 +97,21 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     })
   }
 
-  const handleManualRoll = () => {
+  const handleLogRoll = () => {
     if (!allSelected) return
-    setLastRoll([...selected])
-    onRoll(selected as number[], false)
+    const dice = selected as number[]
+    setLastRoll([...dice])
+    onRoll(dice, false)
     setSelected(Array(diceCount).fill(null))
   }
 
-  const handleRandomRoll = () => {
-    const dice = config.dice.map((sides) => Math.floor(Math.random() * sides) + 1)
-    setLastRoll(dice)
+  const handleQuickRoll = () => {
+    const dice = selected.map((v, i) =>
+      v !== null ? v : Math.floor(Math.random() * config.dice[i]) + 1
+    )
+    setLastRoll(dice as number[])
     setSelected(Array(diceCount).fill(null))
-    onRoll(dice, true)
+    onRoll(dice as number[], noneSelected)
   }
 
   const getDieClass = (dieIndex: number, v: number) => {
@@ -102,6 +119,9 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     if (selected[dieIndex] === null && lastRoll[dieIndex] === v) return styles.lastRoll
     return ""
   }
+
+  const total = computeTotal(selected)
+  const unsetCount = selected.filter((v) => v === null).length
 
   return (
     <div className={styles.roller}>
@@ -115,7 +135,17 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           const values = Array.from({ length: sides }, (_, i) => i + 1)
           return (
             <div key={dieIndex}>
-              <span className={styles.dieLabel}>Die {dieIndex + 1} (d{sides})</span>
+              <div className={styles.dieLabelRow}>
+                <span className={styles.dieLabel}>Die {dieIndex + 1} (d{sides})</span>
+                <button
+                  className={styles.rollSingleBtn}
+                  onClick={() => handleRandomSingle(dieIndex)}
+                  disabled={disabled}
+                  title={`Roll d${sides}`}
+                >
+                  Roll
+                </button>
+              </div>
               <div className={styles.dieRow}>
                 {values.map((v) => (
                   <button
@@ -133,7 +163,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
         })}
 
         <Button
-          onClick={handleManualRoll}
+          onClick={handleLogRoll}
           disabled={disabled || !allSelected}
           size="medium"
         >
@@ -145,8 +175,10 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
         <span>or</span>
       </div>
 
-      <Button onClick={handleRandomRoll} disabled={disabled} variant="secondary" size="medium">
-        Quick Roll
+      <Button onClick={handleQuickRoll} disabled={disabled} variant="secondary" size="medium">
+        {someSelected && !allSelected
+          ? `Roll Remaining (${unsetCount})`
+          : "Quick Roll"}
       </Button>
     </div>
   )
