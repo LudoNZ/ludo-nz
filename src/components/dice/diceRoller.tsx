@@ -162,7 +162,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
         {config.dice.map((sides, dieIndex) => {
           const values = Array.from({ length: sides }, (_, i) => i + 1)
           return (
-            <div key={dieIndex}>
+            <div key={dieIndex} className={styles.dieGroup}>
               <div className={styles.dieLabelRow}>
                 <span className={styles.dieLabel}>Die {dieIndex + 1} (d{sides})</span>
                 <button
@@ -178,7 +178,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
                 {values.map((v) => (
                   <button
                     key={`d${dieIndex}-${v}`}
-                    className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""}`}
+                    className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""} ${styles[`dieSize${sides}`] || ""}`}
                     onClick={() => handleSelect(dieIndex, v)}
                     disabled={disabled}
                   >
@@ -190,6 +190,9 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           )
         })}
 
+      </div>
+
+      <div className={styles.actionRow}>
         <Button
           onClick={handleLogRoll}
           disabled={disabled || !allSelected}

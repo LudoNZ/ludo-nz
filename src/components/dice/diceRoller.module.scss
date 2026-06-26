@@ -31,8 +31,16 @@
 
 .manualSection {
   display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.dieGroup {
+  display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
 .dieLabelRow {
@@ -80,17 +88,17 @@
 }
 
 .dieFace {
-  width: 3rem;
-  height: 3rem;
-  min-width: 3rem;
-  min-height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
   border: 2px solid var(--foreground);
   border-radius: 6px;
   background: var(--background);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.08s, border-color 0.08s;
   flex: 0 0 auto;
-  padding: 5px;
+  padding: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,12 +145,8 @@
   }
 
   &.numberFace {
-    width: 2.2rem;
-    height: 2.2rem;
-    min-width: 2.2rem;
-    min-height: 2.2rem;
     font-family: inherit;
-    font-size: 0.85rem;
+    font-weight: bold;
     color: var(--foreground);
   }
 
@@ -156,6 +160,30 @@
   &.numberFace:hover:not(:disabled):not(.selected) {
     color: var(--color-primary);
   }
+
+  &.dieSize4 {
+    width: 2rem; height: 2rem; min-width: 2rem; min-height: 2rem;
+    font-size: 0.75rem;
+  }
+  &.dieSize6 {
+    width: 2.5rem; height: 2.5rem; min-width: 2.5rem; min-height: 2.5rem;
+  }
+  &.dieSize8 {
+    width: 2.2rem; height: 2.2rem; min-width: 2.2rem; min-height: 2.2rem;
+    font-size: 0.8rem;
+  }
+  &.dieSize10 {
+    width: 2.4rem; height: 2.4rem; min-width: 2.4rem; min-height: 2.4rem;
+    font-size: 0.85rem;
+  }
+  &.dieSize12 {
+    width: 2.6rem; height: 2.6rem; min-width: 2.6rem; min-height: 2.6rem;
+    font-size: 0.9rem;
+  }
+  &.dieSize20 {
+    width: 2.8rem; height: 2.8rem; min-width: 2.8rem; min-height: 2.8rem;
+    font-size: 0.95rem;
+  }
 }
 
 .dieSvg {
@@ -163,6 +191,10 @@
   height: 100%;
   fill: var(--foreground);
   transition: fill 0.15s;
+}
+
+.actionRow {
+  width: 100%;
 }
 
 .divider {
@@ -248,18 +280,20 @@
 }
 
 .mobileResultValue {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: bold;
   color: var(--color-primary);
-  width: 2.2rem;
-  height: 2.2rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 2px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--color-primary) 15%, var(--background));
-  padding: 3px;
+  padding: 4px;
 
   &.mobileResultAnimating {
     background: color-mix(in srgb, var(--color-primary) 50%, var(--background));
