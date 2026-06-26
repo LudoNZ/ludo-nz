@@ -30,6 +30,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   const [triggerType, setTriggerType] = useState<TriggerType>("rollSum")
   const [triggerValue, setTriggerValue] = useState(7)
   const [droughtNumber, setDroughtNumber] = useState(7)
+  const [droughtOngoing, setDroughtOngoing] = useState(false)
   const [selectedDoubles, setSelectedDoubles] = useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6]))
   const [selectedHotTotals, setSelectedHotTotals] = useState<Set<number>>(new Set(ALL_TOTALS))
   const [selectedDiceIndices, setSelectedDiceIndices] = useState<Set<number>>(new Set(config.dice.map((_, i) => i)))
@@ -91,6 +92,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setTriggerType("rollSum")
     setTriggerValue(7)
     setDroughtNumber(7)
+    setDroughtOngoing(false)
     setSelectedDoubles(new Set([1, 2, 3, 4, 5, 6]))
     setSelectedHotTotals(new Set(ALL_TOTALS))
     setSelectedDiceIndices(new Set(config.dice.map((_, i) => i)))
@@ -111,6 +113,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedDiceIndices(new Set(t?.diceIndices || config.dice.map((_, i) => i)))
     setSelectedSumValues(new Set(t?.sumValues || [t?.value ?? 7]))
     setSelectedDroughtNumbers(new Set(t?.droughtNumbers || [t?.droughtNumber ?? 7]))
+    setDroughtOngoing(t?.droughtOngoing ?? false)
     setAction(rule.action)
     setSelectedSound(rule.sound || "alert")
     setEditingId(rule.id)
@@ -126,12 +129,12 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
 
     return {
       id: editingId || crypto.randomUUID(),
-      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues, droughtNumbers),
+      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues, droughtNumbers, droughtOngoing),
       enabled: true,
       trigger: {
         type: triggerType,
         value: triggerValue,
-        ...(triggerType === "drought" ? { droughtNumber, droughtNumbers } : {}),
+        ...(triggerType === "drought" ? { droughtNumber, droughtNumbers, droughtOngoing } : {}),
         ...(triggerType === "doubles" ? { doublesList } : {}),
         ...(triggerType === "hotNumber" ? { hotNumberTotals } : {}),
         ...(triggerType === "rollSum" ? { sumValues } : {}),
@@ -242,6 +245,26 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
             <input type="number" min={3} max={50} value={triggerValue}
               onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
             <span className={styles.formHint}>rolls without it</span>
+          </div>
+          <div className={styles.formRow}>
+            <label className={styles.formLabel}>Mode</label>
+            <div className={styles.doublesGrid}>
+              <button
+                className={`${styles.doublesBtn} ${!droughtOngoing ? styles.doublesActive : ""}`}
+                onClick={() => setDroughtOngoing(false)}
+                type="button"
+              >
+                Reset
+              </button>
+              <button
+                className={`${styles.doublesBtn} ${droughtOngoing ? styles.doublesActive : ""}`}
+                onClick={() => setDroughtOngoing(true)}
+                type="button"
+              >
+                Ongoing
+              </button>
+            </div>
+            <span className={styles.formHint}>{droughtOngoing ? "alerts every roll" : "resets counter"}</span>
           </div>
         </>
       )}
@@ -367,7 +390,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   )
 }
 
-function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[], droughtNumbers?: number[]): string {
+function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[], droughtNumbers?: number[], droughtOngoing?: boolean): string {
   switch (type) {
     case "rollSum":
       if (sumValues && sumValues.length === 1) return `When roll sum = ${sumValues[0]}`
@@ -377,9 +400,10 @@ function buildRuleText(type: TriggerType, value: number, droughtNum?: number, do
       if (!doublesList || doublesList.length === 6) return "When any doubles rolled"
       return `When doubles: ${doublesList.map((d) => `${d}+${d}`).join(", ")}`
     case "drought":
-      if (droughtNumbers && droughtNumbers.length === 1) return `When ${value} rolls without a ${droughtNumbers[0]}`
-      if (droughtNumbers && droughtNumbers.length > 1) return `When ${value} rolls without ${droughtNumbers.join(", ")}`
-      return `When ${value} rolls without a ${droughtNum ?? 7}`
+      const suffix = droughtOngoing ? " (ongoing)" : ""
+      if (droughtNumbers && droughtNumbers.length === 1) return `When ${value} rolls without a ${droughtNumbers[0]}${suffix}`
+      if (droughtNumbers && droughtNumbers.length > 1) return `When ${value} rolls without ${droughtNumbers.join(", ")}${suffix}`
+      return `When ${value} rolls without a ${droughtNum ?? 7}${suffix}`
     case "hotNumber":
       if (!hotTotals || hotTotals.length === ALL_TOTALS.length) return `When any total ${value}× in a row`
       return `When ${hotTotals.join("/")} rolled ${value}× in a row`

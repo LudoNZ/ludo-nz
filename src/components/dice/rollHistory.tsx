@@ -73,6 +73,7 @@ export function checkRollTriggers(
 
     if (type === "drought" && value > 0) {
       const watchNums = rule.trigger.droughtNumbers || [rule.trigger.droughtNumber ?? 7]
+      const ongoing = rule.trigger.droughtOngoing ?? false
       const hitsDrought = !watchNums.includes(scopedTotal)
       if (hitsDrought) {
         let countWithout = 0
@@ -80,7 +81,10 @@ export function checkRollTriggers(
           if (watchNums.includes(getScopedTotal(gameRolls[i]))) break
           countWithout++
         }
-        if (countWithout >= value) {
+        const shouldFire = ongoing
+          ? countWithout >= value
+          : countWithout === value
+        if (shouldFire) {
           alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
         }
       }

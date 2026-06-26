@@ -9,6 +9,7 @@ export interface CustomRule {
     value: number
     droughtNumber?: number
     droughtNumbers?: number[]
+    droughtOngoing?: boolean
     doublesList?: number[]
     hotNumberTotals?: number[]
     sumValues?: number[]
