@@ -52,6 +52,15 @@ const DicePage: React.FC = () => {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<SessionHistory[]>([])
+  const [forgetCode, setForgetCode] = useState<string | null>(null)
+
+  const handleForget = (code: string) => {
+    const updated = history.filter((s) => s.code !== code)
+    setHistory(updated)
+    localStorage.setItem("diceTracker_sessions", JSON.stringify(updated))
+    localStorage.removeItem(`diceTracker_playerName_${code}`)
+    setForgetCode(null)
+  }
 
   useEffect(() => {
     const lastName = localStorage.getItem("diceTracker_lastPlayerName") || ""
@@ -222,9 +231,20 @@ const DicePage: React.FC = () => {
                     {s.name} · {s.isCreator ? "created" : "joined"} · {formatAge(s.joinedAt)}
                   </span>
                 </div>
-                <Link href={`/dice/${s.code}`} className={styles.historyLink}>
-                  {s.isCreator ? "Resume" : "Rejoin"}
-                </Link>
+                <div className={styles.historyActions}>
+                  <Link href={`/dice/${s.code}`} className={styles.historyLink}>
+                    {s.isCreator ? "Resume" : "Rejoin"}
+                  </Link>
+                  {forgetCode === s.code ? (
+                    <div className={styles.forgetConfirm}>
+                      <span className={styles.forgetText}>Forget this session?</span>
+                      <button className={styles.forgetYes} onClick={() => handleForget(s.code)}>Yes</button>
+                      <button className={styles.forgetNo} onClick={() => setForgetCode(null)}>No</button>
+                    </div>
+                  ) : (
+                    <button className={styles.forgetBtn} onClick={() => setForgetCode(s.code)} title="Forget session">×</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
