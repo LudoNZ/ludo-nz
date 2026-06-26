@@ -200,6 +200,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
       await addDoc(collection(firestore, "diceSessions", code, "rolls"), {
         player: currentPlayer,
         dice,
+        diceTypes: session?.diceConfig.dice ?? [6, 6],
         total: dice.reduce((s, v) => s + v, 0),
         isRandom,
         game: session?.currentGame ?? 1,

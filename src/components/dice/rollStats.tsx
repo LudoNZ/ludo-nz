@@ -103,19 +103,28 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
-  const activeSidesSet = new Set(activeDiceIndices.map((i) => config.dice[i]))
+  const allDieTypes = new Set<number>()
+  for (const r of filteredRolls) {
+    const types = r.diceTypes || (r.die1 !== undefined ? [6, 6] : config.dice)
+    for (const s of types) {
+      if (activeDieTypes.has(s)) allDieTypes.add(s)
+    }
+  }
+  for (const s of activeDieTypes) allDieTypes.add(s)
+
   const faceCountsByType: Record<number, Record<number, number>> = {}
-  for (const sides of activeSidesSet) {
+  for (const sides of allDieTypes) {
     const counts: Record<number, number> = {}
     for (let i = 1; i <= sides; i++) counts[i] = 0
     faceCountsByType[sides] = counts
   }
   for (const r of filteredRolls) {
     const dice = getRollDice(r)
-    if (dice.length !== config.dice.length) continue
-    for (const idx of activeDiceIndices) {
-      const d = dice[idx]
-      const sides = config.dice[idx]
+    const types = r.diceTypes || (r.die1 !== undefined ? [6, 6] : config.dice)
+    for (let i = 0; i < dice.length; i++) {
+      const sides = types[i] ?? 6
+      if (!activeDieTypes.has(sides)) continue
+      const d = dice[i]
       if (d && faceCountsByType[sides]) {
         faceCountsByType[sides][d] = (faceCountsByType[sides][d] || 0) + 1
       }
@@ -180,10 +189,10 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         })}
       </div>
 
-      {Array.from(activeSidesSet).sort((a, b) => a - b).map((sides) => {
+      {Array.from(allDieTypes).sort((a, b) => a - b).map((sides) => {
         const counts = faceCountsByType[sides]
         const mf = Math.max(...Object.values(counts), 1)
-        const dieCount = activeDiceIndices.filter((i) => config.dice[i] === sides).length
+        const dieCount = config.dice.filter((s) => s === sides).length
         return (
           <div key={`face-d${sides}`} className={styles.chart}>
             <span className={styles.chartLabel}>

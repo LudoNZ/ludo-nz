@@ -32,10 +32,11 @@ service cloud.firestore {
 
       match /rolls/{rollId} {
         allow read: if true;
-        allow create: if request.resource.data.keys().hasAll(['player', 'dice', 'total', 'isRandom', 'game', 'timestamp'])
+        allow create: if request.resource.data.keys().hasAll(['player', 'dice', 'diceTypes', 'total', 'isRandom', 'game', 'timestamp'])
           && request.resource.data.dice is list
           && request.resource.data.dice.size() >= 1
           && request.resource.data.dice.size() <= 6
+          && request.resource.data.diceTypes is list
           && request.resource.data.total is int
           && request.resource.data.game is int;
         allow update, delete: if false;

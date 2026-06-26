@@ -62,6 +62,7 @@ export interface DiceRoll {
   id: string
   player: string
   dice: number[]
+  diceTypes?: number[]
   die1?: number
   die2?: number
   total: number
