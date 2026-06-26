@@ -184,7 +184,7 @@
   &.dieAnimating {
     background: color-mix(in srgb, var(--color-primary) 40%, transparent);
     border-color: var(--color-primary);
-    animation: dieTumble 0.15s ease-in-out infinite alternate;
+    animation: dieTumble 0.3s ease-in-out infinite;
   }
 
   &.dieAnimating .dieFaceSvg {
@@ -258,9 +258,18 @@
 
 @keyframes dieTumble {
   0% {
-    transform: perspective(200px) rotateX(-8deg) rotateY(6deg) scale(1.02);
+    transform: perspective(200px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
+  }
+  25% {
+    transform: perspective(200px) rotateX(15deg) rotateY(-10deg) rotateZ(5deg) scale(1.04);
+  }
+  50% {
+    transform: perspective(200px) rotateX(-10deg) rotateY(15deg) rotateZ(-3deg) scale(0.96);
+  }
+  75% {
+    transform: perspective(200px) rotateX(8deg) rotateY(-5deg) rotateZ(8deg) scale(1.02);
   }
   100% {
-    transform: perspective(200px) rotateX(8deg) rotateY(-6deg) scale(0.98);
+    transform: perspective(200px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
   }
 }
