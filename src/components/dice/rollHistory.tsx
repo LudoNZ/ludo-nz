@@ -12,6 +12,8 @@ interface RollHistoryProps {
   currentGame: number
   onNewGame: () => void
   readOnly?: boolean
+  animatingRollId?: string | null
+  animatingDice?: (number | null)[]
 }
 
 export interface RollAlert {
@@ -104,7 +106,7 @@ export function checkRollTriggers(
   return alerts
 }
 
-const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly }) => {
+const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly, animatingRollId, animatingDice }) => {
   const [confirmNew, setConfirmNew] = React.useState(false)
   const reversed = [...rolls].reverse()
   const alertMap = new Map<string, { messages: string[]; highlightDice: Set<number> }>()
@@ -169,17 +171,23 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
                     {getRollDice(roll).map((d, i) => {
                       const sides = roll.diceTypes?.[i] ?? 6
                       const highlighted = rollAlertData?.highlightDice.has(i)
+                      const isAnim = animatingRollId === roll.id && animatingDice && animatingDice[i] !== null
+                      const displayValue = isAnim ? (animatingDice![i] ?? d) : d
                       return (
                         <React.Fragment key={i}>
                           {i > 0 && <span className={styles.plus}>+</span>}
-                          <span className={`${styles.die} ${highlighted ? styles.dieHighlight : ""}`}>
-                            {sides <= 6 ? <DieDots value={d} className={styles.dieFaceSvg} /> : d}
+                          <span className={`${styles.die} ${highlighted ? styles.dieHighlight : ""} ${isAnim ? styles.dieAnimating : ""}`}>
+                            {sides <= 6 ? <DieDots value={displayValue} className={styles.dieFaceSvg} /> : displayValue}
                           </span>
                         </React.Fragment>
                       )
                     })}
                     <span className={styles.equals}>=</span>
-                    <span className={styles.total}>{roll.total}</span>
+                    <span className={styles.total}>
+                      {animatingRollId === roll.id && animatingDice?.length
+                        ? animatingDice.reduce<number>((s, v) => s + (v ?? 0), 0)
+                        : roll.total}
+                    </span>
                   </span>
                   <span className={styles.meta}>
                     {roll.isRandom && <span className={styles.randomTag}>digital</span>}

@@ -41,6 +41,9 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [alerts, setAlerts] = useState<RollAlert[]>([])
   const [toasts, setToasts] = useState<{ id: number; message: string; dice?: number[]; diceTypes?: number[] }[]>([])
   const toastIdRef = useRef(0)
+  const [animatingRollId, setAnimatingRollId] = useState<string | null>(null)
+  const [animatingHistoryDice, setAnimatingHistoryDice] = useState<(number | null)[]>([])
+  const animHistoryTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const [activeTab, setActiveTab] = useState<"history" | "stats" | "archive">("history")
   const [archiveGameView, setArchiveGameView] = useState<number | null>(null)
   const sessionRef = useRef<DiceSession | null>(null)
@@ -98,22 +101,45 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
       snap.docChanges().forEach((change) => {
         if (change.type === "added" && sessionRef.current) {
           const roll = { id: change.doc.id, ...change.doc.data() } as DiceRoll
+          const rollDice = getRollDice(roll)
+          const diceTypes = roll.diceTypes || []
+          const sides = diceTypes.map((s) => s || 6)
+
+          // Animate dice in history
+          animHistoryTimers.current.forEach(clearTimeout)
+          animHistoryTimers.current = []
+          setAnimatingRollId(roll.id)
+          const totalSteps = 8
+          for (let step = 0; step < totalSteps; step++) {
+            const delay = Array.from({ length: step + 1 }, (_, s) => 40 + s * 18).reduce((a, b) => a + b, 0)
+            animHistoryTimers.current.push(setTimeout(() => {
+              setAnimatingHistoryDice(
+                rollDice.map((_, i) => Math.floor(Math.random() * (sides[i] || 6)) + 1)
+              )
+            }, delay))
+          }
+          const totalDelay = Array.from({ length: totalSteps }, (_, s) => 40 + s * 18).reduce((a, b) => a + b, 0)
+          animHistoryTimers.current.push(setTimeout(() => {
+            setAnimatingRollId(null)
+            setAnimatingHistoryDice([])
+          }, totalDelay))
+
           const newAlerts = checkRollTriggers(roll, newRolls, sessionRef.current.customRules)
           if (newAlerts.length > 0) {
-            setAlerts((prev) => [...prev, ...newAlerts])
-            for (const a of newAlerts) {
-              playSound(a.sound || "alert")
-            }
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200])
-            const rollDice = getRollDice(roll)
-            const rollTypes = roll.diceTypes
-            for (const a of newAlerts) {
-              const id = ++toastIdRef.current
-              setToasts((prev) => [...prev, { id, message: a.message, dice: rollDice, diceTypes: rollTypes }])
-              setTimeout(() => {
-                setToasts((prev) => prev.filter((t) => t.id !== id))
-              }, 4000)
-            }
+            animHistoryTimers.current.push(setTimeout(() => {
+              setAlerts((prev) => [...prev, ...newAlerts])
+              for (const a of newAlerts) {
+                playSound(a.sound || "alert")
+              }
+              if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+              for (const a of newAlerts) {
+                const id = ++toastIdRef.current
+                setToasts((prev) => [...prev, { id, message: a.message, dice: rollDice, diceTypes: roll.diceTypes }])
+                setTimeout(() => {
+                  setToasts((prev) => prev.filter((t) => t.id !== id))
+                }, 4000)
+              }
+            }, totalDelay))
           }
         }
       })
@@ -410,6 +436,8 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
               alerts={alerts}
               currentGame={session.currentGame ?? 1}
               onNewGame={handleNewGame}
+              animatingRollId={animatingRollId}
+              animatingDice={animatingHistoryDice}
             />
           )}
           {activeTab === "stats" && (
