@@ -16,6 +16,22 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   const config = diceConfig || DEFAULT_DICE_CONFIG
   const [scope, setScope] = useState<StatsScope>("current")
 
+  const uniqueDieTypes = useMemo(() => Array.from(new Set(config.dice)).sort((a, b) => a - b), [config.dice])
+  const [activeDieTypes, setActiveDieTypes] = useState<Set<number>>(new Set(uniqueDieTypes))
+  const hasMultipleTypes = uniqueDieTypes.length > 1
+
+  const toggleDieType = (sides: number) => {
+    setActiveDieTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(sides)) {
+        if (next.size > 1) next.delete(sides)
+      } else {
+        next.add(sides)
+      }
+      return next
+    })
+  }
+
   const totalGames = Math.max(currentGame, ...rolls.map((r) => r.game || 1))
   const hasMultipleGames = totalGames > 1
 
@@ -38,41 +54,58 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
     )
   }
 
-  const minTotal = config.dice.length
-  const maxTotal = config.dice.reduce((s, sides) => s + sides, 0)
+  const activeDiceIndices = config.dice
+    .map((sides, i) => ({ sides, i }))
+    .filter(({ sides }) => activeDieTypes.has(sides))
+    .map(({ i }) => i)
+
+  const minTotal = activeDiceIndices.length
+  const maxTotal = activeDiceIndices.reduce((s, i) => s + config.dice[i], 0)
+
+  const allActive = activeDiceIndices.length === config.dice.length
+
+  function getFilteredTotal(roll: DiceRoll): number {
+    if (allActive) return roll.total
+    const dice = getRollDice(roll)
+    return activeDiceIndices.reduce((s, i) => s + (dice[i] || 0), 0)
+  }
 
   const distribution: Record<number, number> = {}
   for (let i = minTotal; i <= maxTotal; i++) distribution[i] = 0
   for (const r of filteredRolls) {
-    distribution[r.total] = (distribution[r.total] || 0) + 1
+    const t = getFilteredTotal(r)
+    distribution[t] = (distribution[t] || 0) + 1
   }
 
   const maxCount = Math.max(...Object.values(distribution), 1)
 
   const playerStats = new Map<string, { count: number; sum: number; totals: number[] }>()
   for (const r of filteredRolls) {
+    const t = getFilteredTotal(r)
     const ps = playerStats.get(r.player) || { count: 0, sum: 0, totals: [] }
     ps.count++
-    ps.sum += r.total
-    ps.totals.push(r.total)
+    ps.sum += t
+    ps.totals.push(t)
     playerStats.set(r.player, ps)
   }
 
   let streakWithout7 = 0
   for (let i = filteredRolls.length - 1; i >= 0; i--) {
-    if (filteredRolls[i].total === 7) break
+    if (getFilteredTotal(filteredRolls[i]) === 7) break
     streakWithout7++
   }
 
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
-  const maxFaceValue = Math.max(...config.dice)
+  const maxFaceValue = Math.max(...activeDiceIndices.map((i) => config.dice[i]))
   const faceCounts: Record<number, number> = {}
   for (let i = 1; i <= maxFaceValue; i++) faceCounts[i] = 0
   for (const r of filteredRolls) {
-    for (const d of getRollDice(r)) {
-      faceCounts[d] = (faceCounts[d] || 0) + 1
+    const dice = getRollDice(r)
+    for (const idx of activeDiceIndices) {
+      const d = dice[idx]
+      if (d) faceCounts[d] = (faceCounts[d] || 0) + 1
     }
   }
   const maxFace = Math.max(...Object.values(faceCounts), 1)
@@ -83,6 +116,20 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         <h3 className={styles.heading}>Statistics</h3>
         {hasMultipleGames && <ScopeToggle scope={scope} onToggle={setScope} />}
       </div>
+
+      {hasMultipleTypes && (
+        <div className={styles.dieFilter}>
+          {uniqueDieTypes.map((sides) => (
+            <button
+              key={sides}
+              className={`${styles.filterPill} ${activeDieTypes.has(sides) ? styles.filterActive : ""}`}
+              onClick={() => toggleDieType(sides)}
+            >
+              d{sides}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className={styles.quickStats}>
         <div className={styles.stat}>
