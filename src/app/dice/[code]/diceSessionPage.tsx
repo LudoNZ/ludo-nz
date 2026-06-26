@@ -35,6 +35,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [session, setSession] = useState<DiceSession | null>(null)
   const [rolls, setRolls] = useState<DiceRoll[]>([])
   const [playerName, setPlayerName] = useState<string | null>(null)
+  const [spectating, setSpectating] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState("")
   const [alerts, setAlerts] = useState<RollAlert[]>([])
@@ -374,7 +375,9 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
 
   return (
     <div className={styles.sessionPage}>
-      {!playerName && <PlayerJoinForm onJoin={handleJoin} />}
+      {!playerName && !spectating && (
+        <PlayerJoinForm onJoin={handleJoin} onSpectate={() => setSpectating(true)} />
+      )}
 
       <SessionHeader
         code={code}

@@ -6,9 +6,10 @@ import Button from "@/components/button/button"
 
 interface PlayerJoinFormProps {
   onJoin: (name: string) => void
+  onSpectate: () => void
 }
 
-const PlayerJoinForm: React.FC<PlayerJoinFormProps> = ({ onJoin }) => {
+const PlayerJoinForm: React.FC<PlayerJoinFormProps> = ({ onJoin, onSpectate }) => {
   const lastUsedName = typeof window !== "undefined"
     ? localStorage.getItem("diceTracker_lastPlayerName") || ""
     : ""
@@ -37,6 +38,9 @@ const PlayerJoinForm: React.FC<PlayerJoinFormProps> = ({ onJoin }) => {
         <Button onClick={handleSubmit} disabled={!name.trim()}>
           Join
         </Button>
+        <button className={styles.spectateBtn} onClick={onSpectate}>
+          Spectate without joining
+        </button>
       </div>
     </div>
   )
