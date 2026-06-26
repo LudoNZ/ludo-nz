@@ -64,9 +64,11 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
 
   const allActive = activeDiceIndices.length === config.dice.length
 
-  function getFilteredTotal(roll: DiceRoll): number {
+  function getFilteredTotal(roll: DiceRoll): number | null {
     if (allActive) return roll.total
     const dice = getRollDice(roll)
+    const maxIdx = Math.max(...activeDiceIndices)
+    if (dice.length <= maxIdx) return null
     return activeDiceIndices.reduce((s, i) => s + (dice[i] || 0), 0)
   }
 
@@ -74,7 +76,7 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   for (let i = minTotal; i <= maxTotal; i++) distribution[i] = 0
   for (const r of filteredRolls) {
     const t = getFilteredTotal(r)
-    distribution[t] = (distribution[t] || 0) + 1
+    if (t !== null) distribution[t] = (distribution[t] || 0) + 1
   }
 
   const maxCount = Math.max(...Object.values(distribution), 1)
@@ -82,6 +84,7 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   const playerStats = new Map<string, { count: number; sum: number; totals: number[] }>()
   for (const r of filteredRolls) {
     const t = getFilteredTotal(r)
+    if (t === null) continue
     const ps = playerStats.get(r.player) || { count: 0, sum: 0, totals: [] }
     ps.count++
     ps.sum += t
@@ -91,7 +94,9 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
 
   let streakWithout7 = 0
   for (let i = filteredRolls.length - 1; i >= 0; i--) {
-    if (getFilteredTotal(filteredRolls[i]) === 7) break
+    const t = getFilteredTotal(filteredRolls[i])
+    if (t === null) continue
+    if (t === 7) break
     streakWithout7++
   }
 
@@ -108,6 +113,7 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   for (const r of filteredRolls) {
     const dice = getRollDice(r)
     for (const idx of activeDiceIndices) {
+      if (idx >= dice.length) continue
       const d = dice[idx]
       const sides = config.dice[idx]
       if (d && faceCountsByType[sides]) {
