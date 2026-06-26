@@ -196,23 +196,18 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
 
       <div className={styles.actionRow}>
         <Button
-          onClick={handleLogRoll}
-          disabled={disabled || !allSelected}
+          onClick={allSelected ? handleLogRoll : handleQuickRoll}
+          disabled={disabled}
           size="medium"
+          variant={allSelected ? "primary" : "secondary"}
         >
-          Log Roll ({total ?? "?"})
+          {allSelected
+            ? `Log Roll (${total})`
+            : someSelected
+              ? `Roll Remaining (${unsetCount})`
+              : "Quick Roll"}
         </Button>
       </div>
-
-      <div className={styles.divider}>
-        <span>or</span>
-      </div>
-
-      <Button onClick={handleQuickRoll} disabled={disabled} variant="secondary" size="medium">
-        {someSelected && !allSelected
-          ? `Roll Remaining (${unsetCount})`
-          : "Quick Roll"}
-      </Button>
 
       <div className={styles.mobileBar}>
         <div className={styles.mobileResults}>
@@ -261,10 +256,17 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
             </div>
           )}
         </div>
-        <Button onClick={handleQuickRoll} disabled={disabled} variant="primary" size="medium">
-          {someSelected && !allSelected
-            ? `Roll Remaining (${unsetCount})`
-            : "Quick Roll"}
+        <Button
+          onClick={allSelected ? handleLogRoll : handleQuickRoll}
+          disabled={disabled}
+          variant="primary"
+          size="medium"
+        >
+          {allSelected
+            ? `Log Roll (${total})`
+            : someSelected
+              ? `Roll Remaining (${unsetCount})`
+              : "Quick Roll"}
         </Button>
       </div>
     </div>
