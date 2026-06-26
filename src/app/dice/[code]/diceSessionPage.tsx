@@ -199,6 +199,17 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code])
 
+  const handleUndoLast = useCallback(async () => {
+    if (rolls.length === 0) return
+    const lastRoll = rolls[rolls.length - 1]
+    try {
+      const { deleteDoc } = await import("firebase/firestore")
+      await deleteDoc(doc(firestore, "diceSessions", code, "rolls", lastRoll.id))
+    } catch {
+      setError("Failed to undo last roll")
+    }
+  }, [code, rolls])
+
   const advanceTurn = useCallback(async () => {
     if (!session) return
     const nextIndex = (session.currentTurnIndex ?? 0) + 1
@@ -432,6 +443,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
             alerts={alerts}
             currentGame={session.currentGame ?? 1}
             onNewGame={handleNewGame}
+            onUndoLast={handleUndoLast}
             animatingRollId={animatingRollId}
             animatingDice={animatingHistoryDice}
           />

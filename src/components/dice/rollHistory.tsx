@@ -11,6 +11,7 @@ interface RollHistoryProps {
   alerts: RollAlert[]
   currentGame: number
   onNewGame: () => void
+  onUndoLast?: () => void
   readOnly?: boolean
   animatingRollId?: string | null
   animatingDice?: (number | null)[]
@@ -124,8 +125,9 @@ export function checkRollTriggers(
 const INITIAL_SHOW = 50
 const LOAD_MORE = 50
 
-const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly, animatingRollId, animatingDice }) => {
+const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, onUndoLast, readOnly, animatingRollId, animatingDice }) => {
   const [confirmNew, setConfirmNew] = React.useState(false)
+  const [confirmUndo, setConfirmUndo] = React.useState(false)
   const [showCount, setShowCount] = React.useState(INITIAL_SHOW)
   const reversed = [...rolls].reverse()
   const visible = reversed.slice(0, showCount)
@@ -163,12 +165,29 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
             </button>
           </div>
         )}
+        {!readOnly && onUndoLast && rolls.length > 0 && !confirmUndo && (
+          <button className={styles.undoBtn} onClick={() => setConfirmUndo(true)}>
+            Undo
+          </button>
+        )}
+        {!readOnly && confirmUndo && (
+          <div className={styles.confirmNew}>
+            <span className={styles.confirmNewText}>Remove last roll?</span>
+            <button className={styles.confirmNewYes} onClick={() => { onUndoLast?.(); setConfirmUndo(false) }}>
+              Yes
+            </button>
+            <button className={styles.confirmNewNo} onClick={() => setConfirmUndo(false)}>
+              No
+            </button>
+          </div>
+        )}
       </div>
       {reversed.length === 0 && (
         <p className={styles.empty}>No rolls yet. Start rolling!</p>
       )}
       <div className={styles.list}>
-        {visible.map((roll) => {
+        {visible.map((roll, idx) => {
+          const rollNum = rolls.length - idx
           const rollGame = roll.game || 1
           const rollAlertData = alertMap.get(roll.id)
           let showDivider = false
@@ -186,6 +205,7 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
               )}
               <div className={`${styles.entry} ${rollAlertData ? styles.hasAlert : ""}`}>
                 <div className={styles.entryMain}>
+                  <span className={styles.rollNum}>#{rollNum}</span>
                   <span className={styles.player}>{roll.player}</span>
                   <span className={styles.dice}>
                     {getRollDice(roll).map((d, i) => {

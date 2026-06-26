@@ -158,6 +158,32 @@
   flex-wrap: wrap;
 }
 
+.rollNum {
+  font-size: 0.65rem;
+  opacity: 0.3;
+  min-width: 25px;
+  flex-shrink: 0;
+}
+
+.undoBtn {
+  background: none;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  color: var(--color-danger);
+  font-family: inherit;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.6;
+  text-transform: uppercase;
+
+  &:hover {
+    opacity: 1;
+    background: var(--color-danger);
+    color: var(--background);
+  }
+}
+
 .player {
   font-size: 0.85rem;
   min-width: 60px;
