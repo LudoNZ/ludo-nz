@@ -1,0 +1,210 @@
+@import "/src/styles/config";
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--background);
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+
+  @media (max-width: $MAX_PHONE) {
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+    padding: 1.5rem 1rem;
+  }
+}
+
+.closeBtn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 1.25rem;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0.25rem;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.title {
+  font-size: 1.3rem;
+  margin-bottom: 1.25rem;
+  color: var(--foreground);
+}
+
+.error {
+  color: var(--color-danger);
+  padding: 0.5rem;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.label {
+  display: block;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  margin-bottom: 0.4rem;
+  margin-top: 1rem;
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 1rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.ingredientList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ingredientRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ingredientName {
+  flex: 2;
+  padding: 0.65rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.ingredientAmount {
+  flex: 1;
+  padding: 0.65rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.removeBtn {
+  background: none;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--borderRadius);
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+    background: var(--color-danger);
+    color: var(--background);
+  }
+}
+
+.addIngredientBtn {
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--foreground) 30%, transparent);
+  color: var(--color-primary);
+  padding: 0.6rem;
+  border-radius: var(--borderRadius);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+
+  & > * {
+    flex: 1;
+  }
+}

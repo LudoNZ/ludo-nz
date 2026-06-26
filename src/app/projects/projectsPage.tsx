@@ -25,13 +25,13 @@ const ProjectsPage: React.FC = () => {
       link: "/projects/construction-pm",
     },
     {
-      id: "cooking",
-      title: "Weekly Meal Planner",
+      id: "menu",
+      title: "Menu",
       description:
-        "A smart meal planning app that generates a randomised weekly menu, sources recipes from an open food API, and helps you build a shopping list with the right ingredients.",
-      tech: ["React", "Next.js", "TypeScript", "TheMealDB API", "Firebase"],
+        "A family meal planner where you log your favourite meals with ingredients and recipes, randomly generate a weekly lunch and dinner plan, and get an auto-generated shopping list.",
+      tech: ["React", "Next.js", "TypeScript", "Firebase", "Firestore"],
       featured: false,
-      link: "/projects/cooking",
+      link: "/menu",
     },
     {
       id: "dice-tracker",

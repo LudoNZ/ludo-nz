@@ -1,0 +1,152 @@
+@import "/src/styles/config";
+
+.mealList {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.empty {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.emptyText {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.emptyHint {
+  opacity: 0.5;
+  font-size: 0.85rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+
+  @media (max-width: $MAX_PHONE) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.cardContent {
+  cursor: pointer;
+  flex: 1;
+}
+
+.mealName {
+  font-size: 1rem;
+  color: var(--foreground);
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.ingredientCount {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  padding-top: 0.5rem;
+}
+
+.editBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  opacity: 0.4;
+
+  &:hover {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+}
+
+.deleteBtn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 0.1rem 0.4rem;
+  opacity: 0.4;
+  line-height: 1;
+  margin-left: auto;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.deleteConfirm {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.deleteText {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.deleteYes,
+.deleteNo {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.deleteYes {
+  color: var(--color-danger);
+
+  &:hover {
+    background: var(--color-danger);
+    color: var(--background);
+  }
+}
+
+.deleteNo {
+  color: var(--foreground);
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.addSection {
+  display: flex;
+
+  & > * {
+    flex: 1;
+  }
+}

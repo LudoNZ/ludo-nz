@@ -44,6 +44,26 @@ service cloud.firestore {
       }
     }
 
+    // Menu sessions
+    match /menuSessions/{sessionId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if request.resource.data.keys().hasAll(['createdAt', 'creatorName'])
+        && request.resource.data.creatorName is string;
+      allow update: if true;
+      allow delete: if false;
+
+      match /meals/{mealId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['name', 'ingredients', 'instructions', 'createdAt'])
+          && request.resource.data.name is string
+          && request.resource.data.ingredients is list;
+        allow update: if request.resource.data.name is string
+          && request.resource.data.ingredients is list;
+        allow delete: if true;
+      }
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;
