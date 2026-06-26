@@ -295,6 +295,11 @@
   background: color-mix(in srgb, var(--color-primary) 15%, var(--background));
   padding: 4px;
 
+  &.mobileResultEmpty {
+    opacity: 0.25;
+    border-style: dashed;
+  }
+
   &.mobileResultAnimating {
     background: color-mix(in srgb, var(--color-primary) 50%, var(--background));
     border-color: var(--color-primary);

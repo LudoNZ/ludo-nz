@@ -213,53 +213,52 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
       </Button>
 
       <div className={styles.mobileBar}>
-        {(lastRoll.some((v) => v !== null) || animating.some((v) => v !== null)) && (
-          <div className={styles.mobileResults}>
-            <button
-              className={styles.mobileResultsToggle}
-              onClick={() => setResultsCollapsed(!resultsCollapsed)}
-            >
-              {resultsCollapsed ? "Show Results ▲" : "▼"}
-            </button>
-            {!resultsCollapsed && (
-              <div className={styles.mobileResultsDice}>
-                {config.dice.map((sides, i) => {
-                  const isAnimating = animating[i] !== null
-                  const displayVal = animating[i] ?? lastRoll[i]
-                  if (displayVal === null) return null
-                  return (
-                    <span key={i} className={styles.mobileResultDie}>
-                      <span className={styles.mobileResultLabel}>D{i + 1}</span>
-                      <button
-                        className={`${styles.mobileResultValue} ${isAnimating ? styles.mobileResultAnimating : ""}`}
-                        onClick={() => !isAnimating && setMobilePickerDie(mobilePickerDie === i ? null : i)}
-                        disabled={isAnimating}
-                      >
-                        {sides <= 6 ? <DieDots value={displayVal} className={styles.mobileResultSvg} /> : displayVal}
-                      </button>
-                      {mobilePickerDie === i && !isAnimating && (
-                        <div className={sides <= 6 ? styles.mobilePickerVertical : styles.mobilePickerGrid}>
-                          {Array.from({ length: sides }, (_, v) => v + 1).map((v) => (
-                            <button
-                              key={v}
-                              className={`${styles.mobilePickerBtn} ${v === displayVal ? styles.mobilePickerActive : ""}`}
-                              onClick={() => handleMobileSelect(i, v)}
-                            >
-                              {sides <= 6 ? <DieDots value={v} className={styles.mobilePickerSvg} /> : v}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </span>
-                  )
-                })}
-                <span className={styles.mobileResultTotal}>
-                  = {config.dice.reduce((s, _, i) => s + (animating[i] ?? lastRoll[i] ?? 0), 0)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+        <div className={styles.mobileResults}>
+          <button
+            className={styles.mobileResultsToggle}
+            onClick={() => setResultsCollapsed(!resultsCollapsed)}
+          >
+            {resultsCollapsed ? "Show Results ▲" : "▼"}
+          </button>
+          {!resultsCollapsed && (
+            <div className={styles.mobileResultsDice}>
+              {config.dice.map((sides, i) => {
+                const isAnimating = animating[i] !== null
+                const activeVal = animating[i] ?? selected[i] ?? lastRoll[i]
+                const isEmpty = activeVal === null
+                const displayVal = isEmpty ? sides : activeVal
+                return (
+                  <span key={i} className={styles.mobileResultDie}>
+                    <span className={styles.mobileResultLabel}>D{i + 1}</span>
+                    <button
+                      className={`${styles.mobileResultValue} ${isAnimating ? styles.mobileResultAnimating : ""} ${isEmpty ? styles.mobileResultEmpty : ""}`}
+                      onClick={() => !isAnimating && setMobilePickerDie(mobilePickerDie === i ? null : i)}
+                      disabled={isAnimating}
+                    >
+                      {sides <= 6 ? <DieDots value={displayVal} className={styles.mobileResultSvg} /> : displayVal}
+                    </button>
+                    {mobilePickerDie === i && !isAnimating && (
+                      <div className={sides <= 6 ? styles.mobilePickerVertical : styles.mobilePickerGrid}>
+                        {Array.from({ length: sides }, (_, v) => v + 1).map((v) => (
+                          <button
+                            key={v}
+                            className={`${styles.mobilePickerBtn} ${v === activeVal ? styles.mobilePickerActive : ""}`}
+                            onClick={() => handleMobileSelect(i, v)}
+                          >
+                            {sides <= 6 ? <DieDots value={v} className={styles.mobilePickerSvg} /> : v}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </span>
+                )
+              })}
+              <span className={styles.mobileResultTotal}>
+                = {config.dice.reduce((s, _, i) => s + (animating[i] ?? selected[i] ?? lastRoll[i] ?? 0), 0)}
+              </span>
+            </div>
+          )}
+        </div>
         <Button onClick={handleQuickRoll} disabled={disabled} variant="primary" size="medium">
           {someSelected && !allSelected
             ? `Roll Remaining (${unsetCount})`
