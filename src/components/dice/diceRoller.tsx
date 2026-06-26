@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
-import { DiceConfig, DEFAULT_DICE_CONFIG, formatDiceConfig } from "./types"
+import { DiceConfig, DEFAULT_DICE_CONFIG } from "./types"
 
 import DieDots from "./dieDots"
 
@@ -143,73 +143,11 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     })
   }, [selected, config.dice, diceCount, noneSelected, onRoll, animateRoll])
 
-  const getDieClass = (dieIndex: number, v: number) => {
-    if (animating[dieIndex] === v) return styles.animating
-    if (selected[dieIndex] === v) return styles.selected
-    if (selected[dieIndex] === null && animating[dieIndex] === null && lastRoll[dieIndex] === v) return styles.lastRoll
-    return ""
-  }
-
   const total = computeTotal(selected)
   const unsetCount = selected.filter((v) => v === null).length
 
   return (
-    <div className={styles.roller}>
-      <div className={styles.rollerHeader}>
-        <span className={styles.turnLabel}>{currentPlayer}&apos;s turn</span>
-        <span className={styles.configLabel}>{formatDiceConfig(config)}</span>
-      </div>
-
-      <div className={styles.manualSection}>
-        {config.dice.map((sides, dieIndex) => {
-          const values = Array.from({ length: sides }, (_, i) => i + 1)
-          return (
-            <div key={dieIndex} className={styles.dieGroup}>
-              <div className={styles.dieLabelRow}>
-                <span className={styles.dieLabel}>Die {dieIndex + 1} (d{sides})</span>
-                <button
-                  className={styles.rollSingleBtn}
-                  onClick={() => handleRandomSingle(dieIndex)}
-                  disabled={disabled}
-                  title={`Roll d${sides}`}
-                >
-                  Roll
-                </button>
-              </div>
-              <div className={styles.dieRow}>
-                {values.map((v) => (
-                  <button
-                    key={`d${dieIndex}-${v}`}
-                    className={`${styles.dieFace} ${getDieClass(dieIndex, v)} ${sides > 6 ? styles.numberFace : ""} ${styles[`dieSize${sides}`] || ""}`}
-                    onClick={() => handleSelect(dieIndex, v)}
-                    disabled={disabled}
-                  >
-                    {sides <= 6 ? <DieDots value={v} className={styles.dieSvg} /> : v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        })}
-
-      </div>
-
-      <div className={styles.actionRow}>
-        <Button
-          onClick={allSelected ? handleLogRoll : handleQuickRoll}
-          disabled={disabled}
-          size="medium"
-          variant={allSelected ? "primary" : "secondary"}
-        >
-          {allSelected
-            ? `Log ${currentPlayer}'s Roll (${total})`
-            : someSelected
-              ? `Roll ${currentPlayer}'s Remaining (${unsetCount})`
-              : `Quick Roll — ${currentPlayer}`}
-        </Button>
-      </div>
-
-      <div className={styles.mobileBar}>
+    <div className={styles.mobileBar}>
         <div className={styles.mobileResults}>
           <button
             className={styles.mobileResultsToggle}
@@ -294,7 +232,6 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
               ? `Roll ${currentPlayer}'s Remaining (${unsetCount})`
               : `Quick Roll — ${currentPlayer}`}
         </Button>
-      </div>
     </div>
   )
 }
