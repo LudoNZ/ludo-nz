@@ -98,17 +98,23 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
-  const maxFaceValue = Math.max(...activeDiceIndices.map((i) => config.dice[i]))
-  const faceCounts: Record<number, number> = {}
-  for (let i = 1; i <= maxFaceValue; i++) faceCounts[i] = 0
+  const activeSidesSet = new Set(activeDiceIndices.map((i) => config.dice[i]))
+  const faceCountsByType: Record<number, Record<number, number>> = {}
+  for (const sides of activeSidesSet) {
+    const counts: Record<number, number> = {}
+    for (let i = 1; i <= sides; i++) counts[i] = 0
+    faceCountsByType[sides] = counts
+  }
   for (const r of filteredRolls) {
     const dice = getRollDice(r)
     for (const idx of activeDiceIndices) {
       const d = dice[idx]
-      if (d) faceCounts[d] = (faceCounts[d] || 0) + 1
+      const sides = config.dice[idx]
+      if (d && faceCountsByType[sides]) {
+        faceCountsByType[sides][d] = (faceCountsByType[sides][d] || 0) + 1
+      }
     }
   }
-  const maxFace = Math.max(...Object.values(faceCounts), 1)
 
   return (
     <div className={styles.stats}>
@@ -168,21 +174,30 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         })}
       </div>
 
-      <div className={styles.chart}>
-        <span className={styles.chartLabel}>Die Face Frequency</span>
-        {Object.entries(faceCounts).map(([face, count]) => {
-          const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
-          return (
-            <div key={`face-${face}`} className={styles.bar}>
-              <span className={styles.barTotal}>{face}</span>
-              <div className={styles.barTrack}>
-                <div className={styles.barFill} style={{ width: `${pct}%` }} />
-              </div>
-              <span className={styles.barCount}>{count}</span>
-            </div>
-          )
-        })}
-      </div>
+      {Array.from(activeSidesSet).sort((a, b) => a - b).map((sides) => {
+        const counts = faceCountsByType[sides]
+        const mf = Math.max(...Object.values(counts), 1)
+        const dieCount = activeDiceIndices.filter((i) => config.dice[i] === sides).length
+        return (
+          <div key={`face-d${sides}`} className={styles.chart}>
+            <span className={styles.chartLabel}>
+              d{sides} Face Frequency{dieCount > 1 ? ` (×${dieCount})` : ""}
+            </span>
+            {Object.entries(counts).map(([face, count]) => {
+              const pct = mf > 0 ? (count / mf) * 100 : 0
+              return (
+                <div key={`face-d${sides}-${face}`} className={styles.bar}>
+                  <span className={styles.barTotal}>{face}</span>
+                  <div className={styles.barTrack}>
+                    <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={styles.barCount}>{count}</span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
 
       <div className={styles.playerSection}>
         <span className={styles.chartLabel}>Per Player</span>
