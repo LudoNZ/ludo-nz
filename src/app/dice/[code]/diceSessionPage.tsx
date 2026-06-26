@@ -104,6 +104,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     )
     let initialLoad = true
     const unsubRolls = onSnapshot(rollsQuery, (snap) => {
+      try {
       const newRolls: DiceRoll[] = []
       snap.forEach((d) => {
         newRolls.push({ id: d.id, ...d.data() } as DiceRoll)
@@ -162,6 +163,12 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           }
         }
       })
+      } catch (e) {
+        console.error("Roll snapshot error:", e)
+      }
+    }, (err) => {
+      console.error("Roll listener error:", err)
+      setError("Failed to load rolls")
     })
 
     return () => {

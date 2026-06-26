@@ -37,7 +37,7 @@ export const DICE_SIDES_OPTIONS = [4, 6, 8, 10, 12, 20]
 export function normalizeDiceConfig(raw: any): DiceConfig {
   if (!raw) return DEFAULT_DICE_CONFIG
   if (Array.isArray(raw.dice) && raw.dice.length > 0) return { dice: raw.dice }
-  if (typeof raw.count === "number" && typeof raw.sides === "number") {
+  if (typeof raw.count === "number" && typeof raw.sides === "number" && raw.count > 0) {
     return { dice: Array(raw.count).fill(raw.sides) }
   }
   return DEFAULT_DICE_CONFIG

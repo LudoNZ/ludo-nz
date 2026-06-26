@@ -150,6 +150,16 @@
   text-align: center;
 }
 
+.colDice {
+  min-width: 70px;
+  font-size: 0.75rem;
+  opacity: 0.7;
+
+  @media (max-width: $MAX_PHONE) {
+    display: none;
+  }
+}
+
 .colDate {
   min-width: 100px;
   text-align: right;

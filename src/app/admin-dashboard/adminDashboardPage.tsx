@@ -15,11 +15,26 @@ interface SessionSummary {
   currentGame: number
   rollCount: number
   rulesCount: number
+  diceType: string
   createdAt: Date | null
   lastPlayed: Date | null
 }
 
 type Filter = "recent" | "popular" | "active"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatDice(config: any): string {
+  if (!config) return "2d6"
+  const dice: number[] = Array.isArray(config.dice) ? config.dice :
+    (typeof config.count === "number" && typeof config.sides === "number")
+      ? Array(config.count).fill(config.sides) : [6, 6]
+  const groups: Record<number, number> = {}
+  for (const s of dice) groups[s] = (groups[s] || 0) + 1
+  return Object.entries(groups)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([sides, count]) => `${count}d${sides}`)
+    .join(", ")
+}
 
 export const AdminDashboardPage = () => {
   const auth = useAuth()
@@ -57,6 +72,7 @@ export const AdminDashboardPage = () => {
               currentGame: data.currentGame ?? 1,
               rollCount: rollsSnap.data().count,
               rulesCount: (data.customRules || []).length,
+              diceType: formatDice(data.diceConfig),
               createdAt: data.createdAt?.toDate?.() || null,
               lastPlayed,
             }
@@ -142,6 +158,7 @@ export const AdminDashboardPage = () => {
               <span className={styles.colGames}>Games</span>
               <span className={styles.colRolls}>Rolls</span>
               <span className={styles.colRules}>Rules</span>
+              <span className={styles.colDice}>Dice</span>
               <span className={styles.colDate}>Created</span>
               <span className={styles.colDate}>Last Played</span>
             </div>
@@ -157,6 +174,7 @@ export const AdminDashboardPage = () => {
                 <span className={styles.colGames}>{s.currentGame}</span>
                 <span className={styles.colRolls}>{s.rollCount}</span>
                 <span className={styles.colRules}>{s.rulesCount}</span>
+                <span className={styles.colDice}>{s.diceType}</span>
                 <span className={styles.colDate}>
                   {s.createdAt
                     ? s.createdAt.toLocaleDateString(undefined, {
