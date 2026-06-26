@@ -53,8 +53,11 @@ export function checkRollTriggers(
       return indices.map((i) => d[i] || 0).reduce((s, v) => s + v, 0)
     }
 
-    if (type === "rollSum" && scopedTotal === value) {
-      alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+    if (type === "rollSum") {
+      const sums = rule.trigger.sumValues || [value]
+      if (sums.includes(scopedTotal)) {
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+      }
     }
 
     if (type === "doubles" && scopedDice.length >= 2 && scopedDice.every((d) => d === scopedDice[0])) {
