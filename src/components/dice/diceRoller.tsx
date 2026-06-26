@@ -24,7 +24,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const [resultsCollapsed, setResultsCollapsed] = useState(false)
   const animTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  const animateRoll = useCallback((dieIndex: number, finalValue: number, sides: number) => {
+  const animateRoll = useCallback((dieIndex: number, finalValue: number, sides: number, setSelectedOnEnd = false) => {
     const totalSteps = 8
     let step = 0
     setLastRoll((prev) => {
@@ -49,11 +49,19 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           next[dieIndex] = null
           return next
         })
-        setLastRoll((prev) => {
-          const next = [...prev]
-          next[dieIndex] = finalValue
-          return next
-        })
+        if (setSelectedOnEnd) {
+          setSelected((prev) => {
+            const next = [...prev]
+            next[dieIndex] = finalValue
+            return next
+          })
+        } else {
+          setLastRoll((prev) => {
+            const next = [...prev]
+            next[dieIndex] = finalValue
+            return next
+          })
+        }
       }
     }
     tick()
@@ -73,8 +81,17 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const computeTotal = (dice: (number | null)[]) =>
     dice.every((v) => v !== null) ? dice.reduce((s, v) => s + (v ?? 0), 0) : null
 
+  const hasResult = lastRoll.some((v) => v !== null)
+  const [mobilePickerDie, setMobilePickerDie] = useState<number | null>(null)
+
   const handleSelect = (dieIndex: number, value: number) => {
     setSelected((prev) => {
+      if (hasResult && prev.every((v) => v === null)) {
+        const next = Array(diceCount).fill(null) as (number | null)[]
+        next[dieIndex] = value
+        setLastRoll(Array(diceCount).fill(null))
+        return next
+      }
       const next = [...prev]
       next[dieIndex] = next[dieIndex] === value ? null : value
       return next
@@ -84,12 +101,15 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const handleRandomSingle = (dieIndex: number) => {
     const sides = config.dice[dieIndex]
     const value = Math.floor(Math.random() * sides) + 1
-    setSelected((prev) => {
-      const next = [...prev]
-      next[dieIndex] = value
-      return next
-    })
-    animateRoll(dieIndex, value, sides)
+    if (hasResult && selected.every((v) => v === null)) {
+      setLastRoll(Array(diceCount).fill(null))
+    }
+    animateRoll(dieIndex, value, sides, true)
+  }
+
+  const handleMobileSelect = (dieIndex: number, value: number) => {
+    handleSelect(dieIndex, value)
+    setMobilePickerDie(null)
   }
 
   const handleLogRoll = useCallback(() => {
@@ -207,9 +227,26 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
                   return (
                     <span key={i} className={styles.mobileResultDie}>
                       <span className={styles.mobileResultLabel}>D{i + 1}</span>
-                      <span className={`${styles.mobileResultValue} ${isAnimating ? styles.mobileResultAnimating : ""}`}>
+                      <button
+                        className={`${styles.mobileResultValue} ${isAnimating ? styles.mobileResultAnimating : ""}`}
+                        onClick={() => !isAnimating && setMobilePickerDie(mobilePickerDie === i ? null : i)}
+                        disabled={isAnimating}
+                      >
                         {sides <= 6 ? <DieDots value={displayVal} className={styles.mobileResultSvg} /> : displayVal}
-                      </span>
+                      </button>
+                      {mobilePickerDie === i && !isAnimating && (
+                        <div className={sides <= 6 ? styles.mobilePickerVertical : styles.mobilePickerGrid}>
+                          {Array.from({ length: sides }, (_, v) => v + 1).map((v) => (
+                            <button
+                              key={v}
+                              className={`${styles.mobilePickerBtn} ${v === displayVal ? styles.mobilePickerActive : ""}`}
+                              onClick={() => handleMobileSelect(i, v)}
+                            >
+                              {sides <= 6 ? <DieDots value={v} className={styles.mobilePickerSvg} /> : v}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </span>
                   )
                 })}
