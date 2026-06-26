@@ -68,14 +68,17 @@ export function checkRollTriggers(
     }
 
     if (type === "drought" && value > 0) {
-      const watchNum = rule.trigger.droughtNumber ?? 7
-      let countWithout = 0
-      for (let i = gameRolls.length - 1; i >= 0; i--) {
-        if (getScopedTotal(gameRolls[i]) === watchNum) break
-        countWithout++
-      }
-      if (countWithout >= value && scopedTotal !== watchNum) {
-        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+      const watchNums = rule.trigger.droughtNumbers || [rule.trigger.droughtNumber ?? 7]
+      const hitsDrought = !watchNums.includes(scopedTotal)
+      if (hitsDrought) {
+        let countWithout = 0
+        for (let i = gameRolls.length - 1; i >= 0; i--) {
+          if (watchNums.includes(getScopedTotal(gameRolls[i]))) break
+          countWithout++
+        }
+        if (countWithout >= value) {
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+        }
       }
     }
 

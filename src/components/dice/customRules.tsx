@@ -34,6 +34,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   const [selectedHotTotals, setSelectedHotTotals] = useState<Set<number>>(new Set(ALL_TOTALS))
   const [selectedDiceIndices, setSelectedDiceIndices] = useState<Set<number>>(new Set(config.dice.map((_, i) => i)))
   const [selectedSumValues, setSelectedSumValues] = useState<Set<number>>(new Set([7]))
+  const [selectedDroughtNumbers, setSelectedDroughtNumbers] = useState<Set<number>>(new Set([7]))
   const [action, setAction] = useState("")
   const [selectedSound, setSelectedSound] = useState("alert")
 
@@ -67,6 +68,15 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedSumValues(selectedSumValues.size === allSumValues.length ? new Set([allSumValues[0]]) : new Set(allSumValues))
   }
 
+  const toggleDroughtNumber = (v: number) => {
+    const next = new Set(selectedDroughtNumbers)
+    if (next.has(v)) { if (next.size > 1) next.delete(v) } else next.add(v)
+    setSelectedDroughtNumbers(next)
+  }
+  const toggleAllDroughtNumbers = () => {
+    setSelectedDroughtNumbers(selectedDroughtNumbers.size === allSumValues.length ? new Set([allSumValues[0]]) : new Set(allSumValues))
+  }
+
   const toggleDieIndex = (i: number) => {
     const next = new Set(selectedDiceIndices)
     if (next.has(i)) { if (next.size > 1) next.delete(i) } else next.add(i)
@@ -85,6 +95,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedHotTotals(new Set(ALL_TOTALS))
     setSelectedDiceIndices(new Set(config.dice.map((_, i) => i)))
     setSelectedSumValues(new Set([7]))
+    setSelectedDroughtNumbers(new Set([7]))
     setAction("")
     setSelectedSound("alert")
     setEditingId(null)
@@ -99,6 +110,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedHotTotals(new Set(t?.hotNumberTotals || ALL_TOTALS))
     setSelectedDiceIndices(new Set(t?.diceIndices || config.dice.map((_, i) => i)))
     setSelectedSumValues(new Set(t?.sumValues || [t?.value ?? 7]))
+    setSelectedDroughtNumbers(new Set(t?.droughtNumbers || [t?.droughtNumber ?? 7]))
     setAction(rule.action)
     setSelectedSound(rule.sound || "alert")
     setEditingId(rule.id)
@@ -106,6 +118,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
 
   const buildRule = (): CustomRule => {
     const sumValues = triggerType === "rollSum" ? Array.from(selectedSumValues).sort((a, b) => a - b) : undefined
+    const droughtNumbers = triggerType === "drought" ? Array.from(selectedDroughtNumbers).sort((a, b) => a - b) : undefined
     const doublesList = triggerType === "doubles" ? Array.from(selectedDoubles).sort() : undefined
     const hotNumberTotals = triggerType === "hotNumber" ? Array.from(selectedHotTotals).sort((a, b) => a - b) : undefined
     const allDice = selectedDiceIndices.size === config.dice.length
@@ -113,12 +126,12 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
 
     return {
       id: editingId || crypto.randomUUID(),
-      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues),
+      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues, droughtNumbers),
       enabled: true,
       trigger: {
         type: triggerType,
         value: triggerValue,
-        ...(triggerType === "drought" ? { droughtNumber } : {}),
+        ...(triggerType === "drought" ? { droughtNumber, droughtNumbers } : {}),
         ...(triggerType === "doubles" ? { doublesList } : {}),
         ...(triggerType === "hotNumber" ? { hotNumberTotals } : {}),
         ...(triggerType === "rollSum" ? { sumValues } : {}),
@@ -214,13 +227,18 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
       {triggerType === "drought" && (
         <>
           <div className={styles.formRow}>
-            <label className={styles.formLabel}>Number</label>
-            <input type="number" min={1} max={120} value={droughtNumber}
-              onChange={(e) => setDroughtNumber(Number(e.target.value))} className={styles.numberInput} />
-            <span className={styles.formHint}>the sum to watch for</span>
+            <label className={styles.formLabel}>Without</label>
+            <div className={styles.doublesGrid}>
+              <button className={`${styles.doublesBtn} ${selectedDroughtNumbers.size === allSumValues.length ? styles.doublesActive : ""}`}
+                onClick={toggleAllDroughtNumbers} type="button">All</button>
+              {allSumValues.map((v) => (
+                <button key={v} className={`${styles.doublesBtn} ${selectedDroughtNumbers.has(v) ? styles.doublesActive : ""}`}
+                  onClick={() => toggleDroughtNumber(v)} type="button">{v}</button>
+              ))}
+            </div>
           </div>
           <div className={styles.formRow}>
-            <label className={styles.formLabel}>Rolls</label>
+            <label className={styles.formLabel}>For</label>
             <input type="number" min={3} max={50} value={triggerValue}
               onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
             <span className={styles.formHint}>rolls without it</span>
@@ -349,7 +367,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   )
 }
 
-function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[]): string {
+function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[], droughtNumbers?: number[]): string {
   switch (type) {
     case "rollSum":
       if (sumValues && sumValues.length === 1) return `When roll sum = ${sumValues[0]}`
@@ -359,6 +377,8 @@ function buildRuleText(type: TriggerType, value: number, droughtNum?: number, do
       if (!doublesList || doublesList.length === 6) return "When any doubles rolled"
       return `When doubles: ${doublesList.map((d) => `${d}+${d}`).join(", ")}`
     case "drought":
+      if (droughtNumbers && droughtNumbers.length === 1) return `When ${value} rolls without a ${droughtNumbers[0]}`
+      if (droughtNumbers && droughtNumbers.length > 1) return `When ${value} rolls without ${droughtNumbers.join(", ")}`
       return `When ${value} rolls without a ${droughtNum ?? 7}`
     case "hotNumber":
       if (!hotTotals || hotTotals.length === ALL_TOTALS.length) return `When any total ${value}× in a row`
