@@ -253,6 +253,16 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
     }
   }, [code, session])
 
+  const handleUpdateRule = useCallback(async (rule: CustomRule) => {
+    if (!session) return
+    const updated = session.customRules.map((r) => r.id === rule.id ? rule : r)
+    try {
+      await updateDoc(doc(firestore, "diceSessions", code), { customRules: updated })
+    } catch {
+      setError("Failed to update rule")
+    }
+  }, [code, session])
+
   const handleToggleRule = useCallback(async (ruleId: string) => {
     if (!session) return
     const updated = session.customRules.map((r) =>
@@ -346,7 +356,9 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           <CustomRules
             rules={session.customRules}
             triggerCounts={triggerCounts}
+            diceConfig={session.diceConfig}
             onAdd={handleAddRule}
+            onUpdate={handleUpdateRule}
             onToggle={handleToggleRule}
             onRemove={handleRemoveRule}
           />

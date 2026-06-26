@@ -103,6 +103,41 @@
   opacity: 0.8;
 }
 
+.diceScope {
+  font-size: 0.65rem;
+  opacity: 0.5;
+}
+
+.soundLabel {
+  font-size: 0.6rem;
+  opacity: 0.5;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 0.2rem;
+}
+
+.ruleActions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.editBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.4;
+
+  &:hover {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+}
+
 .removeBtn {
   background: none;
   border: none;

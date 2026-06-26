@@ -37,19 +37,29 @@ export function checkRollTriggers(
   rules: CustomRule[]
 ): RollAlert[] {
   const gameRolls = rolls.filter((r) => r.game === roll.game)
+  const allDice = getRollDice(roll)
   const alerts: RollAlert[] = []
+
   for (const rule of rules) {
     if (!rule.enabled || !rule.trigger) continue
-    const { type, value } = rule.trigger
+    const { type, value, diceIndices } = rule.trigger
 
-    if (type === "rollSum" && roll.total === value) {
+    const indices = diceIndices || allDice.map((_, i) => i)
+    const scopedDice = indices.map((i) => allDice[i]).filter((v) => v !== undefined)
+    const scopedTotal = scopedDice.reduce((s, v) => s + v, 0)
+
+    function getScopedTotal(r: DiceRoll): number {
+      const d = getRollDice(r)
+      return indices.map((i) => d[i] || 0).reduce((s, v) => s + v, 0)
+    }
+
+    if (type === "rollSum" && scopedTotal === value) {
       alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
     }
 
-    const dice = getRollDice(roll)
-    if (type === "doubles" && dice.length >= 2 && dice.every((d) => d === dice[0])) {
+    if (type === "doubles" && scopedDice.length >= 2 && scopedDice.every((d) => d === scopedDice[0])) {
       const list = rule.trigger.doublesList
-      if (!list || list.length === 6 || list.includes(dice[0])) {
+      if (!list || list.length === 6 || list.includes(scopedDice[0])) {
         alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
       }
     }
@@ -58,20 +68,20 @@ export function checkRollTriggers(
       const watchNum = rule.trigger.droughtNumber ?? 7
       let countWithout = 0
       for (let i = gameRolls.length - 1; i >= 0; i--) {
-        if (gameRolls[i].total === watchNum) break
+        if (getScopedTotal(gameRolls[i]) === watchNum) break
         countWithout++
       }
-      if (countWithout >= value && roll.total !== watchNum) {
+      if (countWithout >= value && scopedTotal !== watchNum) {
         alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
       }
     }
 
     if (type === "hotNumber" && value > 0) {
       const watchTotals = rule.trigger.hotNumberTotals
-      if (!watchTotals || watchTotals.includes(roll.total)) {
+      if (!watchTotals || watchTotals.includes(scopedTotal)) {
         let streakCount = 0
         for (let i = gameRolls.length - 1; i >= 0; i--) {
-          if (gameRolls[i].total === roll.total) {
+          if (getScopedTotal(gameRolls[i]) === scopedTotal) {
             streakCount++
           } else {
             break

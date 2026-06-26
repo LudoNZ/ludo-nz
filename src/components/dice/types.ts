@@ -10,6 +10,7 @@ export interface CustomRule {
     droughtNumber?: number
     doublesList?: number[]
     hotNumberTotals?: number[]
+    diceIndices?: number[]
   }
   action: string
   sound?: string
