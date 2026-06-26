@@ -15,6 +15,7 @@ type StatsScope = "current" | "all"
 const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig }) => {
   const config = diceConfig || DEFAULT_DICE_CONFIG
   const [scope, setScope] = useState<StatsScope>("current")
+  const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null)
 
   const uniqueDieTypes = useMemo(() => Array.from(new Set(config.dice)).sort((a, b) => a - b), [config.dice])
   const [activeDieTypes, setActiveDieTypes] = useState<Set<number>>(new Set(uniqueDieTypes))
@@ -223,14 +224,79 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
             for (const t of ps.totals) modeCounts[t] = (modeCounts[t] || 0) + 1
             const mode = Object.entries(modeCounts).sort(([, a], [, b]) => b - a)[0][0]
             const sevens = ps.totals.filter((t) => t === 7).length
+            const isExpanded = expandedPlayer === name
 
             return (
-              <div key={name} className={styles.playerRow}>
-                <span className={styles.playerName}>{name}</span>
-                <span className={styles.playerStat}>{ps.count} rolls</span>
-                <span className={styles.playerStat}>avg {avg}</span>
-                <span className={styles.playerStat}>mode {mode}</span>
-                <span className={styles.playerStat}>{sevens} sevens</span>
+              <div key={name} className={styles.playerCard}>
+                <button
+                  className={`${styles.playerRow} ${isExpanded ? styles.playerRowActive : ""}`}
+                  onClick={() => setExpandedPlayer(isExpanded ? null : name)}
+                >
+                  <span className={styles.playerName}>{name}</span>
+                  <span className={styles.playerStat}>{ps.count} rolls</span>
+                  <span className={styles.playerStat}>avg {avg}</span>
+                  <span className={styles.playerStat}>mode {mode}</span>
+                  <span className={styles.playerStat}>{sevens} sevens</span>
+                  <span className={styles.playerExpand}>{isExpanded ? "−" : "+"}</span>
+                </button>
+                {isExpanded && (() => {
+                  const pRolls = filteredRolls.filter((r) => r.player === name)
+                  const pDist: Record<number, number> = {}
+                  for (let i = minTotal; i <= maxTotal; i++) pDist[i] = 0
+                  for (const r of pRolls) {
+                    const t = getFilteredTotal(r)
+                    if (t !== null) pDist[t] = (pDist[t] || 0) + 1
+                  }
+                  const pMax = Math.max(...Object.values(pDist), 1)
+
+                  const pFace: Record<number, number> = {}
+                  for (const r of pRolls) {
+                    const dice = getRollDice(r)
+                    for (const idx of activeDiceIndices) {
+                      if (idx >= dice.length) continue
+                      const d = dice[idx]
+                      if (d) pFace[d] = (pFace[d] || 0) + 1
+                    }
+                  }
+                  const pfMax = Math.max(...Object.values(pFace), 1)
+                  const maxFace = Math.max(...activeDiceIndices.map((i) => config.dice[i]), 1)
+
+                  return (
+                    <div className={styles.playerDetail}>
+                      <div className={styles.chart}>
+                        <span className={styles.chartLabel}>Sum Distribution</span>
+                        {Object.entries(pDist).map(([total, count]) => {
+                          const pct = pMax > 0 ? (count / pMax) * 100 : 0
+                          return (
+                            <div key={total} className={styles.bar}>
+                              <span className={styles.barTotal}>{total}</span>
+                              <div className={styles.barTrack}>
+                                <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className={styles.barCount}>{count}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className={styles.chart}>
+                        <span className={styles.chartLabel}>Face Frequency</span>
+                        {Array.from({ length: maxFace }, (_, i) => i + 1).map((face) => {
+                          const count = pFace[face] || 0
+                          const pct = pfMax > 0 ? (count / pfMax) * 100 : 0
+                          return (
+                            <div key={face} className={styles.bar}>
+                              <span className={styles.barTotal}>{face}</span>
+                              <div className={styles.barTrack}>
+                                <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className={styles.barCount}>{count}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
