@@ -45,7 +45,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedDoubles(next)
   }
   const toggleAllDoubles = () => {
-    setSelectedDoubles(selectedDoubles.size === 6 ? new Set() : new Set([1, 2, 3, 4, 5, 6]))
+    setSelectedDoubles(selectedDoubles.size === allDoublesValues.length ? new Set() : new Set(allDoublesValues))
   }
   const toggleHotTotal = (v: number) => {
     const next = new Set(selectedHotTotals)
@@ -53,12 +53,15 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedHotTotals(next)
   }
   const toggleAllHotTotals = () => {
-    setSelectedHotTotals(selectedHotTotals.size === ALL_TOTALS.length ? new Set() : new Set(ALL_TOTALS))
+    setSelectedHotTotals(selectedHotTotals.size === allSumValues.length ? new Set() : new Set(allSumValues))
   }
   const activeDice = Array.from(selectedDiceIndices)
+  const activeSides = activeDice.map((i) => config.dice[i])
   const sumMin = activeDice.length > 0 ? activeDice.length : 1
   const sumMax = activeDice.length > 0 ? activeDice.reduce((s, i) => s + config.dice[i], 0) : 6
   const allSumValues = Array.from({ length: sumMax - sumMin + 1 }, (_, i) => sumMin + i)
+  const maxDoublesValue = Math.min(...(activeSides.length > 0 ? activeSides : [6]))
+  const allDoublesValues = Array.from({ length: maxDoublesValue }, (_, i) => i + 1)
 
   const toggleSumValue = (v: number) => {
     const next = new Set(selectedSumValues)
@@ -93,8 +96,8 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setTriggerValue(7)
     setDroughtNumber(7)
     setDroughtOngoing(false)
-    setSelectedDoubles(new Set([1, 2, 3, 4, 5, 6]))
-    setSelectedHotTotals(new Set(ALL_TOTALS))
+    setSelectedDoubles(new Set(allDoublesValues))
+    setSelectedHotTotals(new Set(allSumValues))
     setSelectedDiceIndices(new Set(config.dice.map((_, i) => i)))
     setSelectedSumValues(new Set([7]))
     setSelectedDroughtNumbers(new Set([7]))
@@ -217,9 +220,9 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
         <div className={styles.formRow}>
           <label className={styles.formLabel}>Which</label>
           <div className={styles.doublesGrid}>
-            <button className={`${styles.doublesBtn} ${selectedDoubles.size === 6 ? styles.doublesActive : ""}`}
+            <button className={`${styles.doublesBtn} ${selectedDoubles.size === allDoublesValues.length ? styles.doublesActive : ""}`}
               onClick={toggleAllDoubles} type="button">All</button>
-            {[1, 2, 3, 4, 5, 6].map((v) => (
+            {allDoublesValues.map((v) => (
               <button key={v} className={`${styles.doublesBtn} ${selectedDoubles.has(v) ? styles.doublesActive : ""}`}
                 onClick={() => toggleDouble(v)} type="button">{v}+{v}</button>
             ))}
@@ -274,9 +277,9 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
           <div className={styles.formRow}>
             <label className={styles.formLabel}>Totals</label>
             <div className={styles.doublesGrid}>
-              <button className={`${styles.doublesBtn} ${selectedHotTotals.size === ALL_TOTALS.length ? styles.doublesActive : ""}`}
+              <button className={`${styles.doublesBtn} ${selectedHotTotals.size === allSumValues.length ? styles.doublesActive : ""}`}
                 onClick={toggleAllHotTotals} type="button">All</button>
-              {ALL_TOTALS.map((v) => (
+              {allSumValues.map((v) => (
                 <button key={v} className={`${styles.doublesBtn} ${selectedHotTotals.has(v) ? styles.doublesActive : ""}`}
                   onClick={() => toggleHotTotal(v)} type="button">{v}</button>
               ))}
@@ -405,7 +408,7 @@ function buildRuleText(type: TriggerType, value: number, droughtNum?: number, do
       if (droughtNumbers && droughtNumbers.length > 1) return `When ${value} rolls without ${droughtNumbers.join(", ")}${suffix}`
       return `When ${value} rolls without a ${droughtNum ?? 7}${suffix}`
     case "hotNumber":
-      if (!hotTotals || hotTotals.length === ALL_TOTALS.length) return `When any total ${value}× in a row`
+      if (!hotTotals) return `When any total ${value}× in a row`
       return `When ${hotTotals.join("/")} rolled ${value}× in a row`
   }
 }
