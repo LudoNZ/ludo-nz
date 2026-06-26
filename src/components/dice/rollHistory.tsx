@@ -17,6 +17,7 @@ export interface RollAlert {
   rollId: string
   ruleId: string
   message: string
+  sound?: string
 }
 
 function getRelativeTime(date: Date): string {
@@ -42,14 +43,14 @@ export function checkRollTriggers(
     const { type, value } = rule.trigger
 
     if (type === "rollSum" && roll.total === value) {
-      alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
+      alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
     }
 
     const dice = getRollDice(roll)
     if (type === "doubles" && dice.length >= 2 && dice.every((d) => d === dice[0])) {
       const list = rule.trigger.doublesList
       if (!list || list.length === 6 || list.includes(dice[0])) {
-        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
       }
     }
 
@@ -61,7 +62,7 @@ export function checkRollTriggers(
         countWithout++
       }
       if (countWithout >= value && roll.total !== watchNum) {
-        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
       }
     }
 
@@ -77,7 +78,7 @@ export function checkRollTriggers(
           }
         }
         if (streakCount >= value) {
-          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}` })
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
         }
       }
     }

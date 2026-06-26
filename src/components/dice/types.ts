@@ -12,6 +12,7 @@ export interface CustomRule {
     hotNumberTotals?: number[]
   }
   action: string
+  sound?: string
 }
 
 export interface GameRecord {

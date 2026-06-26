@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import styles from "./customRules.module.scss"
 import Button from "@/components/button/button"
 import { CustomRule } from "./types"
+import { SOUND_OPTIONS, playSound } from "./sounds"
 
 interface CustomRulesProps {
   rules: CustomRule[]
@@ -27,6 +28,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, onAdd, 
   const [selectedDoubles, setSelectedDoubles] = useState<Set<number>>(new Set([1, 2, 3, 4, 5, 6]))
   const [selectedHotTotals, setSelectedHotTotals] = useState<Set<number>>(new Set(ALL_TOTALS))
   const [action, setAction] = useState("")
+  const [selectedSound, setSelectedSound] = useState("alert")
 
   const toggleDouble = (v: number) => {
     const next = new Set(selectedDoubles)
@@ -78,6 +80,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, onAdd, 
         ...(triggerType === "hotNumber" ? { hotNumberTotals } : {}),
       },
       action: action.trim(),
+      sound: selectedSound,
     }
 
     onAdd(rule)
@@ -92,6 +95,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, onAdd, 
     setSelectedDoubles(new Set([1, 2, 3, 4, 5, 6]))
     setSelectedHotTotals(new Set(ALL_TOTALS))
     setAction("")
+    setSelectedSound("alert")
   }
 
   return (
@@ -290,6 +294,22 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, onAdd, 
                   maxLength={60}
                   onKeyDown={(e) => e.key === "Enter" && handleAdd()}
                 />
+              </div>
+
+              <div className={styles.formRow}>
+                <label className={styles.formLabel}>Sound</label>
+                <div className={styles.soundGrid}>
+                  {SOUND_OPTIONS.map((s) => (
+                    <button
+                      key={s.id}
+                      className={`${styles.soundBtn} ${selectedSound === s.id ? styles.soundActive : ""}`}
+                      onClick={() => { setSelectedSound(s.id); playSound(s.id) }}
+                      type="button"
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className={styles.formActions}>

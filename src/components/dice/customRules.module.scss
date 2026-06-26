@@ -241,6 +241,36 @@
   }
 }
 
+.soundGrid {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.soundBtn {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &.soundActive {
+    background: var(--color-primary);
+    color: var(--background);
+    border-color: var(--color-primary);
+  }
+}
+
 .formActions {
   display: flex;
   gap: 0.5rem;
