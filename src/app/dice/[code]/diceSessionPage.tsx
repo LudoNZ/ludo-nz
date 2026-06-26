@@ -419,67 +419,56 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
 
       {error && <p className={styles.error}>{error}</p>}
 
+      {currentPlayer && (
+        <DiceRoller
+          currentPlayer={currentPlayer}
+          diceConfig={session.diceConfig}
+          onRoll={handleRoll}
+        />
+      )}
+
       <div className={styles.layout}>
         <div className={styles.leftCol}>
-          {currentPlayer && (
-            <DiceRoller
-              currentPlayer={currentPlayer}
-              diceConfig={session.diceConfig}
-              onRoll={handleRoll}
-            />
-          )}
-          <CustomRules
-            rules={session.customRules}
-            triggerCounts={triggerCounts}
-            diceConfig={session.diceConfig}
-            onAdd={handleAddRule}
-            onUpdate={handleUpdateRule}
-            onToggle={handleToggleRule}
-            onRemove={handleRemoveRule}
+          <RollHistory
+            rolls={rolls.filter((r) => (r.game || 1) === (session.currentGame ?? 1))}
+            alerts={alerts}
+            currentGame={session.currentGame ?? 1}
+            onNewGame={handleNewGame}
+            animatingRollId={animatingRollId}
+            animatingDice={animatingHistoryDice}
           />
         </div>
 
         <div className={styles.rightCol}>
+          <RollStats
+            rolls={rolls}
+            currentGame={session.currentGame ?? 1}
+            diceConfig={session.diceConfig}
+          />
+        </div>
+      </div>
+
+      <CustomRules
+        rules={session.customRules}
+        triggerCounts={triggerCounts}
+        diceConfig={session.diceConfig}
+        onAdd={handleAddRule}
+        onUpdate={handleUpdateRule}
+        onToggle={handleToggleRule}
+        onRemove={handleRemoveRule}
+      />
+
+      <div>
+        {(session.games || []).length > 1 && (
           <div className={styles.tabs}>
             <button
-              className={`${styles.tab} ${activeTab === "history" ? styles.activeTab : ""}`}
-              onClick={() => setActiveTab("history")}
+              className={`${styles.tab} ${activeTab === "archive" ? styles.activeTab : ""}`}
+              onClick={() => setActiveTab(activeTab === "archive" ? "history" : "archive")}
             >
-              History
+              Archive
             </button>
-            <button
-              className={`${styles.tab} ${activeTab === "stats" ? styles.activeTab : ""}`}
-              onClick={() => setActiveTab("stats")}
-            >
-              Stats
-            </button>
-            {(session.games || []).length > 1 && (
-              <button
-                className={`${styles.tab} ${activeTab === "archive" ? styles.activeTab : ""}`}
-                onClick={() => setActiveTab("archive")}
-              >
-                Archive
-              </button>
-            )}
           </div>
-
-          {activeTab === "history" && (
-            <RollHistory
-              rolls={rolls.filter((r) => (r.game || 1) === (session.currentGame ?? 1))}
-              alerts={alerts}
-              currentGame={session.currentGame ?? 1}
-              onNewGame={handleNewGame}
-              animatingRollId={animatingRollId}
-              animatingDice={animatingHistoryDice}
-            />
-          )}
-          {activeTab === "stats" && (
-            <RollStats
-              rolls={rolls}
-              currentGame={session.currentGame ?? 1}
-              diceConfig={session.diceConfig}
-            />
-          )}
+        )}
           {activeTab === "archive" && (
             <div className={styles.archive}>
               <h3 className={styles.archiveHeading}>Archived Games</h3>
@@ -521,7 +510,6 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
               )}
             </div>
           )}
-        </div>
       </div>
 
       <Link href="/dice" className={styles.backLink}>← Back to Dice Tracker</Link>

@@ -236,6 +236,12 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
                     </button>
                     {mobilePickerDie === i && !isAnimating && (
                       <div className={sides <= 6 ? styles.mobilePickerVertical : styles.mobilePickerGrid}>
+                        <button
+                          className={styles.mobilePickerRoll}
+                          onClick={() => { handleRandomSingle(i); setMobilePickerDie(null) }}
+                        >
+                          Roll
+                        </button>
                         {Array.from({ length: sides }, (_, v) => v + 1).map((v) => (
                           <button
                             key={v}
