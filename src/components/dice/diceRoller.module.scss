@@ -1,12 +1,7 @@
 @import "/src/styles/config";
 
 .roller {
-  border: 1px solid var(--foreground);
-  border-radius: var(--borderRadius);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: none;
 }
 
 .rollerHeader {
@@ -390,6 +385,29 @@
   .mobilePickerActive:hover & {
     fill: var(--background);
   }
+}
+
+.mobileResultGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.mobileResultGroup + .mobileResultGroup {
+  margin-left: 0.75rem;
+}
+
+.mobileResultGroupDice {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.mobileResultGroupLabel {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  opacity: 0.35;
+  font-weight: bold;
 }
 
 .mobileResultDie {
