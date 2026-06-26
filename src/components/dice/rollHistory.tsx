@@ -121,9 +121,14 @@ export function checkRollTriggers(
   return alerts
 }
 
+const INITIAL_SHOW = 50
+const LOAD_MORE = 50
+
 const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly, animatingRollId, animatingDice }) => {
   const [confirmNew, setConfirmNew] = React.useState(false)
+  const [showCount, setShowCount] = React.useState(INITIAL_SHOW)
   const reversed = [...rolls].reverse()
+  const visible = reversed.slice(0, showCount)
   const alertMap = new Map<string, { messages: string[]; highlightDice: Set<number> }>()
   for (const a of alerts) {
     const existing = alertMap.get(a.rollId) || { messages: [], highlightDice: new Set<number>() }
@@ -163,7 +168,7 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
         <p className={styles.empty}>No rolls yet. Start rolling!</p>
       )}
       <div className={styles.list}>
-        {reversed.map((roll) => {
+        {visible.map((roll) => {
           const rollGame = roll.game || 1
           const rollAlertData = alertMap.get(roll.id)
           let showDivider = false
@@ -223,6 +228,11 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
             </React.Fragment>
           )
         })}
+        {reversed.length > showCount && (
+          <button className={styles.showMore} onClick={() => setShowCount((c) => c + LOAD_MORE)}>
+            Show more ({reversed.length - showCount} remaining)
+          </button>
+        )}
       </div>
     </div>
   )

@@ -100,6 +100,25 @@
   font-size: 0.6rem;
 }
 
+.showMore {
+  background: none;
+  border: 1px dashed var(--foreground);
+  border-radius: var(--borderRadius);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0.5;
+  text-align: center;
+
+  &:hover {
+    opacity: 1;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
 .empty {
   opacity: 0.5;
   font-size: 0.85rem;
