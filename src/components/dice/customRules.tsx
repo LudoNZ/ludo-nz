@@ -16,7 +16,7 @@ interface CustomRulesProps {
   onRemove: (ruleId: string) => void
 }
 
-type TriggerType = "rollSum" | "doubles" | "drought" | "hotNumber"
+type TriggerType = "rollSum" | "doubles" | "drought" | "hotNumber" | "sequence"
 
 const ALL_TOTALS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
@@ -37,6 +37,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   const [selectedSumValues, setSelectedSumValues] = useState<Set<number>>(new Set([7]))
   const [selectedDroughtNumbers, setSelectedDroughtNumbers] = useState<Set<number>>(new Set([7]))
   const [action, setAction] = useState("")
+  const [selectedSequenceValues, setSelectedSequenceValues] = useState<number[]>([])
   const [selectedSound, setSelectedSound] = useState("alert")
 
   const toggleDouble = (v: number) => {
@@ -62,6 +63,15 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   const allSumValues = Array.from({ length: sumMax - sumMin + 1 }, (_, i) => sumMin + i)
   const maxDoublesValue = Math.min(...(activeSides.length > 0 ? activeSides : [6]))
   const allDoublesValues = Array.from({ length: maxDoublesValue }, (_, i) => i + 1)
+
+  const toggleSequenceValue = (dieIdx: number, value: number) => {
+    setSelectedSequenceValues((prev) => {
+      const next = [...prev]
+      while (next.length < activeDice.length) next.push(0)
+      next[dieIdx] = next[dieIdx] === value ? 0 : value
+      return next
+    })
+  }
 
   const toggleSumValue = (v: number) => {
     const next = new Set(selectedSumValues)
@@ -101,6 +111,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedDiceIndices(new Set(config.dice.map((_, i) => i)))
     setSelectedSumValues(new Set([7]))
     setSelectedDroughtNumbers(new Set([7]))
+    setSelectedSequenceValues([])
     setAction("")
     setSelectedSound("alert")
     setEditingId(null)
@@ -117,6 +128,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setSelectedSumValues(new Set(t?.sumValues || [t?.value ?? 7]))
     setSelectedDroughtNumbers(new Set(t?.droughtNumbers || [t?.droughtNumber ?? 7]))
     setDroughtOngoing(t?.droughtOngoing ?? false)
+    setSelectedSequenceValues(t?.sequenceValues || [])
     setAction(rule.action)
     setSelectedSound(rule.sound || "alert")
     setEditingId(rule.id)
@@ -127,12 +139,13 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     const droughtNumbers = triggerType === "drought" ? Array.from(selectedDroughtNumbers).sort((a, b) => a - b) : undefined
     const doublesList = triggerType === "doubles" ? Array.from(selectedDoubles).sort() : undefined
     const hotNumberTotals = triggerType === "hotNumber" ? Array.from(selectedHotTotals).sort((a, b) => a - b) : undefined
+    const sequenceValues = triggerType === "sequence" ? selectedSequenceValues.filter((v) => v > 0) : undefined
     const allDice = selectedDiceIndices.size === config.dice.length
     const diceIndices = allDice ? undefined : Array.from(selectedDiceIndices).sort((a, b) => a - b)
 
     return {
       id: editingId || crypto.randomUUID(),
-      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues, droughtNumbers, droughtOngoing),
+      text: buildRuleText(triggerType, triggerValue, droughtNumber, doublesList, hotNumberTotals, sumValues, droughtNumbers, droughtOngoing, sequenceValues),
       enabled: true,
       trigger: {
         type: triggerType,
@@ -141,6 +154,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
         ...(triggerType === "doubles" ? { doublesList } : {}),
         ...(triggerType === "hotNumber" ? { hotNumberTotals } : {}),
         ...(triggerType === "rollSum" ? { sumValues } : {}),
+        ...(triggerType === "sequence" ? { sequenceValues } : {}),
         ...(diceIndices ? { diceIndices } : {}),
       },
       action: action.trim(),
@@ -153,6 +167,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     if (triggerType === "rollSum" && selectedSumValues.size === 0) return
     if (triggerType === "doubles" && selectedDoubles.size === 0) return
     if (triggerType === "hotNumber" && selectedHotTotals.size === 0) return
+    if (triggerType === "sequence" && selectedSequenceValues.filter((v) => v > 0).length < 2) return
 
     const rule = buildRule()
     if (formMode === "edit") {
@@ -180,11 +195,13 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
           else if (t === "doubles") setTriggerValue(0)
           else if (t === "drought") setTriggerValue(10)
           else if (t === "hotNumber") setTriggerValue(3)
+          else if (t === "sequence") setSelectedSequenceValues(Array(activeDice.length).fill(0))
         }} className={styles.select}>
           <option value="rollSum">Roll sum equals...</option>
           <option value="doubles">Doubles rolled</option>
           <option value="drought">Drought (no number for...)</option>
           <option value="hotNumber">Hot number (same total × in a row)</option>
+          <option value="sequence">Specific combo (exact values, any order)</option>
         </select>
       </div>
 
@@ -294,6 +311,30 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
         </>
       )}
 
+      {triggerType === "sequence" && (
+        <div className={styles.sequenceForm}>
+          <span className={styles.formLabel}>Pick one value per die</span>
+          {activeDice.map((dieIdx, posIdx) => {
+            const sides = config.dice[dieIdx]
+            const values = Array.from({ length: sides }, (_, i) => i + 1)
+            const currentVal = selectedSequenceValues[posIdx] || 0
+            return (
+              <div key={posIdx} className={styles.formRow}>
+                <label className={styles.formLabel}>D{dieIdx + 1} (d{sides})</label>
+                <div className={styles.doublesGrid}>
+                  {values.map((v) => (
+                    <button key={v}
+                      className={`${styles.doublesBtn} ${currentVal === v ? styles.doublesActive : ""}`}
+                      onClick={() => toggleSequenceValue(posIdx, v)}
+                      type="button">{v}</button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div className={styles.formRow}>
         <label className={styles.formLabel}>Then show</label>
         <input type="text" placeholder='e.g. "Robber activated!"' value={action}
@@ -393,7 +434,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
   )
 }
 
-function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[], droughtNumbers?: number[], droughtOngoing?: boolean): string {
+function buildRuleText(type: TriggerType, value: number, droughtNum?: number, doublesList?: number[], hotTotals?: number[], sumValues?: number[], droughtNumbers?: number[], droughtOngoing?: boolean, sequenceValues?: number[]): string {
   switch (type) {
     case "rollSum":
       if (sumValues && sumValues.length === 1) return `When roll sum = ${sumValues[0]}`
@@ -410,6 +451,9 @@ function buildRuleText(type: TriggerType, value: number, droughtNum?: number, do
     case "hotNumber":
       if (!hotTotals) return `When any total ${value}× in a row`
       return `When ${hotTotals.join("/")} rolled ${value}× in a row`
+    case "sequence":
+      if (sequenceValues && sequenceValues.length > 0) return `When combo [${sequenceValues.join(", ")}] rolled`
+      return "When specific combo rolled"
   }
 }
 

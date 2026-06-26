@@ -106,6 +106,17 @@ export function checkRollTriggers(
         }
       }
     }
+
+    if (type === "sequence") {
+      const target = rule.trigger.sequenceValues
+      if (target && target.length > 0) {
+        const sorted = [...scopedDice].sort((a, b) => a - b)
+        const targetSorted = [...target].sort((a, b) => a - b)
+        if (sorted.length === targetSorted.length && sorted.every((v, i) => v === targetSorted[i])) {
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
+        }
+      }
+    }
   }
   return alerts
 }

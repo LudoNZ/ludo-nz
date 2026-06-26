@@ -5,7 +5,7 @@ export interface CustomRule {
   text: string
   enabled: boolean
   trigger?: {
-    type: "rollSum" | "doubles" | "drought" | "hotNumber"
+    type: "rollSum" | "doubles" | "drought" | "hotNumber" | "sequence"
     value: number
     droughtNumber?: number
     droughtNumbers?: number[]
@@ -14,6 +14,7 @@ export interface CustomRule {
     hotNumberTotals?: number[]
     sumValues?: number[]
     diceIndices?: number[]
+    sequenceValues?: number[]
   }
   action: string
   sound?: string

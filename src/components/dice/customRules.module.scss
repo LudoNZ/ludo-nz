@@ -306,6 +306,12 @@
   }
 }
 
+.sequenceForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .formActions {
   display: flex;
   gap: 0.5rem;
