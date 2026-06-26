@@ -44,13 +44,24 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [animatingRollId, setAnimatingRollId] = useState<string | null>(null)
   const [animatingHistoryDice, setAnimatingHistoryDice] = useState<(number | null)[]>([])
   const animHistoryTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+  const [audioEnabled, setAudioEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("diceTracker_audio") !== "off"
+    }
+    return true
+  })
   const [activeTab, setActiveTab] = useState<"history" | "stats" | "archive">("history")
   const [archiveGameView, setArchiveGameView] = useState<number | null>(null)
   const sessionRef = useRef<DiceSession | null>(null)
+  const audioRef = useRef(true)
 
   useEffect(() => {
     sessionRef.current = session
   }, [session])
+
+  useEffect(() => {
+    audioRef.current = audioEnabled
+  }, [audioEnabled])
 
   const activePlayers = useMemo(() => {
     if (!session) return []
@@ -128,10 +139,12 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
           if (newAlerts.length > 0) {
             animHistoryTimers.current.push(setTimeout(() => {
               setAlerts((prev) => [...prev, ...newAlerts])
-              for (const a of newAlerts) {
-                playSound(a.sound || "alert")
+              if (audioRef.current) {
+                for (const a of newAlerts) {
+                  playSound(a.sound || "alert")
+                }
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200])
               }
-              if (navigator.vibrate) navigator.vibrate([200, 100, 200])
               for (const a of newAlerts) {
                 const id = ++toastIdRef.current
                 setToasts((prev) => [...prev, { id, message: a.message, dice: rollDice, diceTypes: roll.diceTypes }])
@@ -197,6 +210,11 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
       setError("Failed to start new game")
     }
   }, [code, session])
+
+  const handleToggleAudio = useCallback((enabled: boolean) => {
+    setAudioEnabled(enabled)
+    localStorage.setItem("diceTracker_audio", enabled ? "on" : "off")
+  }, [])
 
   const handleDiceConfigChange = useCallback(async (config: DiceConfig) => {
     try {
@@ -357,7 +375,9 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         />
         <DiceSettings
           config={session.diceConfig}
+          audioEnabled={audioEnabled}
           onSave={handleDiceConfigChange}
+          onToggleAudio={handleToggleAudio}
         />
       </div>
 

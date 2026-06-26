@@ -7,10 +7,12 @@ import { DiceConfig, DICE_SIDES_OPTIONS, formatDiceConfig } from "./types"
 
 interface DiceSettingsProps {
   config: DiceConfig
+  audioEnabled: boolean
   onSave: (config: DiceConfig) => void
+  onToggleAudio: (enabled: boolean) => void
 }
 
-const DiceSettings: React.FC<DiceSettingsProps> = ({ config, onSave }) => {
+const DiceSettings: React.FC<DiceSettingsProps> = ({ config, audioEnabled, onSave, onToggleAudio }) => {
   const [open, setOpen] = useState(false)
   const [dice, setDice] = useState<number[]>(config.dice)
 
@@ -55,6 +57,16 @@ const DiceSettings: React.FC<DiceSettingsProps> = ({ config, onSave }) => {
         <div className={styles.overlay}>
           <div className={styles.panel}>
             <h3>Dice Settings</h3>
+
+            <div className={styles.audioRow}>
+              <span className={styles.audioLabel}>Sound</span>
+              <button
+                className={`${styles.audioToggle} ${audioEnabled ? styles.audioOn : styles.audioOff}`}
+                onClick={() => onToggleAudio(!audioEnabled)}
+              >
+                {audioEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
 
             <div className={styles.diceList}>
               {dice.map((sides, i) => (

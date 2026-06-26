@@ -49,6 +49,44 @@
   }
 }
 
+.audioRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: var(--borderRadius);
+}
+
+.audioLabel {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.audioToggle {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.15s;
+
+  &.audioOn {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--background);
+  }
+
+  &.audioOff {
+    background: none;
+    color: var(--foreground);
+    opacity: 0.5;
+  }
+}
+
 .diceList {
   display: flex;
   flex-direction: column;
