@@ -194,56 +194,30 @@
 }
 
 .actionRow {
-  width: 100%;
+  display: none;
 }
 
 .divider {
-  text-align: center;
-  position: relative;
-  opacity: 0.5;
-  font-size: 0.85rem;
-
-  &::before,
-  &::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: 40%;
-    height: 1px;
-    background: var(--foreground);
-    opacity: 0.3;
-  }
-
-  &::before {
-    left: 0;
-  }
-
-  &::after {
-    right: 0;
-  }
+  display: none;
 }
 
 .mobileBar {
-  display: none;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--background);
+  border-top: 1px solid var(--foreground);
+  padding: 0.5rem 1rem;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  gap: 0.5rem;
+  align-items: stretch;
 
-  @media (max-width: $MAX_TABLET) {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    background: var(--background);
-    border-top: 1px solid var(--foreground);
-    padding: 0.5rem 1rem;
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-    gap: 0.5rem;
-    align-items: stretch;
-
-    button {
-      width: 100%;
-    }
+  button {
+    width: 100%;
   }
 }
 
