@@ -25,10 +25,15 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const animTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const animateRoll = useCallback((dieIndex: number, finalValue: number, sides: number) => {
-    const steps = 6 + Math.floor(Math.random() * 4)
+    const totalSteps = 8
     let step = 0
+    setLastRoll((prev) => {
+      const next = [...prev]
+      next[dieIndex] = null
+      return next
+    })
     const tick = () => {
-      if (step < steps) {
+      if (step < totalSteps) {
         const randVal = Math.floor(Math.random() * sides) + 1
         setAnimating((prev) => {
           const next = [...prev]
@@ -36,12 +41,17 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           return next
         })
         step++
-        const delay = 40 + step * 15
+        const delay = 40 + step * 18
         animTimers.current.push(setTimeout(tick, delay))
       } else {
         setAnimating((prev) => {
           const next = [...prev]
           next[dieIndex] = null
+          return next
+        })
+        setLastRoll((prev) => {
+          const next = [...prev]
+          next[dieIndex] = finalValue
           return next
         })
       }
@@ -87,21 +97,26 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     const dice = selected as number[]
     setLastRoll([...dice])
     setResultsCollapsed(false)
-    onRoll(dice, false)
     setSelected(Array(diceCount).fill(null))
+    onRoll(dice, false)
   }, [selected, allSelected, diceCount, onRoll])
 
   const handleQuickRoll = useCallback(() => {
     const dice = selected.map((v, i) =>
       v !== null ? v : Math.floor(Math.random() * config.dice[i]) + 1
     )
-    setLastRoll(dice as number[])
     setResultsCollapsed(false)
     setSelected(Array(diceCount).fill(null))
     onRoll(dice as number[], noneSelected)
     config.dice.forEach((sides, i) => {
       if (selected[i] === null) {
         animateRoll(i, dice[i] as number, sides)
+      } else {
+        setLastRoll((prev) => {
+          const next = [...prev]
+          next[i] = dice[i] as number
+          return next
+        })
       }
     })
   }, [selected, config.dice, diceCount, noneSelected, onRoll, animateRoll])
@@ -175,7 +190,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
       </Button>
 
       <div className={styles.mobileBar}>
-        {lastRoll.some((v) => v !== null) && (
+        {(lastRoll.some((v) => v !== null) || animating.some((v) => v !== null)) && (
           <div className={styles.mobileResults}>
             <button
               className={styles.mobileResultsToggle}
@@ -185,14 +200,21 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
             </button>
             {!resultsCollapsed && (
               <div className={styles.mobileResultsDice}>
-                {lastRoll.map((v, i) => (
-                  <span key={i} className={styles.mobileResultDie}>
-                    <span className={styles.mobileResultLabel}>D{i + 1}</span>
-                    <span className={styles.mobileResultValue}>{v}</span>
-                  </span>
-                ))}
+                {config.dice.map((sides, i) => {
+                  const isAnimating = animating[i] !== null
+                  const displayVal = animating[i] ?? lastRoll[i]
+                  if (displayVal === null) return null
+                  return (
+                    <span key={i} className={styles.mobileResultDie}>
+                      <span className={styles.mobileResultLabel}>D{i + 1}</span>
+                      <span className={`${styles.mobileResultValue} ${isAnimating ? styles.mobileResultAnimating : ""}`}>
+                        {sides <= 6 ? <DieDots value={displayVal} className={styles.mobileResultSvg} /> : displayVal}
+                      </span>
+                    </span>
+                  )
+                })}
                 <span className={styles.mobileResultTotal}>
-                  = {lastRoll.reduce<number>((s, v) => s + (v ?? 0), 0)}
+                  = {config.dice.reduce((s, _, i) => s + (animating[i] ?? lastRoll[i] ?? 0), 0)}
                 </span>
               </div>
             )}
