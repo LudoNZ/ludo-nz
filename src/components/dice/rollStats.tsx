@@ -10,11 +10,6 @@ interface RollStatsProps {
   diceConfig?: DiceConfig
 }
 
-const EXPECTED_DISTRIBUTION: Record<number, number> = {
-  2: 1/36, 3: 2/36, 4: 3/36, 5: 4/36, 6: 5/36, 7: 6/36,
-  8: 5/36, 9: 4/36, 10: 3/36, 11: 2/36, 12: 1/36,
-}
-
 type StatsScope = "current" | "all"
 
 const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig }) => {
@@ -43,11 +38,16 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
     )
   }
 
-  const distribution: Record<number, number> = {}
-  for (let i = 2; i <= 12; i++) distribution[i] = 0
-  for (const r of filteredRolls) distribution[r.total]++
+  const minTotal = config.dice.length
+  const maxTotal = config.dice.reduce((s, sides) => s + sides, 0)
 
-  const maxCount = Math.max(...Object.values(distribution))
+  const distribution: Record<number, number> = {}
+  for (let i = minTotal; i <= maxTotal; i++) distribution[i] = 0
+  for (const r of filteredRolls) {
+    distribution[r.total] = (distribution[r.total] || 0) + 1
+  }
+
+  const maxCount = Math.max(...Object.values(distribution), 1)
 
   const playerStats = new Map<string, { count: number; sum: number; totals: number[] }>()
   for (const r of filteredRolls) {
@@ -67,22 +67,15 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
   const mostCommonTotal = Object.entries(distribution)
     .sort(([, a], [, b]) => b - a)[0][0]
 
-  const dieTypes = new Set(config.dice)
-  const faceCountsByType: Record<number, Record<number, number>> = {}
-  for (const sides of dieTypes) {
-    const counts: Record<number, number> = {}
-    for (let i = 1; i <= sides; i++) counts[i] = 0
-    faceCountsByType[sides] = counts
-  }
+  const maxFaceValue = Math.max(...config.dice)
+  const faceCounts: Record<number, number> = {}
+  for (let i = 1; i <= maxFaceValue; i++) faceCounts[i] = 0
   for (const r of filteredRolls) {
-    const dice = getRollDice(r)
-    dice.forEach((value, i) => {
-      const sides = config.dice[i] || 6
-      if (faceCountsByType[sides]) {
-        faceCountsByType[sides][value] = (faceCountsByType[sides][value] || 0) + 1
-      }
-    })
+    for (const d of getRollDice(r)) {
+      faceCounts[d] = (faceCounts[d] || 0) + 1
+    }
   }
+  const maxFace = Math.max(...Object.values(faceCounts), 1)
 
   return (
     <div className={styles.stats}>
@@ -116,12 +109,10 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         <span className={styles.chartLabel}>Sum Distribution</span>
         {Object.entries(distribution).map(([total, count]) => {
           const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
-          const expectedPct = EXPECTED_DISTRIBUTION[Number(total)] * 100
           return (
             <div key={total} className={styles.bar}>
               <span className={styles.barTotal}>{total}</span>
               <div className={styles.barTrack}>
-                <div className={styles.barExpected} style={{ width: `${expectedPct / EXPECTED_DISTRIBUTION[7] / 100 * 100}%` }} />
                 <div className={styles.barFill} style={{ width: `${pct}%` }} />
               </div>
               <span className={styles.barCount}>{count}</span>
@@ -130,31 +121,21 @@ const RollStats: React.FC<RollStatsProps> = ({ rolls, currentGame, diceConfig })
         })}
       </div>
 
-      {Array.from(dieTypes).sort((a, b) => a - b).map((sides) => {
-        const counts = faceCountsByType[sides]
-        const maxFace = Math.max(...Object.values(counts), 1)
-        const dieCount = config.dice.filter((s) => s === sides).length
-        return (
-          <div key={`face-d${sides}`} className={styles.chart}>
-            <span className={styles.chartLabel}>
-              d{sides} Face Frequency{dieCount > 1 ? ` (×${dieCount})` : ""}
-            </span>
-            {Object.entries(counts).map(([face, count]) => {
-              const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
-              return (
-                <div key={`face-d${sides}-${face}`} className={styles.bar}>
-                  <span className={styles.barTotal}>{face}</span>
-                  <div className={styles.barTrack}>
-                    <div className={styles.barExpected} style={{ width: "100%" }} />
-                    <div className={styles.barFill} style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className={styles.barCount}>{count}</span>
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
+      <div className={styles.chart}>
+        <span className={styles.chartLabel}>Die Face Frequency</span>
+        {Object.entries(faceCounts).map(([face, count]) => {
+          const pct = maxFace > 0 ? (count / maxFace) * 100 : 0
+          return (
+            <div key={`face-${face}`} className={styles.bar}>
+              <span className={styles.barTotal}>{face}</span>
+              <div className={styles.barTrack}>
+                <div className={styles.barFill} style={{ width: `${pct}%` }} />
+              </div>
+              <span className={styles.barCount}>{count}</span>
+            </div>
+          )
+        })}
+      </div>
 
       <div className={styles.playerSection}>
         <span className={styles.chartLabel}>Per Player</span>
