@@ -202,10 +202,10 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           variant={allSelected ? "primary" : "secondary"}
         >
           {allSelected
-            ? `Log Roll (${total})`
+            ? `Log ${currentPlayer}'s Roll (${total})`
             : someSelected
-              ? `Roll Remaining (${unsetCount})`
-              : "Quick Roll"}
+              ? `Roll ${currentPlayer}'s Remaining (${unsetCount})`
+              : `Quick Roll — ${currentPlayer}`}
         </Button>
       </div>
 
@@ -263,10 +263,10 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           size="medium"
         >
           {allSelected
-            ? `Log Roll (${total})`
+            ? `Log ${currentPlayer}'s Roll (${total})`
             : someSelected
-              ? `Roll Remaining (${unsetCount})`
-              : "Quick Roll"}
+              ? `Roll ${currentPlayer}'s Remaining (${unsetCount})`
+              : `Quick Roll — ${currentPlayer}`}
         </Button>
       </div>
     </div>
