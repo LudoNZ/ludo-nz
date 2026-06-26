@@ -17,7 +17,8 @@ import {
   query,
   orderBy,
 } from "firebase/firestore"
-import { DiceSession, DiceRoll, CustomRule, DiceConfig, normalizeDiceConfig } from "@/components/dice/types"
+import { DiceSession, DiceRoll, CustomRule, DiceConfig, normalizeDiceConfig, getRollDice } from "@/components/dice/types"
+import DieDots from "@/components/dice/dieDots"
 import PlayerJoinForm from "@/components/dice/playerJoinForm"
 import SessionHeader from "@/components/dice/sessionHeader"
 import DiceRoller from "@/components/dice/diceRoller"
@@ -38,7 +39,7 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState("")
   const [alerts, setAlerts] = useState<RollAlert[]>([])
-  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([])
+  const [toasts, setToasts] = useState<{ id: number; message: string; dice?: number[]; diceTypes?: number[] }[]>([])
   const toastIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<"history" | "stats" | "archive">("history")
   const [archiveGameView, setArchiveGameView] = useState<number | null>(null)
@@ -104,9 +105,11 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
               playSound(a.sound || "alert")
             }
             if (navigator.vibrate) navigator.vibrate([200, 100, 200])
+            const rollDice = getRollDice(roll)
+            const rollTypes = roll.diceTypes
             for (const a of newAlerts) {
               const id = ++toastIdRef.current
-              setToasts((prev) => [...prev, { id, message: a.message }])
+              setToasts((prev) => [...prev, { id, message: a.message, dice: rollDice, diceTypes: rollTypes }])
               setTimeout(() => {
                 setToasts((prev) => prev.filter((t) => t.id !== id))
               }, 4000)
@@ -336,7 +339,20 @@ const DiceSessionPage: React.FC<DiceSessionPageProps> = ({ code }) => {
         <div className={styles.toastContainer}>
           {toasts.map((t) => (
             <div key={t.id} className={styles.toast}>
-              {t.message}
+              {t.dice && (
+                <div className={styles.toastDice}>
+                  {t.dice.map((d, i) => {
+                    const sides = t.diceTypes?.[i] ?? 6
+                    return (
+                      <span key={i} className={styles.toastDie}>
+                        {sides <= 6 ? <DieDots value={d} className={styles.toastDieSvg} /> : d}
+                      </span>
+                    )
+                  })}
+                  <span className={styles.toastTotal}>= {t.dice.reduce((s, v) => s + v, 0)}</span>
+                </div>
+              )}
+              <span>{t.message}</span>
             </div>
           ))}
         </div>

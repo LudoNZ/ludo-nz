@@ -5,59 +5,13 @@ import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
 import { DiceConfig, DEFAULT_DICE_CONFIG, formatDiceConfig } from "./types"
 
+import DieDots from "./dieDots"
+
 interface DiceRollerProps {
   currentPlayer: string
   diceConfig?: DiceConfig
   onRoll: (dice: number[], isRandom: boolean) => void
   disabled?: boolean
-}
-
-function DieDots({ value }: { value: number }) {
-  return (
-    <svg viewBox="0 0 100 100" className={styles.dieSvg}>
-      {value === 1 && <circle cx="50" cy="50" r="10" />}
-      {value === 2 && (
-        <>
-          <circle cx="30" cy="30" r="9" />
-          <circle cx="70" cy="70" r="9" />
-        </>
-      )}
-      {value === 3 && (
-        <>
-          <circle cx="30" cy="30" r="9" />
-          <circle cx="50" cy="50" r="9" />
-          <circle cx="70" cy="70" r="9" />
-        </>
-      )}
-      {value === 4 && (
-        <>
-          <circle cx="30" cy="30" r="9" />
-          <circle cx="70" cy="30" r="9" />
-          <circle cx="30" cy="70" r="9" />
-          <circle cx="70" cy="70" r="9" />
-        </>
-      )}
-      {value === 5 && (
-        <>
-          <circle cx="30" cy="30" r="8" />
-          <circle cx="70" cy="30" r="8" />
-          <circle cx="50" cy="50" r="8" />
-          <circle cx="30" cy="70" r="8" />
-          <circle cx="70" cy="70" r="8" />
-        </>
-      )}
-      {value === 6 && (
-        <>
-          <circle cx="30" cy="26" r="8" />
-          <circle cx="70" cy="26" r="8" />
-          <circle cx="30" cy="50" r="8" />
-          <circle cx="70" cy="50" r="8" />
-          <circle cx="30" cy="74" r="8" />
-          <circle cx="70" cy="74" r="8" />
-        </>
-      )}
-    </svg>
-  )
 }
 
 const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRoll, disabled }) => {
@@ -157,7 +111,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
                     onClick={() => handleSelect(dieIndex, v)}
                     disabled={disabled}
                   >
-                    {sides <= 6 ? <DieDots value={v} /> : v}
+                    {sides <= 6 ? <DieDots value={v} className={styles.dieSvg} /> : v}
                   </button>
                 ))}
               </div>

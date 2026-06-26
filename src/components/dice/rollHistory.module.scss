@@ -160,6 +160,22 @@
   border: 1px solid var(--foreground);
   border-radius: 3px;
   font-size: 0.85rem;
+  padding: 2px;
+
+  &.dieHighlight {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  }
+}
+
+.dieFaceSvg {
+  width: 100%;
+  height: 100%;
+  fill: var(--foreground);
+
+  .dieHighlight & {
+    fill: var(--color-primary);
+  }
 }
 
 .plus, .equals {

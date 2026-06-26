@@ -4,6 +4,7 @@ import React from "react"
 import styles from "./rollHistory.module.scss"
 import Button from "@/components/button/button"
 import { DiceRoll, CustomRule, getRollDice } from "./types"
+import DieDots from "./dieDots"
 
 interface RollHistoryProps {
   rolls: DiceRoll[]
@@ -18,6 +19,7 @@ export interface RollAlert {
   ruleId: string
   message: string
   sound?: string
+  diceIndices?: number[]
 }
 
 function getRelativeTime(date: Date): string {
@@ -56,14 +58,14 @@ export function checkRollTriggers(
     if (type === "rollSum") {
       const sums = rule.trigger.sumValues || [value]
       if (sums.includes(scopedTotal)) {
-        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
       }
     }
 
     if (type === "doubles" && scopedDice.length >= 2 && scopedDice.every((d) => d === scopedDice[0])) {
       const list = rule.trigger.doublesList
       if (!list || list.length === 6 || list.includes(scopedDice[0])) {
-        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+        alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
       }
     }
 
@@ -77,7 +79,7 @@ export function checkRollTriggers(
           countWithout++
         }
         if (countWithout >= value) {
-          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
         }
       }
     }
@@ -94,7 +96,7 @@ export function checkRollTriggers(
           }
         }
         if (streakCount >= value) {
-          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound })
+          alerts.push({ rollId: roll.id, ruleId: rule.id, message: `${rule.action}`, sound: rule.sound, diceIndices: rule.trigger.diceIndices })
         }
       }
     }
@@ -105,10 +107,13 @@ export function checkRollTriggers(
 const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, onNewGame, readOnly }) => {
   const [confirmNew, setConfirmNew] = React.useState(false)
   const reversed = [...rolls].reverse()
-  const alertMap = new Map<string, string[]>()
+  const alertMap = new Map<string, { messages: string[]; highlightDice: Set<number> }>()
   for (const a of alerts) {
-    const existing = alertMap.get(a.rollId) || []
-    existing.push(a.message)
+    const existing = alertMap.get(a.rollId) || { messages: [], highlightDice: new Set<number>() }
+    existing.messages.push(a.message)
+    if (a.diceIndices) {
+      for (const i of a.diceIndices) existing.highlightDice.add(i)
+    }
     alertMap.set(a.rollId, existing)
   }
 
@@ -143,7 +148,7 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
       <div className={styles.list}>
         {reversed.map((roll) => {
           const rollGame = roll.game || 1
-          const rollAlerts = alertMap.get(roll.id)
+          const rollAlertData = alertMap.get(roll.id)
           let showDivider = false
           if (lastGameSeen !== null && rollGame !== lastGameSeen) {
             showDivider = true
@@ -157,16 +162,22 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
                   <span>Game {rollGame}</span>
                 </div>
               )}
-              <div className={`${styles.entry} ${rollAlerts ? styles.hasAlert : ""}`}>
+              <div className={`${styles.entry} ${rollAlertData ? styles.hasAlert : ""}`}>
                 <div className={styles.entryMain}>
                   <span className={styles.player}>{roll.player}</span>
                   <span className={styles.dice}>
-                    {getRollDice(roll).map((d, i) => (
-                      <React.Fragment key={i}>
-                        {i > 0 && <span className={styles.plus}>+</span>}
-                        <span className={styles.die}>{d}</span>
-                      </React.Fragment>
-                    ))}
+                    {getRollDice(roll).map((d, i) => {
+                      const sides = roll.diceTypes?.[i] ?? 6
+                      const highlighted = rollAlertData?.highlightDice.has(i)
+                      return (
+                        <React.Fragment key={i}>
+                          {i > 0 && <span className={styles.plus}>+</span>}
+                          <span className={`${styles.die} ${highlighted ? styles.dieHighlight : ""}`}>
+                            {sides <= 6 ? <DieDots value={d} className={styles.dieFaceSvg} /> : d}
+                          </span>
+                        </React.Fragment>
+                      )
+                    })}
                     <span className={styles.equals}>=</span>
                     <span className={styles.total}>{roll.total}</span>
                   </span>
@@ -178,9 +189,9 @@ const RollHistory: React.FC<RollHistoryProps> = ({ rolls, alerts, currentGame, o
                     </span>
                   </span>
                 </div>
-                {rollAlerts && (
+                {rollAlertData && (
                   <div className={styles.alertList}>
-                    {rollAlerts.map((msg, i) => (
+                    {rollAlertData.messages.map((msg, i) => (
                       <span key={i} className={styles.alert}>{msg}</span>
                     ))}
                   </div>
