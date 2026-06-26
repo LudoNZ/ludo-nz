@@ -184,6 +184,7 @@
   &.dieAnimating {
     background: color-mix(in srgb, var(--color-primary) 40%, transparent);
     border-color: var(--color-primary);
+    animation: dieTumble 0.15s ease-in-out infinite alternate;
   }
 
   &.dieAnimating .dieFaceSvg {
@@ -253,4 +254,13 @@
   padding: 0.15rem 0.5rem;
   border: 1px solid var(--color-primary);
   border-radius: var(--borderRadius);
+}
+
+@keyframes dieTumble {
+  0% {
+    transform: perspective(200px) rotateX(-8deg) rotateY(6deg) scale(1.02);
+  }
+  100% {
+    transform: perspective(200px) rotateX(8deg) rotateY(-6deg) scale(0.98);
+  }
 }

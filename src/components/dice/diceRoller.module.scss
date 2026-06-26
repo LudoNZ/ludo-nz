@@ -269,6 +269,7 @@
   &.mobileResultAnimating {
     background: color-mix(in srgb, var(--color-primary) 50%, var(--background));
     border-color: var(--color-primary);
+    animation: dieTumble 0.15s ease-in-out infinite alternate;
   }
 }
 
@@ -419,4 +420,13 @@
   font-size: 1.4rem;
   font-weight: bold;
   color: var(--color-primary);
+}
+
+@keyframes dieTumble {
+  0% {
+    transform: perspective(200px) rotateX(-8deg) rotateY(6deg) scale(1.02);
+  }
+  100% {
+    transform: perspective(200px) rotateX(8deg) rotateY(-6deg) scale(0.98);
+  }
 }
