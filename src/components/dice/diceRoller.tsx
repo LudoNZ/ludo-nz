@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
 import { DiceConfig, DEFAULT_DICE_CONFIG, formatDiceConfig } from "./types"
@@ -20,11 +20,40 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
 
   const [selected, setSelected] = useState<(number | null)[]>(Array(diceCount).fill(null))
   const [lastRoll, setLastRoll] = useState<(number | null)[]>(Array(diceCount).fill(null))
+  const [animating, setAnimating] = useState<(number | null)[]>(Array(diceCount).fill(null))
   const [resultsCollapsed, setResultsCollapsed] = useState(false)
+  const animTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const animateRoll = useCallback((dieIndex: number, finalValue: number, sides: number) => {
+    const steps = 6 + Math.floor(Math.random() * 4)
+    let step = 0
+    const tick = () => {
+      if (step < steps) {
+        const randVal = Math.floor(Math.random() * sides) + 1
+        setAnimating((prev) => {
+          const next = [...prev]
+          next[dieIndex] = randVal
+          return next
+        })
+        step++
+        const delay = 40 + step * 15
+        animTimers.current.push(setTimeout(tick, delay))
+      } else {
+        setAnimating((prev) => {
+          const next = [...prev]
+          next[dieIndex] = null
+          return next
+        })
+      }
+    }
+    tick()
+  }, [])
 
   useEffect(() => {
     setSelected(Array(diceCount).fill(null))
     setLastRoll(Array(diceCount).fill(null))
+    setAnimating(Array(diceCount).fill(null))
+    return () => { animTimers.current.forEach(clearTimeout) }
   }, [diceCount])
 
   const allSelected = selected.every((v) => v !== null)
@@ -50,6 +79,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
       next[dieIndex] = value
       return next
     })
+    animateRoll(dieIndex, value, sides)
   }
 
   const handleLogRoll = useCallback(() => {
@@ -69,11 +99,17 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     setResultsCollapsed(false)
     setSelected(Array(diceCount).fill(null))
     onRoll(dice as number[], noneSelected)
-  }, [selected, config.dice, diceCount, noneSelected, onRoll])
+    config.dice.forEach((sides, i) => {
+      if (selected[i] === null) {
+        animateRoll(i, dice[i] as number, sides)
+      }
+    })
+  }, [selected, config.dice, diceCount, noneSelected, onRoll, animateRoll])
 
   const getDieClass = (dieIndex: number, v: number) => {
+    if (animating[dieIndex] === v) return styles.animating
     if (selected[dieIndex] === v) return styles.selected
-    if (selected[dieIndex] === null && lastRoll[dieIndex] === v) return styles.lastRoll
+    if (selected[dieIndex] === null && animating[dieIndex] === null && lastRoll[dieIndex] === v) return styles.lastRoll
     return ""
   }
 

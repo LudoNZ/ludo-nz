@@ -104,6 +104,15 @@
     fill: var(--color-primary);
   }
 
+  &.animating {
+    background: color-mix(in srgb, var(--color-primary) 50%, var(--background));
+    border-color: var(--color-primary);
+  }
+
+  &.animating .dieSvg {
+    fill: var(--background);
+  }
+
   &.lastRoll {
     background: color-mix(in srgb, var(--color-primary) 20%, var(--background));
     border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
@@ -139,7 +148,8 @@
 
   &.numberFace.selected,
   &.numberFace.selected:hover,
-  &.numberFace.selected:focus {
+  &.numberFace.selected:focus,
+  &.numberFace.animating {
     color: var(--background);
   }
 
