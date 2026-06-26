@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import styles from "./diceRoller.module.scss"
 import Button from "@/components/button/button"
 import { DiceConfig, DEFAULT_DICE_CONFIG, formatDiceConfig } from "./types"
@@ -66,6 +66,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
 
   const [selected, setSelected] = useState<(number | null)[]>(Array(diceCount).fill(null))
   const [lastRoll, setLastRoll] = useState<(number | null)[]>(Array(diceCount).fill(null))
+  const [resultsCollapsed, setResultsCollapsed] = useState(false)
 
   useEffect(() => {
     setSelected(Array(diceCount).fill(null))
@@ -97,22 +98,24 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     })
   }
 
-  const handleLogRoll = () => {
+  const handleLogRoll = useCallback(() => {
     if (!allSelected) return
     const dice = selected as number[]
     setLastRoll([...dice])
+    setResultsCollapsed(false)
     onRoll(dice, false)
     setSelected(Array(diceCount).fill(null))
-  }
+  }, [selected, allSelected, diceCount, onRoll])
 
-  const handleQuickRoll = () => {
+  const handleQuickRoll = useCallback(() => {
     const dice = selected.map((v, i) =>
       v !== null ? v : Math.floor(Math.random() * config.dice[i]) + 1
     )
     setLastRoll(dice as number[])
+    setResultsCollapsed(false)
     setSelected(Array(diceCount).fill(null))
     onRoll(dice as number[], noneSelected)
-  }
+  }, [selected, config.dice, diceCount, noneSelected, onRoll])
 
   const getDieClass = (dieIndex: number, v: number) => {
     if (selected[dieIndex] === v) return styles.selected
@@ -180,6 +183,37 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
           ? `Roll Remaining (${unsetCount})`
           : "Quick Roll"}
       </Button>
+
+      <div className={styles.mobileBar}>
+        {lastRoll.some((v) => v !== null) && (
+          <div className={styles.mobileResults}>
+            <button
+              className={styles.mobileResultsToggle}
+              onClick={() => setResultsCollapsed(!resultsCollapsed)}
+            >
+              {resultsCollapsed ? "Show Results ▲" : "▼"}
+            </button>
+            {!resultsCollapsed && (
+              <div className={styles.mobileResultsDice}>
+                {lastRoll.map((v, i) => (
+                  <span key={i} className={styles.mobileResultDie}>
+                    <span className={styles.mobileResultLabel}>D{i + 1}</span>
+                    <span className={styles.mobileResultValue}>{v}</span>
+                  </span>
+                ))}
+                <span className={styles.mobileResultTotal}>
+                  = {lastRoll.reduce<number>((s, v) => s + (v ?? 0), 0)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+        <Button onClick={handleQuickRoll} disabled={disabled} variant="primary" size="medium">
+          {someSelected && !allSelected
+            ? `Roll Remaining (${unsetCount})`
+            : "Quick Roll"}
+        </Button>
+      </div>
     </div>
   )
 }
