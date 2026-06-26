@@ -81,17 +81,19 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const computeTotal = (dice: (number | null)[]) =>
     dice.every((v) => v !== null) ? dice.reduce((s, v) => s + (v ?? 0), 0) : null
 
-  const hasResult = lastRoll.some((v) => v !== null)
   const [mobilePickerDie, setMobilePickerDie] = useState<number | null>(null)
+  const clearedForNewRound = useRef(false)
+
+  const clearIfNewRound = () => {
+    if (!clearedForNewRound.current && lastRoll.some((v) => v !== null) && selected.every((v) => v === null)) {
+      setLastRoll(Array(diceCount).fill(null))
+      clearedForNewRound.current = true
+    }
+  }
 
   const handleSelect = (dieIndex: number, value: number) => {
+    clearIfNewRound()
     setSelected((prev) => {
-      if (hasResult && prev.every((v) => v === null)) {
-        const next = Array(diceCount).fill(null) as (number | null)[]
-        next[dieIndex] = value
-        setLastRoll(Array(diceCount).fill(null))
-        return next
-      }
       const next = [...prev]
       next[dieIndex] = next[dieIndex] === value ? null : value
       return next
@@ -101,9 +103,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
   const handleRandomSingle = (dieIndex: number) => {
     const sides = config.dice[dieIndex]
     const value = Math.floor(Math.random() * sides) + 1
-    if (hasResult && selected.every((v) => v === null)) {
-      setLastRoll(Array(diceCount).fill(null))
-    }
+    clearIfNewRound()
     animateRoll(dieIndex, value, sides, true)
   }
 
@@ -118,6 +118,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     setLastRoll([...dice])
     setResultsCollapsed(false)
     setSelected(Array(diceCount).fill(null))
+    clearedForNewRound.current = false
     onRoll(dice, false)
   }, [selected, allSelected, diceCount, onRoll])
 
@@ -127,6 +128,7 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ currentPlayer, diceConfig, onRo
     )
     setResultsCollapsed(false)
     setSelected(Array(diceCount).fill(null))
+    clearedForNewRound.current = false
     onRoll(dice as number[], noneSelected)
     config.dice.forEach((sides, i) => {
       if (selected[i] === null) {
