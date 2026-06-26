@@ -130,7 +130,128 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
     setFormMode("edit")
   }
 
-  const showForm = formMode !== "closed"
+  const renderForm = () => (
+    <div className={styles.form}>
+      <div className={styles.formRow}>
+        <label className={styles.formLabel}>When</label>
+        <select value={triggerType} onChange={(e) => {
+          const t = e.target.value as TriggerType
+          setTriggerType(t)
+          if (t === "rollSum") setTriggerValue(7)
+          else if (t === "doubles") setTriggerValue(0)
+          else if (t === "drought") setTriggerValue(10)
+          else if (t === "hotNumber") setTriggerValue(3)
+        }} className={styles.select}>
+          <option value="rollSum">Roll sum equals...</option>
+          <option value="doubles">Doubles rolled</option>
+          <option value="drought">Drought (no number for...)</option>
+          <option value="hotNumber">Hot number (same total × in a row)</option>
+        </select>
+      </div>
+
+      {config.dice.length > 1 && (
+        <div className={styles.formRow}>
+          <label className={styles.formLabel}>Applies to</label>
+          <div className={styles.doublesGrid}>
+            <button className={`${styles.doublesBtn} ${selectedDiceIndices.size === config.dice.length ? styles.doublesActive : ""}`}
+              onClick={toggleAllDice} type="button">All</button>
+            {config.dice.map((sides, i) => (
+              <button key={i} className={`${styles.doublesBtn} ${selectedDiceIndices.has(i) ? styles.doublesActive : ""}`}
+                onClick={() => toggleDieIndex(i)} type="button">D{i + 1} (d{sides})</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {triggerType === "rollSum" && (
+        <div className={styles.formRow}>
+          <label className={styles.formLabel}>Sum</label>
+          <input type="number" min={1} max={120} value={triggerValue}
+            onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
+        </div>
+      )}
+
+      {triggerType === "doubles" && (
+        <div className={styles.formRow}>
+          <label className={styles.formLabel}>Which</label>
+          <div className={styles.doublesGrid}>
+            <button className={`${styles.doublesBtn} ${selectedDoubles.size === 6 ? styles.doublesActive : ""}`}
+              onClick={toggleAllDoubles} type="button">All</button>
+            {[1, 2, 3, 4, 5, 6].map((v) => (
+              <button key={v} className={`${styles.doublesBtn} ${selectedDoubles.has(v) ? styles.doublesActive : ""}`}
+                onClick={() => toggleDouble(v)} type="button">{v}+{v}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {triggerType === "drought" && (
+        <>
+          <div className={styles.formRow}>
+            <label className={styles.formLabel}>Number</label>
+            <input type="number" min={1} max={120} value={droughtNumber}
+              onChange={(e) => setDroughtNumber(Number(e.target.value))} className={styles.numberInput} />
+            <span className={styles.formHint}>the sum to watch for</span>
+          </div>
+          <div className={styles.formRow}>
+            <label className={styles.formLabel}>Rolls</label>
+            <input type="number" min={3} max={50} value={triggerValue}
+              onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
+            <span className={styles.formHint}>rolls without it</span>
+          </div>
+        </>
+      )}
+
+      {triggerType === "hotNumber" && (
+        <>
+          <div className={styles.formRow}>
+            <label className={styles.formLabel}>Totals</label>
+            <div className={styles.doublesGrid}>
+              <button className={`${styles.doublesBtn} ${selectedHotTotals.size === ALL_TOTALS.length ? styles.doublesActive : ""}`}
+                onClick={toggleAllHotTotals} type="button">All</button>
+              {ALL_TOTALS.map((v) => (
+                <button key={v} className={`${styles.doublesBtn} ${selectedHotTotals.has(v) ? styles.doublesActive : ""}`}
+                  onClick={() => toggleHotTotal(v)} type="button">{v}</button>
+              ))}
+            </div>
+          </div>
+          <div className={styles.formRow}>
+            <label className={styles.formLabel}>Count</label>
+            <input type="number" min={2} max={10} value={triggerValue}
+              onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
+            <span className={styles.formHint}>times in a row</span>
+          </div>
+        </>
+      )}
+
+      <div className={styles.formRow}>
+        <label className={styles.formLabel}>Then show</label>
+        <input type="text" placeholder='e.g. "Robber activated!"' value={action}
+          onChange={(e) => setAction(e.target.value)} className={styles.textInput} maxLength={60}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
+      </div>
+
+      <div className={styles.formRow}>
+        <label className={styles.formLabel}>Sound</label>
+        <div className={styles.soundGrid}>
+          {SOUND_OPTIONS.map((s) => (
+            <button key={s.id}
+              className={`${styles.soundBtn} ${selectedSound === s.id ? styles.soundActive : ""}`}
+              onClick={() => { setSelectedSound(s.id); playSound(s.id) }} type="button">{s.name}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.formActions}>
+        <Button onClick={handleSubmit} disabled={!action.trim()} size="small">
+          {formMode === "edit" ? "Save" : "Add Rule"}
+        </Button>
+        <Button onClick={() => { setFormMode("closed"); resetForm() }} variant="secondary" size="small">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
 
   return (
     <div className={styles.rules}>
@@ -141,194 +262,61 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
 
       {expanded && (
         <div className={styles.content}>
-          {rules.length === 0 && !showForm && (
+          {rules.length === 0 && formMode === "closed" && (
             <p className={styles.empty}>No house rules yet</p>
           )}
 
           {rules.map((rule) => (
-            <div key={rule.id} className={`${styles.rule} ${!rule.enabled ? styles.disabled : ""}`}>
-              <button
-                className={styles.enableToggle}
-                onClick={() => onToggle(rule.id)}
-                title={rule.enabled ? "Disable" : "Enable"}
-              >
-                {rule.enabled ? "ON" : "OFF"}
-              </button>
-              <div className={styles.ruleText}>
-                <span className={styles.ruleCondition}>
-                  {rule.text}
-                  {rule.trigger?.diceIndices && (
-                    <span className={styles.diceScope}>
-                      {" "}[{rule.trigger.diceIndices.map((i) => `D${i + 1}`).join(", ")}]
+            <React.Fragment key={rule.id}>
+              {formMode === "edit" && editingId === rule.id ? (
+                renderForm()
+              ) : (
+                <div className={`${styles.rule} ${!rule.enabled ? styles.disabled : ""}`}>
+                  <button className={styles.enableToggle} onClick={() => onToggle(rule.id)}
+                    title={rule.enabled ? "Disable" : "Enable"}>{rule.enabled ? "ON" : "OFF"}</button>
+                  <div className={styles.ruleText}>
+                    <span className={styles.ruleCondition}>
+                      {rule.text}
+                      {rule.trigger?.diceIndices && (
+                        <span className={styles.diceScope}>
+                          {" "}[{rule.trigger.diceIndices.map((i) => `D${i + 1}`).join(", ")}]
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <span className={styles.ruleAction}>
-                  {rule.action}
-                  {rule.sound && rule.sound !== "none" && (
-                    <span className={styles.soundLabel}>{rule.sound}</span>
-                  )}
-                  {(triggerCounts.get(rule.id) ?? 0) > 0 && (
-                    <span className={styles.triggerCount}>×{triggerCounts.get(rule.id)}</span>
-                  )}
-                </span>
-              </div>
-              <div className={styles.ruleActions}>
-                <button className={styles.editBtn} onClick={() => handleEdit(rule)} title="Edit">✎</button>
-                {confirmDeleteId === rule.id ? (
-                  <div className={styles.confirmDelete}>
-                    <span className={styles.confirmLabel}>Delete?</span>
-                    <button className={styles.confirmYes} onClick={() => { onRemove(rule.id); setConfirmDeleteId(null) }}>Yes</button>
-                    <button className={styles.confirmNo} onClick={() => setConfirmDeleteId(null)}>No</button>
+                    <span className={styles.ruleAction}>
+                      {rule.action}
+                      {rule.sound && rule.sound !== "none" && (
+                        <span className={styles.soundLabel}>{rule.sound}</span>
+                      )}
+                      {(triggerCounts.get(rule.id) ?? 0) > 0 && (
+                        <span className={styles.triggerCount}>×{triggerCounts.get(rule.id)}</span>
+                      )}
+                    </span>
                   </div>
-                ) : (
-                  <button className={styles.removeBtn} onClick={() => setConfirmDeleteId(rule.id)}>×</button>
-                )}
-              </div>
-            </div>
+                  <div className={styles.ruleActions}>
+                    <button className={styles.editBtn} onClick={() => handleEdit(rule)} title="Edit">✎</button>
+                    {confirmDeleteId === rule.id ? (
+                      <div className={styles.confirmDelete}>
+                        <span className={styles.confirmLabel}>Delete?</span>
+                        <button className={styles.confirmYes} onClick={() => { onRemove(rule.id); setConfirmDeleteId(null) }}>Yes</button>
+                        <button className={styles.confirmNo} onClick={() => setConfirmDeleteId(null)}>No</button>
+                      </div>
+                    ) : (
+                      <button className={styles.removeBtn} onClick={() => setConfirmDeleteId(rule.id)}>×</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
           ))}
 
-          {showForm ? (
-            <div className={styles.form}>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>When</label>
-                <select
-                  value={triggerType}
-                  onChange={(e) => {
-                    const t = e.target.value as TriggerType
-                    setTriggerType(t)
-                    if (t === "rollSum") setTriggerValue(7)
-                    else if (t === "doubles") setTriggerValue(0)
-                    else if (t === "drought") setTriggerValue(10)
-                    else if (t === "hotNumber") setTriggerValue(3)
-                  }}
-                  className={styles.select}
-                >
-                  <option value="rollSum">Roll sum equals...</option>
-                  <option value="doubles">Doubles rolled</option>
-                  <option value="drought">Drought (no number for...)</option>
-                  <option value="hotNumber">Hot number (same total × in a row)</option>
-                </select>
-              </div>
-
-              {config.dice.length > 1 && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Applies to</label>
-                  <div className={styles.doublesGrid}>
-                    <button
-                      className={`${styles.doublesBtn} ${selectedDiceIndices.size === config.dice.length ? styles.doublesActive : ""}`}
-                      onClick={toggleAllDice}
-                      type="button"
-                    >
-                      All
-                    </button>
-                    {config.dice.map((sides, i) => (
-                      <button
-                        key={i}
-                        className={`${styles.doublesBtn} ${selectedDiceIndices.has(i) ? styles.doublesActive : ""}`}
-                        onClick={() => toggleDieIndex(i)}
-                        type="button"
-                      >
-                        D{i + 1} (d{sides})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {triggerType === "rollSum" && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Sum</label>
-                  <input type="number" min={1} max={120} value={triggerValue}
-                    onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
-                </div>
-              )}
-
-              {triggerType === "doubles" && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>Which</label>
-                  <div className={styles.doublesGrid}>
-                    <button className={`${styles.doublesBtn} ${selectedDoubles.size === 6 ? styles.doublesActive : ""}`}
-                      onClick={toggleAllDoubles} type="button">All</button>
-                    {[1, 2, 3, 4, 5, 6].map((v) => (
-                      <button key={v} className={`${styles.doublesBtn} ${selectedDoubles.has(v) ? styles.doublesActive : ""}`}
-                        onClick={() => toggleDouble(v)} type="button">{v}+{v}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {triggerType === "drought" && (
-                <>
-                  <div className={styles.formRow}>
-                    <label className={styles.formLabel}>Number</label>
-                    <input type="number" min={1} max={120} value={droughtNumber}
-                      onChange={(e) => setDroughtNumber(Number(e.target.value))} className={styles.numberInput} />
-                    <span className={styles.formHint}>the sum to watch for</span>
-                  </div>
-                  <div className={styles.formRow}>
-                    <label className={styles.formLabel}>Rolls</label>
-                    <input type="number" min={3} max={50} value={triggerValue}
-                      onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
-                    <span className={styles.formHint}>rolls without it</span>
-                  </div>
-                </>
-              )}
-
-              {triggerType === "hotNumber" && (
-                <>
-                  <div className={styles.formRow}>
-                    <label className={styles.formLabel}>Totals</label>
-                    <div className={styles.doublesGrid}>
-                      <button className={`${styles.doublesBtn} ${selectedHotTotals.size === ALL_TOTALS.length ? styles.doublesActive : ""}`}
-                        onClick={toggleAllHotTotals} type="button">All</button>
-                      {ALL_TOTALS.map((v) => (
-                        <button key={v} className={`${styles.doublesBtn} ${selectedHotTotals.has(v) ? styles.doublesActive : ""}`}
-                          onClick={() => toggleHotTotal(v)} type="button">{v}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className={styles.formRow}>
-                    <label className={styles.formLabel}>Count</label>
-                    <input type="number" min={2} max={10} value={triggerValue}
-                      onChange={(e) => setTriggerValue(Number(e.target.value))} className={styles.numberInput} />
-                    <span className={styles.formHint}>times in a row</span>
-                  </div>
-                </>
-              )}
-
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>Then show</label>
-                <input type="text" placeholder='e.g. "Robber activated!"' value={action}
-                  onChange={(e) => setAction(e.target.value)} className={styles.textInput} maxLength={60}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()} />
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>Sound</label>
-                <div className={styles.soundGrid}>
-                  {SOUND_OPTIONS.map((s) => (
-                    <button key={s.id}
-                      className={`${styles.soundBtn} ${selectedSound === s.id ? styles.soundActive : ""}`}
-                      onClick={() => { setSelectedSound(s.id); playSound(s.id) }} type="button">{s.name}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.formActions}>
-                <Button onClick={handleSubmit} disabled={!action.trim()} size="small">
-                  {formMode === "edit" ? "Save" : "Add Rule"}
-                </Button>
-                <Button onClick={() => { setFormMode("closed"); resetForm() }} variant="secondary" size="small">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
+          {formMode === "add" ? (
+            renderForm()
+          ) : formMode === "closed" ? (
             <Button onClick={() => { resetForm(); setFormMode("add") }} variant="secondary" size="small">
               + Add Rule
             </Button>
-          )}
+          ) : null}
         </div>
       )}
     </div>

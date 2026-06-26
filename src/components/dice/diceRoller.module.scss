@@ -105,8 +105,8 @@
   }
 
   &.lastRoll {
-    background: color-mix(in srgb, var(--foreground) 10%, var(--background));
-    border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 20%, var(--background));
+    border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
   }
 
   &.selected,
