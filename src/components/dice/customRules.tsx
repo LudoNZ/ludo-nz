@@ -320,7 +320,7 @@ const CustomRules: React.FC<CustomRulesProps> = ({ rules, triggerCounts, diceCon
             const currentVal = selectedSequenceValues[posIdx] || 0
             return (
               <div key={posIdx} className={styles.formRow}>
-                <label className={styles.formLabel}>D{dieIdx + 1} (d{sides})</label>
+                <label className={styles.formLabel}>d{sides}</label>
                 <div className={styles.doublesGrid}>
                   {values.map((v) => (
                     <button key={v}
