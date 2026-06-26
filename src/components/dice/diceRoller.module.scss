@@ -329,7 +329,7 @@
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 10;
+  z-index: 110;
   margin-bottom: 0.3rem;
 }
 
@@ -346,15 +346,17 @@
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 10;
+  z-index: 110;
   margin-bottom: 0.3rem;
   max-height: 50vh;
   overflow-y: auto;
 }
 
 .mobilePickerBtn {
-  width: 2rem;
-  height: 2rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
   border: 1px solid var(--foreground);
   border-radius: 4px;
   background: var(--background);
