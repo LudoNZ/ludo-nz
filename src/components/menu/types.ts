@@ -68,6 +68,8 @@ export interface DayPlan {
   day: string
   lunch: MealSlot | null
   dinner: MealSlot | null
+  lunchEaten?: boolean
+  dinnerEaten?: boolean
 }
 
 export interface WeeklyPlan {
@@ -83,8 +85,30 @@ export interface MenuSession {
   pantryInStock: string[]
 }
 
+export interface PantryItem {
+  id: string
+  name: string
+  quantity: number
+  unit: string
+  isStaple: boolean
+  lowStockThreshold: number
+  updatedAt: Timestamp
+}
+
+export interface ConsumptionEntry {
+  id: string
+  mealId: string
+  mealName: string
+  date: Timestamp
+  ingredients: { name: string; amount: number; unit: string }[]
+}
+
 export interface ShoppingItem {
   name: string
+  needed: number
+  have: number
+  toBuy: number
+  unit: string
   entries: { amount: string; unit: string }[]
   displayAmount: string
 }
@@ -118,4 +142,29 @@ export function getUniqueIngredientNames(meals: Meal[]): string[] {
     }
   }
   return Array.from(names).sort().map((n) => n.charAt(0).toUpperCase() + n.slice(1))
+}
+
+export function parseAmount(amount: string): number | null {
+  const num = parseFloat(amount)
+  return isNaN(num) ? null : num
+}
+
+const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
+  g: { kg: 0.001 },
+  kg: { g: 1000 },
+  ml: { L: 0.001 },
+  L: { ml: 1000 },
+  tsp: { tbsp: 1 / 3 },
+  tbsp: { tsp: 3 },
+}
+
+export function convertAmount(amount: number, fromUnit: string, toUnit: string): number | null {
+  if (fromUnit === toUnit) return amount
+  return UNIT_CONVERSIONS[fromUnit]?.[toUnit] != null
+    ? amount * UNIT_CONVERSIONS[fromUnit][toUnit]
+    : null
+}
+
+export function normalizeKey(name: string): string {
+  return name.toLowerCase().trim()
 }

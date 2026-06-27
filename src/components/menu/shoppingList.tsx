@@ -3,17 +3,23 @@
 import React, { useState, useMemo, useCallback } from "react"
 import styles from "./shoppingList.module.scss"
 import Button from "@/components/button/button"
-import { WeeklyPlan, Meal, ShoppingItem, getAllMealIngredients } from "./types"
+import {
+  WeeklyPlan, Meal, PantryItem, ShoppingItem,
+  getAllMealIngredients, parseAmount, convertAmount, normalizeKey,
+} from "./types"
 
 interface ShoppingListProps {
   plan: WeeklyPlan | null
   meals: Meal[]
+  pantryItems: PantryItem[]
   onGoToPlan: () => void
 }
 
-function buildShoppingList(plan: WeeklyPlan, meals: Meal[]): ShoppingItem[] {
+function buildShoppingList(plan: WeeklyPlan, meals: Meal[], pantryItems: PantryItem[]): ShoppingItem[] {
   const mealMap = new Map(meals.map((m) => [m.id, m]))
-  const aggregated = new Map<string, { amount: string; unit: string }[]>()
+  const pantryMap = new Map(pantryItems.map((p) => [normalizeKey(p.name), p]))
+
+  const needed = new Map<string, { total: number; unit: string; entries: { amount: string; unit: string }[] }>()
 
   for (const day of plan.days) {
     for (const slot of [day.lunch, day.dinner]) {
@@ -22,38 +28,90 @@ function buildShoppingList(plan: WeeklyPlan, meals: Meal[]): ShoppingItem[] {
       if (!meal) continue
       const allIngs = getAllMealIngredients(meal, meals)
       for (const ing of allIngs) {
-        const key = ing.name.toLowerCase().trim()
+        const key = normalizeKey(ing.name)
         if (!key) continue
-        if (!aggregated.has(key)) aggregated.set(key, [])
+
+        if (!needed.has(key)) {
+          needed.set(key, { total: 0, unit: ing.unit || "", entries: [] })
+        }
+        const entry = needed.get(key)!
+        const amount = parseAmount(ing.amount)
+        if (amount !== null) {
+          if (ing.unit && entry.unit && ing.unit !== entry.unit) {
+            const converted = convertAmount(amount, ing.unit, entry.unit)
+            entry.total += converted ?? amount
+          } else {
+            entry.total += amount
+            if (!entry.unit && ing.unit) entry.unit = ing.unit
+          }
+        }
         if (ing.amount) {
-          aggregated.get(key)!.push({ amount: ing.amount, unit: ing.unit || "" })
+          entry.entries.push({ amount: ing.amount, unit: ing.unit || "" })
         }
       }
     }
   }
 
-  return Array.from(aggregated.entries())
-    .map(([name, entries]) => {
-      const display = entries
-        .map((e) => `${e.amount}${e.unit ? ` ${e.unit}` : ""}`)
-        .join(", ")
-      return {
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        entries,
-        displayAmount: display,
-      }
+  // Low-stock staples not in the plan
+  for (const item of pantryItems) {
+    if (!item.isStaple) continue
+    const key = normalizeKey(item.name)
+    if (item.quantity <= item.lowStockThreshold && !needed.has(key)) {
+      needed.set(key, { total: 0, unit: item.unit, entries: [] })
+    }
+  }
+
+  const result: ShoppingItem[] = []
+  for (const [key, data] of needed) {
+    const pantryItem = pantryMap.get(key)
+    const have = pantryItem ? pantryItem.quantity : 0
+    let haveConverted = have
+    if (pantryItem && pantryItem.unit && data.unit && pantryItem.unit !== data.unit) {
+      const conv = convertAmount(have, pantryItem.unit, data.unit)
+      if (conv !== null) haveConverted = conv
+    }
+
+    const toBuy = Math.max(0, data.total - haveConverted)
+    const isStapleLow = pantryItem?.isStaple && pantryItem.quantity <= pantryItem.lowStockThreshold
+
+    if (toBuy <= 0 && !isStapleLow) continue
+
+    const displayParts: string[] = []
+    if (toBuy > 0) {
+      displayParts.push(`${Math.round(toBuy * 10) / 10}${data.unit ? ` ${data.unit}` : ""}`)
+    }
+    if (isStapleLow && toBuy <= 0) {
+      displayParts.push("restock")
+    }
+
+    result.push({
+      name: key.charAt(0).toUpperCase() + key.slice(1),
+      needed: Math.round(data.total * 10) / 10,
+      have: Math.round(haveConverted * 10) / 10,
+      toBuy: Math.round(toBuy * 10) / 10,
+      unit: data.unit,
+      entries: data.entries,
+      displayAmount: displayParts.join(" — "),
     })
-    .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  return result.sort((a, b) => {
+    const aStaple = pantryMap.get(normalizeKey(a.name))?.isStaple ?? false
+    const bStaple = pantryMap.get(normalizeKey(b.name))?.isStaple ?? false
+    if (aStaple && !bStaple) return -1
+    if (bStaple && !aStaple) return 1
+    return a.name.localeCompare(b.name)
+  })
 }
 
-const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, onGoToPlan }) => {
+const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, pantryItems, onGoToPlan }) => {
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [copied, setCopied] = useState(false)
 
   const items = useMemo(() => {
     if (!plan) return []
-    return buildShoppingList(plan, meals)
-  }, [plan, meals])
+    return buildShoppingList(plan, meals, pantryItems)
+  }, [plan, meals, pantryItems])
 
   const toggleItem = useCallback((name: string) => {
     setChecked((prev) => {
@@ -98,8 +156,8 @@ const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, onGoToPlan }) 
   if (items.length === 0) {
     return (
       <div className={styles.empty}>
-        <p className={styles.emptyText}>No ingredients yet!</p>
-        <p className={styles.emptyHint}>Add ingredients to your meals and they will show up here.</p>
+        <p className={styles.emptyText}>All stocked up!</p>
+        <p className={styles.emptyHint}>Your pantry has everything you need for this week.</p>
       </div>
     )
   }
@@ -129,7 +187,14 @@ const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, onGoToPlan }) 
               onChange={() => toggleItem(item.name)}
               className={styles.checkbox}
             />
-            <span className={styles.itemName}>{item.name}</span>
+            <div className={styles.itemInfo}>
+              <span className={styles.itemName}>{item.name}</span>
+              {item.toBuy > 0 && item.have > 0 && (
+                <span className={styles.itemDetail}>
+                  need {item.needed}{item.unit ? ` ${item.unit}` : ""}, have {item.have}
+                </span>
+              )}
+            </div>
             {item.displayAmount && (
               <span className={styles.itemAmount}>{item.displayAmount}</span>
             )}
@@ -147,7 +212,9 @@ const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, onGoToPlan }) 
                   onChange={() => toggleItem(item.name)}
                   className={styles.checkbox}
                 />
-                <span className={styles.itemName}>{item.name}</span>
+                <div className={styles.itemInfo}>
+                  <span className={styles.itemName}>{item.name}</span>
+                </div>
                 {item.displayAmount && (
                   <span className={styles.itemAmount}>{item.displayAmount}</span>
                 )}

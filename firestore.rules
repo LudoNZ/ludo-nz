@@ -53,6 +53,22 @@ service cloud.firestore {
       allow update: if true;
       allow delete: if false;
 
+      match /pantry/{itemId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['name', 'quantity', 'updatedAt'])
+          && request.resource.data.name is string;
+        allow update: if true;
+        allow delete: if true;
+      }
+
+      match /consumptionLog/{logId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['mealId', 'mealName', 'date'])
+          && request.resource.data.mealName is string;
+        allow update: if false;
+        allow delete: if true;
+      }
+
       match /meals/{mealId} {
         allow read: if true;
         allow create: if request.resource.data.keys().hasAll(['name', 'ingredients', 'steps', 'createdAt'])

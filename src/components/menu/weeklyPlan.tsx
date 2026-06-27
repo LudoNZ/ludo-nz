@@ -10,11 +10,13 @@ interface WeeklyPlanProps {
   meals: Meal[]
   onGenerate: () => Promise<void>
   onSwap: (dayIndex: number, slot: "lunch" | "dinner") => Promise<void>
+  onEat: (dayIndex: number, slot: "lunch" | "dinner") => Promise<void>
 }
 
-const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap }) => {
+const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap, onEat }) => {
   const [generating, setGenerating] = useState(false)
   const [swapping, setSwapping] = useState<string | null>(null)
+  const [eating, setEating] = useState<string | null>(null)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
 
   const handleGenerate = async () => {
@@ -68,26 +70,45 @@ const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap
                 const mealSlot = day[slot]
                 const mealDetail = mealSlot ? getMealDetails(mealSlot.mealId) : null
                 const isExpanded = expandedMeal === `${dayIndex}-${slot}`
+                const eatenKey = slot === "lunch" ? "lunchEaten" : "dinnerEaten"
+                const isEaten = !!day[eatenKey as keyof typeof day]
+                const eatKey = `${dayIndex}-${slot}`
+
+                const handleEat = async () => {
+                  setEating(eatKey)
+                  try { await onEat(dayIndex, slot) } finally { setEating(null) }
+                }
 
                 return (
-                  <div key={slot} className={styles.mealSlot}>
+                  <div key={slot} className={`${styles.mealSlot} ${isEaten ? styles.mealSlotEaten : ""}`}>
                     <span className={styles.slotLabel}>{slot === "lunch" ? "Lunch" : "Dinner"}</span>
                     <div className={styles.slotContent}>
                       {mealSlot ? (
                         <>
                           <button
                             className={styles.mealNameBtn}
-                            onClick={() => setExpandedMeal(isExpanded ? null : `${dayIndex}-${slot}`)}
+                            onClick={() => setExpandedMeal(isExpanded ? null : eatKey)}
                           >
                             {mealSlot.mealName}
                           </button>
+                          {!isEaten && (
+                            <button
+                              className={styles.eatBtn}
+                              onClick={handleEat}
+                              disabled={eating === eatKey}
+                              title="Mark as eaten (depletes pantry)"
+                            >
+                              {eating === eatKey ? "..." : "✓"}
+                            </button>
+                          )}
+                          {isEaten && <span className={styles.eatenBadge}>ate</span>}
                           <button
                             className={styles.swapBtn}
                             onClick={() => handleSwap(dayIndex, slot)}
-                            disabled={swapping === `${dayIndex}-${slot}`}
+                            disabled={swapping === eatKey}
                             title="Pick a different meal"
                           >
-                            {swapping === `${dayIndex}-${slot}` ? "..." : "↻"}
+                            {swapping === eatKey ? "..." : "↻"}
                           </button>
                         </>
                       ) : (

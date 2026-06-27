@@ -71,9 +71,21 @@
   cursor: pointer;
 }
 
-.itemName {
+.itemInfo {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.itemName {
   font-size: 0.95rem;
+}
+
+.itemDetail {
+  font-size: 0.65rem;
+  opacity: 0.4;
 }
 
 .itemAmount {

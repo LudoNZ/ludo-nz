@@ -9,8 +9,9 @@ import {
   serverTimestamp, Timestamp, query, orderBy,
 } from "firebase/firestore"
 import {
-  MenuSession, Meal, DayPlan, MealSlot, DAYS,
-  getUniqueIngredientNames,
+  MenuSession, Meal, DayPlan, MealSlot, PantryItem, DAYS,
+  getUniqueIngredientNames, getAllMealIngredients,
+  parseAmount, convertAmount, normalizeKey,
 } from "@/components/menu/types"
 import MealList from "@/components/menu/mealList"
 import MealForm from "@/components/menu/mealForm"
@@ -40,6 +41,7 @@ const MenuSessionPage: React.FC = () => {
 
   const [session, setSession] = useState<MenuSession | null>(null)
   const [meals, setMeals] = useState<Meal[]>([])
+  const [pantryItems, setPantryItems] = useState<PantryItem[]>([])
   const [activeTab, setActiveTab] = useState<Tab>("meals")
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -85,15 +87,36 @@ const MenuSessionPage: React.FC = () => {
       }))
     })
 
+    const pantryQuery = query(
+      collection(firestore, "menuSessions", code, "pantry"),
+      orderBy("updatedAt", "desc")
+    )
+    const unsubPantry = onSnapshot(pantryQuery, (snap) => {
+      setPantryItems(snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        isStaple: d.data().isStaple ?? false,
+        lowStockThreshold: d.data().lowStockThreshold ?? 0,
+        quantity: d.data().quantity ?? 0,
+      } as PantryItem)))
+    })
+
     return () => {
       unsubSession()
       unsubMeals()
+      unsubPantry()
     }
   }, [code])
 
   const allIngredientNames = useMemo(() => getUniqueIngredientNames(meals), [meals])
   const subMeals = useMemo(() => meals.filter((m) => m.isSubMeal), [meals])
 
+  const pantryStockNames = useMemo(() =>
+    pantryItems.filter((p) => p.quantity > 0).map((p) => normalizeKey(p.name)),
+    [pantryItems]
+  )
+
+  // --- Meal CRUD ---
   const handleSaveMeal = useCallback(async (data: SaveMealData) => {
     await addDoc(collection(firestore, "menuSessions", code, "meals"), {
       name: data.name,
@@ -153,15 +176,139 @@ const MenuSessionPage: React.FC = () => {
     setVariationParent(null)
   }, [])
 
-  const handleTogglePantryItem = useCallback(async (ingredientName: string, inStock: boolean) => {
-    const current = session?.pantryInStock ?? []
-    const normalized = ingredientName.toLowerCase().trim()
-    const updated = inStock
-      ? [...current.filter((n) => n !== normalized), normalized]
-      : current.filter((n) => n !== normalized)
-    await updateDoc(doc(firestore, "menuSessions", code), { pantryInStock: updated })
-  }, [code, session])
+  // --- Pantry CRUD ---
+  const handlePantryUpdate = useCallback(async (itemId: string, updates: Partial<PantryItem>) => {
+    await updateDoc(doc(firestore, "menuSessions", code, "pantry", itemId), {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })
+  }, [code])
 
+  const handlePantryAdd = useCallback(async (name: string, unit: string, isStaple: boolean) => {
+    await addDoc(collection(firestore, "menuSessions", code, "pantry"), {
+      name,
+      quantity: 0,
+      unit,
+      isStaple,
+      lowStockThreshold: 0,
+      updatedAt: serverTimestamp(),
+    })
+  }, [code])
+
+  const handlePantryDelete = useCallback(async (itemId: string) => {
+    await deleteDoc(doc(firestore, "menuSessions", code, "pantry", itemId))
+  }, [code])
+
+  const handleAddAllFromMeals = useCallback(async () => {
+    const pantryNames = new Set(pantryItems.map((p) => normalizeKey(p.name)))
+    const toAdd = new Map<string, string>()
+    for (const meal of meals) {
+      for (const ing of meal.ingredients) {
+        const key = normalizeKey(ing.name)
+        if (key && !pantryNames.has(key) && !toAdd.has(key)) {
+          toAdd.set(key, ing.unit || "")
+        }
+      }
+    }
+    const batch: Promise<unknown>[] = []
+    for (const [name, unit] of toAdd) {
+      batch.push(addDoc(collection(firestore, "menuSessions", code, "pantry"), {
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        quantity: 0,
+        unit,
+        isStaple: false,
+        lowStockThreshold: 0,
+        updatedAt: serverTimestamp(),
+      }))
+    }
+    await Promise.all(batch)
+  }, [code, meals, pantryItems])
+
+  // --- Eat meal (deplete pantry) ---
+  const handleEatMeal = useCallback(async (dayIndex: number, slot: "lunch" | "dinner") => {
+    if (!session?.activePlan) return
+    const mealSlot = session.activePlan.days[dayIndex][slot]
+    if (!mealSlot) return
+
+    const meal = meals.find((m) => m.id === mealSlot.mealId)
+    if (!meal) return
+
+    const allIngs = getAllMealIngredients(meal, meals)
+    const pantryMap = new Map(pantryItems.map((p) => [normalizeKey(p.name), p]))
+
+    const depletions: { pantryId: string; newQty: number }[] = []
+    const newPantryItems: { name: string; qty: number; unit: string }[] = []
+
+    for (const ing of allIngs) {
+      const key = normalizeKey(ing.name)
+      if (!key) continue
+      const amount = parseAmount(ing.amount)
+      if (amount === null || amount <= 0) continue
+
+      const pantryItem = pantryMap.get(key)
+      if (pantryItem) {
+        let deduction = amount
+        if (ing.unit && pantryItem.unit && ing.unit !== pantryItem.unit) {
+          const converted = convertAmount(amount, ing.unit, pantryItem.unit)
+          if (converted !== null) {
+            deduction = converted
+          } else {
+            continue
+          }
+        }
+        const newQty = Math.max(0, pantryItem.quantity - deduction)
+        depletions.push({ pantryId: pantryItem.id, newQty })
+      } else {
+        newPantryItems.push({ name: ing.name.trim(), qty: 0, unit: ing.unit || "" })
+      }
+    }
+
+    const updates: Promise<unknown>[] = []
+
+    for (const { pantryId, newQty } of depletions) {
+      updates.push(updateDoc(doc(firestore, "menuSessions", code, "pantry", pantryId), {
+        quantity: Math.round(newQty * 100) / 100,
+        updatedAt: serverTimestamp(),
+      }))
+    }
+
+    const existingPantryNames = new Set(pantryItems.map((p) => normalizeKey(p.name)))
+    for (const item of newPantryItems) {
+      const key = normalizeKey(item.name)
+      if (!existingPantryNames.has(key)) {
+        existingPantryNames.add(key)
+        updates.push(addDoc(collection(firestore, "menuSessions", code, "pantry"), {
+          name: item.name.charAt(0).toUpperCase() + key.slice(1),
+          quantity: 0,
+          unit: item.unit,
+          isStaple: false,
+          lowStockThreshold: 0,
+          updatedAt: serverTimestamp(),
+        }))
+      }
+    }
+
+    updates.push(addDoc(collection(firestore, "menuSessions", code, "consumptionLog"), {
+      mealId: mealSlot.mealId,
+      mealName: mealSlot.mealName,
+      date: serverTimestamp(),
+      ingredients: allIngs
+        .filter((i) => parseAmount(i.amount) !== null)
+        .map((i) => ({ name: i.name, amount: parseAmount(i.amount)!, unit: i.unit || "" })),
+    }))
+
+    const eatenKey = slot === "lunch" ? "lunchEaten" : "dinnerEaten"
+    const updatedDays = session.activePlan.days.map((d, i) =>
+      i === dayIndex ? { ...d, [eatenKey]: true } : d
+    )
+    updates.push(updateDoc(doc(firestore, "menuSessions", code), {
+      activePlan: { ...session.activePlan, days: updatedDays },
+    }))
+
+    await Promise.all(updates)
+  }, [code, session, meals, pantryItems])
+
+  // --- Plan generation ---
   const handleGeneratePlan = useCallback(async () => {
     const mainMeals = meals.filter((m) => !m.isSubMeal)
     if (mainMeals.length === 0) return
@@ -287,7 +434,7 @@ const MenuSessionPage: React.FC = () => {
         {activeTab === "meals" && (
           <MealList
             meals={meals}
-            pantryInStock={session?.pantryInStock ?? []}
+            pantryInStock={pantryStockNames}
             onAdd={() => { setEditingMeal(null); setVariationParent(null); setShowForm(true) }}
             onEdit={handleEditMeal}
             onDelete={handleDeleteMeal}
@@ -298,8 +445,11 @@ const MenuSessionPage: React.FC = () => {
         {activeTab === "pantry" && (
           <Pantry
             meals={meals}
-            pantryInStock={session?.pantryInStock ?? []}
-            onToggle={handleTogglePantryItem}
+            pantryItems={pantryItems}
+            onUpdate={handlePantryUpdate}
+            onAdd={handlePantryAdd}
+            onDelete={handlePantryDelete}
+            onAddAllFromMeals={handleAddAllFromMeals}
           />
         )}
 
@@ -309,6 +459,7 @@ const MenuSessionPage: React.FC = () => {
             meals={meals}
             onGenerate={handleGeneratePlan}
             onSwap={handleSwapMeal}
+            onEat={handleEatMeal}
           />
         )}
 
@@ -316,6 +467,7 @@ const MenuSessionPage: React.FC = () => {
           <ShoppingList
             plan={session?.activePlan ?? null}
             meals={meals}
+            pantryItems={pantryItems}
             onGoToPlan={() => setActiveTab("plan")}
           />
         )}

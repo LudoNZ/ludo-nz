@@ -25,7 +25,7 @@
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 0.75rem 0;
+  padding: 0.5rem 0;
 }
 
 .summaryCount {
@@ -38,9 +38,81 @@
   opacity: 0.5;
 }
 
+.alertBadge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 100px;
+  background: var(--color-danger);
+  color: var(--background);
+  margin-left: auto;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+// --- Add form ---
+.addForm {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+}
+
+.addInput {
+  flex: 2;
+  min-width: 120px;
+  padding: 0.5rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+.addUnit {
+  width: 65px;
+  padding: 0.45rem 0.2rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.stapleToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.7;
+
+  input {
+    accent-color: var(--color-primary);
+  }
+}
+
 .search {
   width: 100%;
-  padding: 0.65rem 0.75rem;
+  padding: 0.6rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
   border-radius: var(--borderRadius);
   background: var(--background);
@@ -56,68 +128,266 @@
   &:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary);
   }
 }
 
+// --- Item list ---
 .list {
   display: flex;
   flex-direction: column;
 }
 
 .item {
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.itemAlert {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  border-radius: var(--borderRadius);
+  margin-bottom: 2px;
+}
+
+.itemEmpty {
+  opacity: 0.6;
+}
+
+.itemLow {
+  background: color-mix(in srgb, orange 6%, transparent);
+  border-radius: var(--borderRadius);
+  margin-bottom: 2px;
+}
+
+.itemMain {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: space-between;
   padding: 0.6rem 0.5rem;
   cursor: pointer;
   border-radius: var(--borderRadius);
-  transition: background 0.1s;
+  gap: 0.5rem;
 
   &:hover {
-    background: color-mix(in srgb, var(--foreground) 5%, transparent);
-  }
-
-  &:not(:last-child) {
-    border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+    background: color-mix(in srgb, var(--foreground) 4%, transparent);
   }
 }
 
-.itemInStock {
-  .itemName {
-    color: var(--color-primary);
-  }
-}
-
-.checkbox {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-}
-
-.itemInfo {
+.itemLeft {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
+  gap: 0.4rem;
   min-width: 0;
+}
+
+.stapleIcon {
+  font-size: 0.5rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 .itemName {
   font-size: 0.95rem;
-}
-
-.itemUsedIn {
-  font-size: 0.65rem;
-  opacity: 0.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.divider {
+.itemRight {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.itemQty {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.alertIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 100px;
+  background: var(--color-danger);
+  color: var(--background);
+  font-size: 0.65rem;
+  font-weight: bold;
+}
+
+.lowIcon {
+  color: orange;
+  font-size: 0.8rem;
+}
+
+// --- Edit panel ---
+.itemEdit {
+  padding: 0.5rem 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.editLabel {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  width: 75px;
+  flex-shrink: 0;
+}
+
+.qtyControls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.qtyBtn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
+.qtyInput {
+  width: 70px;
+  padding: 0.4rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+  text-align: center;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+.editSelect {
+  padding: 0.4rem 0.3rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.thresholdInput {
+  width: 60px;
+  padding: 0.4rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: center;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+.stapleCheck {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0.7;
+
+  input {
+    accent-color: var(--color-primary);
+  }
+}
+
+.usedIn {
+  font-size: 0.65rem;
+  opacity: 0.4;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.removeLink {
+  background: none;
   border: none;
-  border-top: 1px dashed color-mix(in srgb, var(--foreground) 15%, transparent);
-  margin: 0.5rem 0;
+  color: var(--color-danger);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  opacity: 0.5;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.deleteConfirm {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+}
+
+.deleteYes,
+.deleteNo {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.35rem;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.deleteYes {
+  color: var(--color-danger);
+
+  &:hover {
+    background: var(--color-danger);
+    color: var(--background);
+  }
+}
+
+.deleteNo {
+  color: var(--foreground);
+  opacity: 0.6;
+
+  &:hover {
+    opacity: 1;
+  }
 }
