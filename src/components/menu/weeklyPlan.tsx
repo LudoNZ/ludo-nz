@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import styles from "./weeklyPlan.module.scss"
 import Button from "@/components/button/button"
-import { WeeklyPlan as WeeklyPlanType, Meal } from "./types"
+import { WeeklyPlan as WeeklyPlanType, Meal, getAllMealIngredients } from "./types"
 
 interface WeeklyPlanProps {
   plan: WeeklyPlanType | null
@@ -116,11 +116,13 @@ const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap
                       )}
                     </div>
 
-                    {isExpanded && mealDetail && (
+                    {isExpanded && mealDetail && (() => {
+                      const allIngs = getAllMealIngredients(mealDetail, meals)
+                      return (
                       <div className={styles.mealPreview}>
-                        {mealDetail.ingredients.length > 0 && (
+                        {allIngs.length > 0 && (
                           <div className={styles.previewIngredients}>
-                            {mealDetail.ingredients.map((ing, i) => (
+                            {allIngs.map((ing, i) => (
                               <span key={i} className={styles.previewIngredient}>
                                 {ing.name}{ing.amount ? ` (${ing.amount}${ing.unit ? ` ${ing.unit}` : ""})` : ""}
                               </span>
@@ -135,7 +137,8 @@ const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap
                           </div>
                         )}
                       </div>
-                    )}
+                      )
+                    })()}
                   </div>
                 )
               })}

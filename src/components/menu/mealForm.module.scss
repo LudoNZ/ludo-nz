@@ -447,6 +447,33 @@
   }
 }
 
+// --- Component ingredients (read-only) ---
+.componentIngredients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.componentIngredient {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+  border-radius: 100px;
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.componentSource {
+  font-size: 0.55rem;
+  opacity: 0.5;
+
+  &::before {
+    content: "· ";
+  }
+}
+
 // --- Steps ---
 .stepList {
   display: flex;

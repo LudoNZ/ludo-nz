@@ -382,6 +382,32 @@ const MealForm: React.FC<MealFormProps> = ({
           + Add ingredient
         </button>
 
+        {/* Component ingredients (read-only) */}
+        {selectedSubMealIds.length > 0 && (() => {
+          const componentIngs: { source: string; name: string; amount: string; unit: string }[] = []
+          for (const subId of selectedSubMealIds) {
+            const sub = allMeals.find((m) => m.id === subId)
+            if (!sub) continue
+            for (const ing of sub.ingredients) {
+              componentIngs.push({ source: sub.name, ...ing })
+            }
+          }
+          if (componentIngs.length === 0) return null
+          return (
+            <>
+              <label className={styles.label}>From components</label>
+              <div className={styles.componentIngredients}>
+                {componentIngs.map((ing, i) => (
+                  <span key={i} className={styles.componentIngredient}>
+                    {ing.name}{ing.amount ? ` (${ing.amount}${ing.unit ? ` ${ing.unit}` : ""})` : ""}
+                    <span className={styles.componentSource}>{ing.source}</span>
+                  </span>
+                ))}
+              </div>
+            </>
+          )
+        })()}
+
         {/* Steps */}
         <label className={styles.label}>Steps</label>
         <div className={styles.stepList}>

@@ -118,6 +118,7 @@ const MealList: React.FC<MealListProps> = ({
               <div key={meal.id} className={styles.cardGroup}>
                 <MealCard
                   meal={meal}
+                  allMeals={meals}
                   stock={stock}
                   deletingId={deletingId}
                   onEdit={onEdit}
@@ -137,6 +138,7 @@ const MealList: React.FC<MealListProps> = ({
                         <MealCard
                           key={v.id}
                           meal={v}
+                          allMeals={meals}
                           stock={vStock}
                           deletingId={deletingId}
                           onEdit={onEdit}
@@ -164,6 +166,7 @@ const MealList: React.FC<MealListProps> = ({
               <MealCard
                 key={meal.id}
                 meal={meal}
+                allMeals={meals}
                 deletingId={deletingId}
                 onEdit={onEdit}
                 onDelete={onDelete}
@@ -187,6 +190,7 @@ const MealList: React.FC<MealListProps> = ({
 
 interface MealCardProps {
   meal: Meal
+  allMeals: Meal[]
   stock?: { total: number; inStock: number; missing: string[] }
   deletingId: string | null
   onEdit: (meal: Meal) => void
@@ -201,7 +205,7 @@ interface MealCardProps {
 }
 
 const MealCard: React.FC<MealCardProps> = ({
-  meal, stock, deletingId, onEdit, onDelete, onSetDeleting,
+  meal, allMeals, stock, deletingId, onEdit, onDelete, onSetDeleting,
   onCreateVariation, hasVariations, isExpanded, onToggleExpand,
   isVariation, isComponent,
 }) => {
@@ -219,9 +223,16 @@ const MealCard: React.FC<MealCardProps> = ({
           </div>
         )}
         <div className={styles.cardMeta}>
-          <span className={styles.ingredientCount}>
-            {meal.ingredients.length} ingredient{meal.ingredients.length !== 1 ? "s" : ""}
-          </span>
+          {(() => {
+            const total = getAllMealIngredients(meal, allMeals).length
+            const own = meal.ingredients.length
+            return (
+              <span className={styles.ingredientCount}>
+                {total} ingredient{total !== 1 ? "s" : ""}
+                {total > own && ` (${own} + ${total - own} from components)`}
+              </span>
+            )
+          })()}
           {meal.steps.length > 0 && (
             <span className={styles.stepCount}>
               {meal.steps.length} step{meal.steps.length !== 1 ? "s" : ""}
