@@ -135,10 +135,21 @@
   min-width: 0;
 }
 
+.historyCodeRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
 .historyCode {
   font-size: 1rem;
   letter-spacing: 0.15em;
   color: var(--color-primary);
+}
+
+.historyDice {
+  font-size: 0.7rem;
+  opacity: 0.5;
 }
 
 .historyMeta {

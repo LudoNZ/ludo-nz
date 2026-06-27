@@ -7,7 +7,7 @@ import Button from "@/components/button/button"
 import { firestore } from "../../../firebase/client"
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, serverTimestamp, Timestamp } from "firebase/firestore"
 import Link from "next/link"
-import { DEFAULT_DICE_CONFIG } from "@/components/dice/types"
+import { DEFAULT_DICE_CONFIG, DiceConfig, formatDiceConfig, normalizeDiceConfig } from "@/components/dice/types"
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -24,6 +24,7 @@ interface SessionHistory {
   name: string
   joinedAt: number
   isCreator: boolean
+  diceConfig?: DiceConfig
 }
 
 function getSessionHistory(): SessionHistory[] {
@@ -35,9 +36,9 @@ function getSessionHistory(): SessionHistory[] {
   }
 }
 
-function saveSessionToHistory(code: string, name: string, isCreator: boolean) {
+function saveSessionToHistory(code: string, name: string, isCreator: boolean, diceConfig?: DiceConfig) {
   const history = getSessionHistory().filter((s) => s.code !== code)
-  history.unshift({ code, name, joinedAt: Date.now(), isCreator })
+  history.unshift({ code, name, joinedAt: Date.now(), isCreator, diceConfig })
   if (history.length > 20) history.length = 20
   localStorage.setItem("diceTracker_sessions", JSON.stringify(history))
 }
@@ -116,7 +117,7 @@ const DicePage: React.FC = () => {
 
       localStorage.setItem(`diceTracker_playerName_${code}`, name.trim())
       localStorage.setItem("diceTracker_lastPlayerName", name.trim())
-      saveSessionToHistory(code, name.trim(), true)
+      saveSessionToHistory(code, name.trim(), true, DEFAULT_DICE_CONFIG)
       router.push(`/dice/${code}`)
     } catch {
       setError("Failed to create session. Please try again.")
@@ -144,9 +145,11 @@ const DicePage: React.FC = () => {
         setError("Session not found. Check the code and try again.")
         return
       }
+      const sessionData = snap.data()
+      const diceConfig = normalizeDiceConfig(sessionData?.diceConfig)
       localStorage.setItem(`diceTracker_playerName_${code}`, name.trim())
       localStorage.setItem("diceTracker_lastPlayerName", name.trim())
-      saveSessionToHistory(code, name.trim(), false)
+      saveSessionToHistory(code, name.trim(), false, diceConfig)
       await updateDoc(doc(firestore, "diceSessions", code), {
         players: arrayUnion(name.trim()),
       })
@@ -229,7 +232,12 @@ const DicePage: React.FC = () => {
             {history.map((s) => (
               <div key={s.code} className={styles.historyItem}>
                 <div className={styles.historyInfo}>
-                  <span className={styles.historyCode}>{s.code}</span>
+                  <div className={styles.historyCodeRow}>
+                    <span className={styles.historyCode}>{s.code}</span>
+                    {s.diceConfig && (
+                      <span className={styles.historyDice}>{formatDiceConfig(s.diceConfig)}</span>
+                    )}
+                  </div>
                   <span className={styles.historyMeta}>
                     {s.name} · {s.isCreator ? "created" : "joined"} · {formatAge(s.joinedAt)}
                   </span>
