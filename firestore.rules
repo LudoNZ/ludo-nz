@@ -79,6 +79,25 @@ service cloud.firestore {
           && request.resource.data.ingredients is list;
         allow delete: if true;
       }
+
+      match /templates/{templateId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['name', 'sections', 'createdAt'])
+          && request.resource.data.name is string
+          && request.resource.data.sections is list;
+        allow update: if request.resource.data.name is string
+          && request.resource.data.sections is list;
+        allow delete: if true;
+      }
+
+      match /ingredientCategories/{categoryId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['name', 'order', 'createdAt'])
+          && request.resource.data.name is string
+          && request.resource.data.order is int;
+        allow update: if request.resource.data.name is string;
+        allow delete: if true;
+      }
     }
 
     // Default: deny all other access
