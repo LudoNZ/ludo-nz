@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useMemo, useCallback, useEffect } from "react"
+import React, { useState, useRef, useMemo, useEffect } from "react"
 import styles from "./mealBuilder.module.scss"
 import Button from "@/components/button/button"
 import { MealTemplate, Meal, DAYS, getAllMealIngredients, Ingredient } from "./types"
@@ -179,7 +179,7 @@ export default function MealBuilder({ template, allMeals, onBack, onSaveMeal, on
                     className={`${styles.skipToggle} ${isSkipped ? styles.skipToggleActive : ""}`}
                     onClick={() => setSkipped((prev) => {
                       const next = new Set(prev)
-                      next.has(section.id) ? next.delete(section.id) : next.add(section.id)
+                      if (next.has(section.id)) { next.delete(section.id) } else { next.add(section.id) }
                       return next
                     })}
                   >
