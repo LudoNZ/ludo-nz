@@ -131,6 +131,170 @@
   }
 }
 
+// --- Category manager ---
+.manageCatsBtn {
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
+.categoryManager {
+  border: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  border-radius: var(--borderRadius);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.categoryManagerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.categoryManagerTitle {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.categoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.noCats {
+  font-size: 0.8rem;
+  opacity: 0.4;
+  margin: 0;
+}
+
+.categoryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--borderRadius);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.catName {
+  font-size: 0.85rem;
+}
+
+.catDeleteBtn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 2px 6px;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.addCatRow {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.addCatInput {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+}
+
+// --- Category filter tabs ---
+.categoryFilterTabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.filterTab {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  border: 1.5px solid transparent;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    color: var(--color-primary);
+  }
+}
+
+.filterTabActive {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+// --- Grouped item list ---
+.groupedList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.categoryGroup {
+  // no outer gap needed
+}
+
+.categoryGroupHeader {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.4;
+  padding: 0.6rem 0.5rem 0.2rem;
+}
+
 // --- Item list ---
 .list {
   display: flex;

@@ -14,17 +14,18 @@ interface MealFormProps {
   allMeals: Meal[]
   onSave: (data: SaveMealData) => Promise<void>
   onClose: () => void
+  lockedIsSubMeal?: boolean
 }
 
 const MealForm: React.FC<MealFormProps> = ({
-  meal, variationParent, allIngredientNames, availableSubMeals, allMeals, onSave, onClose,
+  meal, variationParent, allIngredientNames, availableSubMeals, allMeals, onSave, onClose, lockedIsSubMeal,
 }) => {
   const source = meal ?? variationParent
 
   const [name, setName] = useState(
     variationParent ? `${variationParent.name} (variation)` : (meal?.name ?? "")
   )
-  const [isSubMeal, setIsSubMeal] = useState(source?.isSubMeal ?? false)
+  const [isSubMeal, setIsSubMeal] = useState(lockedIsSubMeal ?? source?.isSubMeal ?? false)
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     source?.ingredients?.length ? [...source.ingredients] : [{ name: "", amount: "", unit: "" }]
   )
@@ -219,24 +220,26 @@ const MealForm: React.FC<MealFormProps> = ({
           autoFocus
         />
 
-        {/* Type toggle */}
-        <div className={styles.typeToggle}>
-          <button
-            className={`${styles.typeBtn} ${!isSubMeal ? styles.typeBtnActive : ""}`}
-            onClick={() => setIsSubMeal(false)}
-          >
-            Full Meal
-          </button>
-          <button
-            className={`${styles.typeBtn} ${isSubMeal ? styles.typeBtnActive : ""}`}
-            onClick={() => setIsSubMeal(true)}
-          >
-            Component
-          </button>
-          <span className={styles.typeHint}>
-            {isSubMeal ? "A part of other meals (e.g. white sauce)" : "A complete meal"}
-          </span>
-        </div>
+        {/* Type toggle — hidden when locked to a specific type */}
+        {lockedIsSubMeal === undefined && (
+          <div className={styles.typeToggle}>
+            <button
+              className={`${styles.typeBtn} ${!isSubMeal ? styles.typeBtnActive : ""}`}
+              onClick={() => setIsSubMeal(false)}
+            >
+              Full Meal
+            </button>
+            <button
+              className={`${styles.typeBtn} ${isSubMeal ? styles.typeBtnActive : ""}`}
+              onClick={() => setIsSubMeal(true)}
+            >
+              Component
+            </button>
+            <span className={styles.typeHint}>
+              {isSubMeal ? "A part of other meals (e.g. white sauce)" : "A complete meal"}
+            </span>
+          </div>
+        )}
 
         {/* Categories */}
         {!isSubMeal && (

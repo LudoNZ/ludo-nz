@@ -1,0 +1,258 @@
+@import "/src/styles/config";
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal {
+  background: var(--background);
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+
+  @media (max-width: $MAX_PHONE) {
+    max-height: 100vh;
+    height: 100%;
+    border-radius: 0;
+  }
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem 0;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 1.1rem;
+  cursor: pointer;
+  opacity: 0.5;
+  padding: 0.2rem;
+
+  &:hover { opacity: 1; }
+}
+
+.body {
+  padding: 1rem 1.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 15%, transparent);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+// --- Fields ---
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
+.input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--background);
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: var(--borderRadius);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 1rem;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+// --- Sections ---
+.sectionsArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionCard {
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  border-radius: var(--borderRadius);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sectionNumber {
+  font-size: 0.75rem;
+  font-weight: 700;
+  opacity: 0.4;
+  width: 1.2rem;
+  flex-shrink: 0;
+}
+
+.sectionNameInput {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: var(--background);
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: 4px;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+.optionalLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.removeSectionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: inherit;
+  opacity: 0.4;
+  padding: 0.2rem;
+  flex-shrink: 0;
+
+  &:hover { opacity: 1; }
+}
+
+// --- Options ---
+.optionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.optionChip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.65rem;
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-radius: 20px;
+  font-size: 0.8rem;
+}
+
+.removeOptionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  color: inherit;
+  opacity: 0.5;
+  padding: 0;
+  line-height: 1;
+
+  &:hover { opacity: 1; }
+}
+
+// --- Add option ---
+.addOptionArea {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.addOptionBtn {
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+
+  &:hover { opacity: 1; }
+}
+
+.addOptionHint {
+  font-size: 0.72rem;
+  opacity: 0.4;
+}
+
+.addSectionBtn {
+  background: none;
+  border: 1px dashed color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  opacity: 0.6;
+  width: 100%;
+  transition: opacity 0.15s;
+
+  &:hover { opacity: 1; }
+}
+
+.error {
+  color: var(--color-danger, #e53e3e);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-danger, #e53e3e);
+  border-radius: var(--borderRadius);
+}

@@ -9,18 +9,22 @@ import {
   serverTimestamp, Timestamp, query, orderBy,
 } from "firebase/firestore"
 import {
-  MenuSession, Meal, DayPlan, MealSlot, PantryItem, DAYS,
-  getUniqueIngredientNames, getAllMealIngredients,
+  MenuSession, Meal, DayPlan, MealSlot, PantryItem, MealTemplate, IngredientCategory, DAYS,
+  getAllMealIngredients,
   parseAmount, convertAmount, normalizeKey,
 } from "@/components/menu/types"
-import MealList from "@/components/menu/mealList"
-import MealForm from "@/components/menu/mealForm"
+import { SaveTemplateData } from "@/components/menu/templateForm"
+import { SaveOptionData } from "@/components/menu/optionEditor"
+import { seedDemoData } from "@/components/menu/seedData"
+import TemplateList from "@/components/menu/templateList"
+import TemplateForm from "@/components/menu/templateForm"
+import MealBuilder from "@/components/menu/mealBuilder"
 import WeeklyPlan from "@/components/menu/weeklyPlan"
 import ShoppingList from "@/components/menu/shoppingList"
 import Pantry from "@/components/menu/pantry"
 import Link from "next/link"
 
-type Tab = "meals" | "pantry" | "plan" | "shopping"
+type Tab = "build" | "pantry" | "plan" | "shopping"
 
 export interface SaveMealData {
   name: string
@@ -42,12 +46,16 @@ const MenuSessionPage: React.FC = () => {
   const [session, setSession] = useState<MenuSession | null>(null)
   const [meals, setMeals] = useState<Meal[]>([])
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([])
-  const [activeTab, setActiveTab] = useState<Tab>("meals")
+  const [templates, setTemplates] = useState<MealTemplate[]>([])
+  const [ingredientCategories, setIngredientCategories] = useState<IngredientCategory[]>([])
+  const [activeTab, setActiveTab] = useState<Tab>("build")
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
-  const [showForm, setShowForm] = useState(false)
-  const [editingMeal, setEditingMeal] = useState<Meal | null>(null)
-  const [variationParent, setVariationParent] = useState<Meal | null>(null)
+
+  // Builder state
+  const [activeTemplate, setActiveTemplate] = useState<MealTemplate | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<MealTemplate | null>(null)
+  const [showTemplateForm, setShowTemplateForm] = useState(false)
 
   useEffect(() => {
     const unsubSession = onSnapshot(doc(firestore, "menuSessions", code), (snap) => {
@@ -101,80 +109,172 @@ const MenuSessionPage: React.FC = () => {
       } as PantryItem)))
     })
 
+    const templatesQuery = query(
+      collection(firestore, "menuSessions", code, "templates"),
+      orderBy("createdAt", "asc")
+    )
+    const unsubTemplates = onSnapshot(templatesQuery, (snap) => {
+      setTemplates(snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        sections: d.data().sections ?? [],
+      } as MealTemplate)))
+    })
+
+    const categoriesQuery = query(
+      collection(firestore, "menuSessions", code, "ingredientCategories"),
+      orderBy("order", "asc")
+    )
+    const unsubCategories = onSnapshot(categoriesQuery, (snap) => {
+      setIngredientCategories(snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      } as IngredientCategory)))
+    })
+
     return () => {
       unsubSession()
       unsubMeals()
       unsubPantry()
+      unsubTemplates()
+      unsubCategories()
     }
   }, [code])
 
-  const allIngredientNames = useMemo(() => getUniqueIngredientNames(meals), [meals])
   const subMeals = useMemo(() => meals.filter((m) => m.isSubMeal), [meals])
+  const savedMeals = useMemo(() => meals.filter((m) => !m.isSubMeal), [meals])
 
-  const pantryStockNames = useMemo(() =>
-    pantryItems.filter((p) => p.quantity > 0).map((p) => normalizeKey(p.name)),
-    [pantryItems]
-  )
+  // --- Template CRUD ---
+  const handleSaveTemplate = useCallback(async (data: SaveTemplateData) => {
+    if (editingTemplate) {
+      await updateDoc(doc(firestore, "menuSessions", code, "templates", editingTemplate.id), {
+        name: data.name,
+        sections: data.sections,
+        updatedAt: serverTimestamp(),
+      })
+    } else {
+      await addDoc(collection(firestore, "menuSessions", code, "templates"), {
+        name: data.name,
+        sections: data.sections,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    }
+    setShowTemplateForm(false)
+    setEditingTemplate(null)
+  }, [code, editingTemplate])
 
-  // --- Meal CRUD ---
-  const handleSaveMeal = useCallback(async (data: SaveMealData) => {
-    await addDoc(collection(firestore, "menuSessions", code, "meals"), {
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    await deleteDoc(doc(firestore, "menuSessions", code, "templates", id))
+  }, [code])
+
+  // --- Create an option (sub-meal) from within TemplateForm / OptionEditor ---
+  const handleCreateOption = useCallback(async (data: SaveOptionData): Promise<string> => {
+    const ref = await addDoc(collection(firestore, "menuSessions", code, "meals"), {
       name: data.name,
-      isSubMeal: data.isSubMeal,
-      parentId: data.parentId,
-      categories: data.categories,
+      isSubMeal: true,
+      parentId: null,
+      categories: [],
       ingredients: data.ingredients,
       subMealIds: data.subMealIds,
-      steps: data.steps,
-      difficulty: data.difficulty,
-      rating: data.rating,
-      maxPerWeek: data.maxPerWeek,
+      steps: [],
+      difficulty: 0,
+      rating: 0,
+      maxPerWeek: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
-    setShowForm(false)
-    setVariationParent(null)
+    return ref.id
   }, [code])
 
-  const handleUpdateMeal = useCallback(async (mealId: string, data: SaveMealData) => {
-    await updateDoc(doc(firestore, "menuSessions", code, "meals", mealId), {
-      name: data.name,
-      isSubMeal: data.isSubMeal,
-      parentId: data.parentId,
-      categories: data.categories,
-      ingredients: data.ingredients,
-      subMealIds: data.subMealIds,
-      steps: data.steps,
-      difficulty: data.difficulty,
-      rating: data.rating,
-      maxPerWeek: data.maxPerWeek,
+  // --- Build & save a meal from the builder ---
+  const handleBuildAndSaveMeal = useCallback(async (name: string, subMealIds: string[]): Promise<string> => {
+    const ref = await addDoc(collection(firestore, "menuSessions", code, "meals"), {
+      name,
+      isSubMeal: false,
+      parentId: null,
+      categories: [],
+      ingredients: [],
+      subMealIds,
+      steps: [],
+      difficulty: 0,
+      rating: 0,
+      maxPerWeek: null,
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
-    setEditingMeal(null)
-    setShowForm(false)
+    return ref.id
   }, [code])
+
+  // --- Add a built or saved meal to a plan slot ---
+  const handlePlanMealSlot = useCallback(async (
+    mealId: string,
+    mealName: string,
+    day: string,
+    slot: "lunch" | "dinner"
+  ) => {
+    const newSlot: MealSlot = { mealId, mealName }
+    const activePlan = session?.activePlan
+
+    if (activePlan) {
+      const updatedDays = activePlan.days.map((d) =>
+        d.day === day ? { ...d, [slot]: newSlot } : d
+      )
+      await updateDoc(doc(firestore, "menuSessions", code), {
+        activePlan: { ...activePlan, days: updatedDays },
+      })
+    } else {
+      const now = new Date()
+      const monday = new Date(now)
+      monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+      const weekLabel = `Week of ${monday.toLocaleDateString("en-NZ", { month: "long", day: "numeric" })}`
+      const days: DayPlan[] = DAYS.map((d) => ({
+        day: d,
+        lunch: d === day && slot === "lunch" ? newSlot : null,
+        dinner: d === day && slot === "dinner" ? newSlot : null,
+      }))
+      await updateDoc(doc(firestore, "menuSessions", code), {
+        activePlan: { createdAt: Timestamp.now(), weekLabel, days },
+      })
+    }
+  }, [code, session])
+
+  const handleBuildAndPlanMeal = useCallback(async (
+    mealId: string,
+    mealName: string,
+    day: string,
+    slot: "lunch" | "dinner"
+  ) => {
+    await handlePlanMealSlot(mealId, mealName, day, slot)
+  }, [handlePlanMealSlot])
 
   const handleDeleteMeal = useCallback(async (mealId: string) => {
     await deleteDoc(doc(firestore, "menuSessions", code, "meals", mealId))
   }, [code])
 
-  const handleEditMeal = useCallback((meal: Meal) => {
-    setEditingMeal(meal)
-    setVariationParent(null)
-    setShowForm(true)
-  }, [])
+  // --- Seed demo data ---
+  const handleLoadDemoData = useCallback(async () => {
+    await seedDemoData(code)
+  }, [code])
 
-  const handleCreateVariation = useCallback((baseMeal: Meal) => {
-    setEditingMeal(null)
-    setVariationParent(baseMeal)
-    setShowForm(true)
-  }, [])
+  // --- Ingredient category CRUD ---
+  const handleAddCategory = useCallback(async (name: string) => {
+    await addDoc(collection(firestore, "menuSessions", code, "ingredientCategories"), {
+      name,
+      order: ingredientCategories.length,
+      createdAt: serverTimestamp(),
+    })
+  }, [code, ingredientCategories.length])
 
-  const handleCloseForm = useCallback(() => {
-    setShowForm(false)
-    setEditingMeal(null)
-    setVariationParent(null)
-  }, [])
+  const handleDeleteCategory = useCallback(async (id: string) => {
+    await deleteDoc(doc(firestore, "menuSessions", code, "ingredientCategories", id))
+  }, [code])
+
+  const handleReorderCategories = useCallback(async (reordered: IngredientCategory[]) => {
+    await Promise.all(reordered.map((cat, i) =>
+      updateDoc(doc(firestore, "menuSessions", code, "ingredientCategories", cat.id), { order: i })
+    ))
+  }, [code])
 
   // --- Pantry CRUD ---
   const handlePantryUpdate = useCallback(async (itemId: string, updates: Partial<PantryItem>) => {
@@ -184,12 +284,13 @@ const MenuSessionPage: React.FC = () => {
     })
   }, [code])
 
-  const handlePantryAdd = useCallback(async (name: string, unit: string, isStaple: boolean) => {
+  const handlePantryAdd = useCallback(async (name: string, unit: string, isStaple: boolean, category?: string) => {
     await addDoc(collection(firestore, "menuSessions", code, "pantry"), {
       name,
       quantity: 0,
       unit,
       isStaple,
+      category: category ?? null,
       lowStockThreshold: 0,
       updatedAt: serverTimestamp(),
     })
@@ -217,6 +318,7 @@ const MenuSessionPage: React.FC = () => {
         quantity: 0,
         unit,
         isStaple: false,
+        category: null,
         lowStockThreshold: 0,
         updatedAt: serverTimestamp(),
       }))
@@ -282,6 +384,7 @@ const MenuSessionPage: React.FC = () => {
           quantity: 0,
           unit: item.unit,
           isStaple: false,
+          category: null,
           lowStockThreshold: 0,
           updatedAt: serverTimestamp(),
         }))
@@ -405,10 +508,10 @@ const MenuSessionPage: React.FC = () => {
 
       <div className={styles.tabs}>
         <button
-          className={`${styles.tab} ${activeTab === "meals" ? styles.tabActive : ""}`}
-          onClick={() => setActiveTab("meals")}
+          className={`${styles.tab} ${activeTab === "build" ? styles.tabActive : ""}`}
+          onClick={() => { setActiveTab("build"); setActiveTemplate(null) }}
         >
-          Meals
+          Build
         </button>
         <button
           className={`${styles.tab} ${activeTab === "pantry" ? styles.tabActive : ""}`}
@@ -431,14 +534,27 @@ const MenuSessionPage: React.FC = () => {
       </div>
 
       <div className={styles.content}>
-        {activeTab === "meals" && (
-          <MealList
-            meals={meals}
-            pantryInStock={pantryStockNames}
-            onAdd={() => { setEditingMeal(null); setVariationParent(null); setShowForm(true) }}
-            onEdit={handleEditMeal}
-            onDelete={handleDeleteMeal}
-            onCreateVariation={handleCreateVariation}
+        {activeTab === "build" && !activeTemplate && (
+          <TemplateList
+            templates={templates}
+            savedMeals={savedMeals}
+            onSelectTemplate={setActiveTemplate}
+            onNewTemplate={() => { setEditingTemplate(null); setShowTemplateForm(true) }}
+            onEditTemplate={(t) => { setEditingTemplate(t); setShowTemplateForm(true) }}
+            onDeleteTemplate={handleDeleteTemplate}
+            onPlanSavedMeal={handlePlanMealSlot}
+            onDeleteSavedMeal={handleDeleteMeal}
+            onLoadDemoData={handleLoadDemoData}
+          />
+        )}
+
+        {activeTab === "build" && activeTemplate && (
+          <MealBuilder
+            template={activeTemplate}
+            allMeals={meals}
+            onBack={() => setActiveTemplate(null)}
+            onSaveMeal={handleBuildAndSaveMeal}
+            onPlanMeal={handleBuildAndPlanMeal}
           />
         )}
 
@@ -446,10 +562,14 @@ const MenuSessionPage: React.FC = () => {
           <Pantry
             meals={meals}
             pantryItems={pantryItems}
+            categories={ingredientCategories}
             onUpdate={handlePantryUpdate}
             onAdd={handlePantryAdd}
             onDelete={handlePantryDelete}
             onAddAllFromMeals={handleAddAllFromMeals}
+            onAddCategory={handleAddCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onReorderCategories={handleReorderCategories}
           />
         )}
 
@@ -473,18 +593,15 @@ const MenuSessionPage: React.FC = () => {
         )}
       </div>
 
-      {showForm && (
-        <MealForm
-          meal={editingMeal}
-          variationParent={variationParent}
-          allIngredientNames={allIngredientNames}
+      {showTemplateForm && (
+        <TemplateForm
+          template={editingTemplate}
           availableSubMeals={subMeals}
-          allMeals={meals}
-          onSave={editingMeal
-            ? (data) => handleUpdateMeal(editingMeal.id, data)
-            : handleSaveMeal
-          }
-          onClose={handleCloseForm}
+          pantryItems={pantryItems}
+          categories={ingredientCategories}
+          onSave={handleSaveTemplate}
+          onClose={() => { setShowTemplateForm(false); setEditingTemplate(null) }}
+          onCreateOption={handleCreateOption}
         />
       )}
     </div>

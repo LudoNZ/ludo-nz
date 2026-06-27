@@ -93,6 +93,14 @@ export interface PantryItem {
   isStaple: boolean
   lowStockThreshold: number
   updatedAt: Timestamp
+  category?: string
+}
+
+export interface IngredientCategory {
+  id: string
+  name: string
+  order: number
+  createdAt: Timestamp
 }
 
 export interface ConsumptionEntry {
@@ -167,4 +175,23 @@ export function convertAmount(amount: number, fromUnit: string, toUnit: string):
 
 export function normalizeKey(name: string): string {
   return name.toLowerCase().trim()
+}
+
+export function generateSectionId(): string {
+  return Math.random().toString(36).substring(2, 8)
+}
+
+export interface TemplateSection {
+  id: string
+  name: string
+  isOptional: boolean
+  optionIds: string[]
+}
+
+export interface MealTemplate {
+  id: string
+  name: string
+  sections: TemplateSection[]
+  createdAt: Timestamp
+  updatedAt: Timestamp
 }
