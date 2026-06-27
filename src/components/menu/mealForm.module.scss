@@ -17,7 +17,7 @@
   border-radius: var(--borderRadius);
   padding: 1.5rem;
   width: 100%;
-  max-width: 480px;
+  max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
@@ -49,8 +49,14 @@
 
 .title {
   font-size: 1.3rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
   color: var(--foreground);
+}
+
+.variationNote {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  margin-bottom: 1rem;
 }
 
 .error {
@@ -68,15 +74,14 @@
   font-size: 0.85rem;
   opacity: 0.7;
   margin-bottom: 0.4rem;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
 
   &:first-of-type {
-    margin-top: 0;
+    margin-top: 0.75rem;
   }
 }
 
-.input,
-.textarea {
+.input {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid var(--foreground);
@@ -98,32 +103,94 @@
   }
 }
 
-.textarea {
-  resize: vertical;
-  min-height: 80px;
+// --- Type toggle ---
+.typeToggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
+.typeBtn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.15s;
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+.typeBtnActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+.typeHint {
+  font-size: 0.7rem;
+  opacity: 0.4;
+  width: 100%;
+}
+
+// --- Sub-meals ---
+.subMealList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.subMealItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.3rem 0;
+
+  input {
+    accent-color: var(--color-primary);
+    width: 18px;
+    height: 18px;
+  }
+}
+
+// --- Ingredients ---
 .ingredientList {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  position: relative;
 }
 
 .ingredientRow {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
   align-items: center;
 }
 
-.ingredientName {
+.ingredientNameWrap {
   flex: 2;
-  padding: 0.65rem;
+  position: relative;
+}
+
+.ingredientName {
+  width: 100%;
+  padding: 0.6rem;
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   background: var(--background);
   color: var(--foreground);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   box-sizing: border-box;
 
   &::placeholder {
@@ -134,19 +201,50 @@
     outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--background);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  z-index: 10;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.autocompleteItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
   }
 }
 
 .ingredientAmount {
-  flex: 1;
-  padding: 0.65rem;
+  width: 60px;
+  padding: 0.6rem 0.4rem;
   border: 1px solid var(--foreground);
   border-radius: var(--borderRadius);
   background: var(--background);
   color: var(--foreground);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   box-sizing: border-box;
+  text-align: center;
 
   &::placeholder {
     opacity: 0.4;
@@ -156,6 +254,23 @@
     outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.ingredientUnit {
+  width: 65px;
+  padding: 0.55rem 0.2rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
   }
 }
 
@@ -163,16 +278,16 @@
   background: none;
   border: 1px solid var(--color-danger);
   color: var(--color-danger);
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--borderRadius);
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: 0.5;
 
   &:hover {
     opacity: 1;
@@ -181,17 +296,17 @@
   }
 }
 
-.addIngredientBtn {
+.addBtn {
   background: none;
   border: 1px dashed color-mix(in srgb, var(--foreground) 30%, transparent);
   color: var(--color-primary);
-  padding: 0.6rem;
+  padding: 0.5rem;
   border-radius: var(--borderRadius);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   width: 100%;
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   transition: border-color 0.15s;
 
   &:hover {
@@ -199,6 +314,119 @@
   }
 }
 
+// --- Steps ---
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stepRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.stepNumber {
+  font-size: 0.75rem;
+  opacity: 0.4;
+  padding-top: 0.65rem;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.stepContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.stepInput {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.stepMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.stepMetaLabel {
+  font-size: 0.65rem;
+  opacity: 0.4;
+  text-transform: uppercase;
+}
+
+.stepDeps {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.stepDepBtn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: 3px;
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.65rem;
+  cursor: pointer;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.stepDepActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.stepSubMealSelect {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+}
+
+// --- Actions ---
 .actions {
   display: flex;
   gap: 0.75rem;

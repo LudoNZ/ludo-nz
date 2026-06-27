@@ -101,13 +101,17 @@ const WeeklyPlan: React.FC<WeeklyPlanProps> = ({ plan, meals, onGenerate, onSwap
                           <div className={styles.previewIngredients}>
                             {mealDetail.ingredients.map((ing, i) => (
                               <span key={i} className={styles.previewIngredient}>
-                                {ing.name}{ing.amount ? ` (${ing.amount})` : ""}
+                                {ing.name}{ing.amount ? ` (${ing.amount}${ing.unit ? ` ${ing.unit}` : ""})` : ""}
                               </span>
                             ))}
                           </div>
                         )}
-                        {mealDetail.instructions && (
-                          <p className={styles.previewInstructions}>{mealDetail.instructions}</p>
+                        {mealDetail.steps.length > 0 && (
+                          <div className={styles.previewInstructions}>
+                            {mealDetail.steps.map((step, si) => (
+                              <p key={step.id}>{si + 1}. {step.text}</p>
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}

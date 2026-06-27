@@ -1,0 +1,123 @@
+@import "/src/styles/config";
+
+.pantry {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.empty {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.emptyText {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.emptyHint {
+  opacity: 0.5;
+  font-size: 0.85rem;
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.summaryCount {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+}
+
+.summaryLabel {
+  font-size: 0.85rem;
+  opacity: 0.5;
+}
+
+.search {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+
+  &::placeholder {
+    opacity: 0.4;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.5rem;
+  cursor: pointer;
+  border-radius: var(--borderRadius);
+  transition: background 0.1s;
+
+  &:hover {
+    background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  }
+
+  &:not(:last-child) {
+    border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+}
+
+.itemInStock {
+  .itemName {
+    color: var(--color-primary);
+  }
+}
+
+.checkbox {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.itemName {
+  font-size: 0.95rem;
+}
+
+.itemUsedIn {
+  font-size: 0.65rem;
+  opacity: 0.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.divider {
+  border: none;
+  border-top: 1px dashed color-mix(in srgb, var(--foreground) 15%, transparent);
+  margin: 0.5rem 0;
+}

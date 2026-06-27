@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import styles from "./menuSessionPage.module.scss"
 import { useParams } from "next/navigation"
 import { firestore } from "../../../../firebase/client"
@@ -8,14 +8,27 @@ import {
   doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
   serverTimestamp, Timestamp, query, orderBy,
 } from "firebase/firestore"
-import { MenuSession, Meal, DayPlan, MealSlot, DAYS } from "@/components/menu/types"
+import {
+  MenuSession, Meal, DayPlan, MealSlot, DAYS,
+  getUniqueIngredientNames,
+} from "@/components/menu/types"
 import MealList from "@/components/menu/mealList"
 import MealForm from "@/components/menu/mealForm"
 import WeeklyPlan from "@/components/menu/weeklyPlan"
 import ShoppingList from "@/components/menu/shoppingList"
+import Pantry from "@/components/menu/pantry"
 import Link from "next/link"
 
-type Tab = "meals" | "plan" | "shopping"
+type Tab = "meals" | "pantry" | "plan" | "shopping"
+
+export interface SaveMealData {
+  name: string
+  isSubMeal: boolean
+  parentId: string | null
+  ingredients: { name: string; amount: string; unit: string }[]
+  subMealIds: string[]
+  steps: { id: string; text: string; afterStepIds: string[]; subMealId?: string }[]
+}
 
 const MenuSessionPage: React.FC = () => {
   const params = useParams()
@@ -28,6 +41,7 @@ const MenuSessionPage: React.FC = () => {
   const [notFound, setNotFound] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null)
+  const [variationParent, setVariationParent] = useState<Meal | null>(null)
 
   useEffect(() => {
     const unsubSession = onSnapshot(doc(firestore, "menuSessions", code), (snap) => {
@@ -36,7 +50,11 @@ const MenuSessionPage: React.FC = () => {
         setLoading(false)
         return
       }
-      setSession(snap.data() as MenuSession)
+      const data = snap.data()
+      setSession({
+        ...data,
+        pantryInStock: data.pantryInStock ?? [],
+      } as MenuSession)
       setLoading(false)
     })
 
@@ -45,7 +63,15 @@ const MenuSessionPage: React.FC = () => {
       orderBy("createdAt", "asc")
     )
     const unsubMeals = onSnapshot(mealsQuery, (snap) => {
-      setMeals(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Meal)))
+      setMeals(snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        isSubMeal: d.data().isSubMeal ?? false,
+        parentId: d.data().parentId ?? null,
+        subMealIds: d.data().subMealIds ?? [],
+        steps: d.data().steps ?? [],
+        ingredients: d.data().ingredients ?? [],
+      } as Meal)))
     })
 
     return () => {
@@ -54,22 +80,32 @@ const MenuSessionPage: React.FC = () => {
     }
   }, [code])
 
-  const handleAddMeal = useCallback(async (name: string, ingredients: { name: string; amount: string }[], instructions: string) => {
+  const allIngredientNames = useMemo(() => getUniqueIngredientNames(meals), [meals])
+  const subMeals = useMemo(() => meals.filter((m) => m.isSubMeal), [meals])
+
+  const handleSaveMeal = useCallback(async (data: SaveMealData) => {
     await addDoc(collection(firestore, "menuSessions", code, "meals"), {
-      name,
-      ingredients,
-      instructions,
+      name: data.name,
+      isSubMeal: data.isSubMeal,
+      parentId: data.parentId,
+      ingredients: data.ingredients,
+      subMealIds: data.subMealIds,
+      steps: data.steps,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
     setShowForm(false)
+    setVariationParent(null)
   }, [code])
 
-  const handleUpdateMeal = useCallback(async (mealId: string, name: string, ingredients: { name: string; amount: string }[], instructions: string) => {
+  const handleUpdateMeal = useCallback(async (mealId: string, data: SaveMealData) => {
     await updateDoc(doc(firestore, "menuSessions", code, "meals", mealId), {
-      name,
-      ingredients,
-      instructions,
+      name: data.name,
+      isSubMeal: data.isSubMeal,
+      parentId: data.parentId,
+      ingredients: data.ingredients,
+      subMealIds: data.subMealIds,
+      steps: data.steps,
       updatedAt: serverTimestamp(),
     })
     setEditingMeal(null)
@@ -82,18 +118,36 @@ const MenuSessionPage: React.FC = () => {
 
   const handleEditMeal = useCallback((meal: Meal) => {
     setEditingMeal(meal)
+    setVariationParent(null)
+    setShowForm(true)
+  }, [])
+
+  const handleCreateVariation = useCallback((baseMeal: Meal) => {
+    setEditingMeal(null)
+    setVariationParent(baseMeal)
     setShowForm(true)
   }, [])
 
   const handleCloseForm = useCallback(() => {
     setShowForm(false)
     setEditingMeal(null)
+    setVariationParent(null)
   }, [])
 
-  const handleGeneratePlan = useCallback(async () => {
-    if (meals.length === 0) return
+  const handleTogglePantryItem = useCallback(async (ingredientName: string, inStock: boolean) => {
+    const current = session?.pantryInStock ?? []
+    const normalized = ingredientName.toLowerCase().trim()
+    const updated = inStock
+      ? [...current.filter((n) => n !== normalized), normalized]
+      : current.filter((n) => n !== normalized)
+    await updateDoc(doc(firestore, "menuSessions", code), { pantryInStock: updated })
+  }, [code, session])
 
-    const shuffled = [...meals].sort(() => Math.random() - 0.5)
+  const handleGeneratePlan = useCallback(async () => {
+    const mainMeals = meals.filter((m) => !m.isSubMeal)
+    if (mainMeals.length === 0) return
+
+    const shuffled = [...mainMeals].sort(() => Math.random() - 0.5)
     const days: DayPlan[] = DAYS.map((day, i) => {
       const lunchMeal = shuffled[i % shuffled.length]
       let dinnerMeal = shuffled[(i + Math.ceil(shuffled.length / 2)) % shuffled.length]
@@ -113,31 +167,28 @@ const MenuSessionPage: React.FC = () => {
     const weekLabel = `Week of ${monday.toLocaleDateString("en-NZ", { month: "long", day: "numeric" })}`
 
     await updateDoc(doc(firestore, "menuSessions", code), {
-      activePlan: {
-        createdAt: Timestamp.now(),
-        weekLabel,
-        days,
-      },
+      activePlan: { createdAt: Timestamp.now(), weekLabel, days },
     })
   }, [code, meals])
 
   const handleSwapMeal = useCallback(async (dayIndex: number, slot: "lunch" | "dinner") => {
-    if (!session?.activePlan || meals.length === 0) return
+    if (!session?.activePlan) return
+    const mainMeals = meals.filter((m) => !m.isSubMeal)
+    if (mainMeals.length === 0) return
 
-    const currentPlan = session.activePlan
-    const currentSlot = currentPlan.days[dayIndex][slot]
-    const available = meals.filter((m) => m.id !== currentSlot?.mealId)
+    const currentSlot = session.activePlan.days[dayIndex][slot]
+    const available = mainMeals.filter((m) => m.id !== currentSlot?.mealId)
     const pick = available.length > 0
       ? available[Math.floor(Math.random() * available.length)]
-      : meals[Math.floor(Math.random() * meals.length)]
+      : mainMeals[Math.floor(Math.random() * mainMeals.length)]
 
     const newSlot: MealSlot = { mealId: pick.id, mealName: pick.name }
-    const updatedDays = currentPlan.days.map((d, i) =>
+    const updatedDays = session.activePlan.days.map((d, i) =>
       i === dayIndex ? { ...d, [slot]: newSlot } : d
     )
 
     await updateDoc(doc(firestore, "menuSessions", code), {
-      activePlan: { ...currentPlan, days: updatedDays },
+      activePlan: { ...session.activePlan, days: updatedDays },
     })
   }, [code, session, meals])
 
@@ -176,19 +227,25 @@ const MenuSessionPage: React.FC = () => {
           className={`${styles.tab} ${activeTab === "meals" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("meals")}
         >
-          My Meals
+          Meals
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "pantry" ? styles.tabActive : ""}`}
+          onClick={() => setActiveTab("pantry")}
+        >
+          Pantry
         </button>
         <button
           className={`${styles.tab} ${activeTab === "plan" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("plan")}
         >
-          This Week
+          Plan
         </button>
         <button
           className={`${styles.tab} ${activeTab === "shopping" ? styles.tabActive : ""}`}
           onClick={() => setActiveTab("shopping")}
         >
-          Shopping List
+          Shop
         </button>
       </div>
 
@@ -196,9 +253,19 @@ const MenuSessionPage: React.FC = () => {
         {activeTab === "meals" && (
           <MealList
             meals={meals}
-            onAdd={() => setShowForm(true)}
+            pantryInStock={session?.pantryInStock ?? []}
+            onAdd={() => { setEditingMeal(null); setVariationParent(null); setShowForm(true) }}
             onEdit={handleEditMeal}
             onDelete={handleDeleteMeal}
+            onCreateVariation={handleCreateVariation}
+          />
+        )}
+
+        {activeTab === "pantry" && (
+          <Pantry
+            meals={meals}
+            pantryInStock={session?.pantryInStock ?? []}
+            onToggle={handleTogglePantryItem}
           />
         )}
 
@@ -223,9 +290,13 @@ const MenuSessionPage: React.FC = () => {
       {showForm && (
         <MealForm
           meal={editingMeal}
+          variationParent={variationParent}
+          allIngredientNames={allIngredientNames}
+          availableSubMeals={subMeals}
+          allMeals={meals}
           onSave={editingMeal
-            ? (name, ingredients, instructions) => handleUpdateMeal(editingMeal.id, name, ingredients, instructions)
-            : handleAddMeal
+            ? (data) => handleUpdateMeal(editingMeal.id, data)
+            : handleSaveMeal
           }
           onClose={handleCloseForm}
         />

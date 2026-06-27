@@ -1,24 +1,45 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import styles from "./mealForm.module.scss"
 import Button from "@/components/button/button"
-import { Meal, Ingredient } from "./types"
+import { Meal, Ingredient, CookingStep, UNITS, generateStepId } from "./types"
+import { SaveMealData } from "@/app/menu/[code]/menuSessionPage"
 
 interface MealFormProps {
   meal: Meal | null
-  onSave: (name: string, ingredients: Ingredient[], instructions: string) => Promise<void>
+  variationParent: Meal | null
+  allIngredientNames: string[]
+  availableSubMeals: Meal[]
+  allMeals: Meal[]
+  onSave: (data: SaveMealData) => Promise<void>
   onClose: () => void
 }
 
-const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
-  const [name, setName] = useState(meal?.name ?? "")
-  const [ingredients, setIngredients] = useState<Ingredient[]>(
-    meal?.ingredients?.length ? meal.ingredients : [{ name: "", amount: "" }]
+const MealForm: React.FC<MealFormProps> = ({
+  meal, variationParent, allIngredientNames, availableSubMeals, allMeals, onSave, onClose,
+}) => {
+  const source = meal ?? variationParent
+
+  const [name, setName] = useState(
+    variationParent ? `${variationParent.name} (variation)` : (meal?.name ?? "")
   )
-  const [instructions, setInstructions] = useState(meal?.instructions ?? "")
+  const [isSubMeal, setIsSubMeal] = useState(source?.isSubMeal ?? false)
+  const [ingredients, setIngredients] = useState<Ingredient[]>(
+    source?.ingredients?.length ? [...source.ingredients] : [{ name: "", amount: "", unit: "" }]
+  )
+  const [selectedSubMealIds, setSelectedSubMealIds] = useState<string[]>(source?.subMealIds ?? [])
+  const [steps, setSteps] = useState<CookingStep[]>(
+    source?.steps?.length
+      ? source.steps.map((s) => ({ ...s }))
+      : [{ id: generateStepId(), text: "", afterStepIds: [] }]
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+
+  const [activeAutocomplete, setActiveAutocomplete] = useState<number | null>(null)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const autocompleteRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -28,8 +49,20 @@ const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose])
 
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+        setActiveAutocomplete(null)
+        setSuggestions([])
+      }
+    }
+    document.addEventListener("mousedown", onClick)
+    return () => document.removeEventListener("mousedown", onClick)
+  }, [])
+
+  // --- Ingredients ---
   const addIngredient = useCallback(() => {
-    setIngredients((prev) => [...prev, { name: "", amount: "" }])
+    setIngredients((prev) => [...prev, { name: "", amount: "", unit: "" }])
   }, [])
 
   const removeIngredient = useCallback((index: number) => {
@@ -40,8 +73,83 @@ const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
     setIngredients((prev) =>
       prev.map((ing, i) => (i === index ? { ...ing, [field]: value } : ing))
     )
+    if (field === "name") {
+      if (value.length >= 1) {
+        const matches = allIngredientNames.filter(
+          (n) => n.toLowerCase().includes(value.toLowerCase()) && n.toLowerCase() !== value.toLowerCase()
+        )
+        setSuggestions(matches.slice(0, 6))
+        setActiveAutocomplete(index)
+      } else {
+        setSuggestions([])
+        setActiveAutocomplete(null)
+      }
+    }
+  }, [allIngredientNames])
+
+  const selectSuggestion = useCallback((index: number, value: string) => {
+    setIngredients((prev) =>
+      prev.map((ing, i) => (i === index ? { ...ing, name: value } : ing))
+    )
+    setSuggestions([])
+    setActiveAutocomplete(null)
   }, [])
 
+  // --- Steps ---
+  const addStep = useCallback(() => {
+    setSteps((prev) => [...prev, { id: generateStepId(), text: "", afterStepIds: [] }])
+  }, [])
+
+  const removeStep = useCallback((index: number) => {
+    setSteps((prev) => {
+      const removedId = prev[index].id
+      return prev
+        .filter((_, i) => i !== index)
+        .map((s) => ({ ...s, afterStepIds: s.afterStepIds.filter((id) => id !== removedId) }))
+    })
+  }, [])
+
+  const updateStepText = useCallback((index: number, text: string) => {
+    setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, text } : s)))
+  }, [])
+
+  const toggleStepDependency = useCallback((stepIndex: number, depId: string) => {
+    setSteps((prev) => prev.map((s, i) => {
+      if (i !== stepIndex) return s
+      const has = s.afterStepIds.includes(depId)
+      return {
+        ...s,
+        afterStepIds: has
+          ? s.afterStepIds.filter((id) => id !== depId)
+          : [...s.afterStepIds, depId],
+      }
+    }))
+  }, [])
+
+  const setStepSubMeal = useCallback((stepIndex: number, subMealId: string | undefined) => {
+    setSteps((prev) => prev.map((s, i) => {
+      if (i !== stepIndex) return s
+      const updated = { ...s, subMealId }
+      if (subMealId) {
+        const subMeal = allMeals.find((m) => m.id === subMealId)
+        if (subMeal && !updated.text) {
+          updated.text = `Make the ${subMeal.name}`
+        }
+      }
+      return updated
+    }))
+  }, [allMeals])
+
+  // --- Sub-meals ---
+  const toggleSubMeal = useCallback((subMealId: string) => {
+    setSelectedSubMealIds((prev) =>
+      prev.includes(subMealId)
+        ? prev.filter((id) => id !== subMealId)
+        : [...prev, subMealId]
+    )
+  }, [])
+
+  // --- Save ---
   const handleSave = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
@@ -50,10 +158,19 @@ const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
     }
 
     const validIngredients = ingredients.filter((i) => i.name.trim())
+    const validSteps = steps.filter((s) => s.text.trim())
+
     setSaving(true)
     setError("")
     try {
-      await onSave(trimmedName, validIngredients, instructions.trim())
+      await onSave({
+        name: trimmedName,
+        isSubMeal,
+        parentId: variationParent ? variationParent.id : (meal?.parentId ?? null),
+        ingredients: validIngredients,
+        subMealIds: selectedSubMealIds,
+        steps: validSteps,
+      })
     } catch {
       setError("Something went wrong. Try again.")
     } finally {
@@ -61,15 +178,26 @@ const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
     }
   }
 
+  const filteredSubMeals = availableSubMeals.filter((sm) =>
+    !meal || sm.id !== meal.id
+  )
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <button className={styles.closeBtn} onClick={onClose}>✕</button>
 
-        <h2 className={styles.title}>{meal ? "Edit Meal" : "Add a Meal"}</h2>
+        <h2 className={styles.title}>
+          {meal ? "Edit Meal" : variationParent ? "Create Variation" : "Add a Meal"}
+        </h2>
+
+        {variationParent && (
+          <p className={styles.variationNote}>Based on: {variationParent.name}</p>
+        )}
 
         {error && <p className={styles.error}>{error}</p>}
 
+        {/* Name */}
         <label className={styles.label}>What&apos;s it called?</label>
         <input
           type="text"
@@ -77,59 +205,171 @@ const MealForm: React.FC<MealFormProps> = ({ meal, onSave, onClose }) => {
           onChange={(e) => setName(e.target.value)}
           className={styles.input}
           placeholder="e.g. Spaghetti Bolognese"
-          maxLength={60}
+          maxLength={80}
           autoFocus
         />
 
-        <label className={styles.label}>What do you need?</label>
-        <div className={styles.ingredientList}>
+        {/* Type toggle */}
+        <div className={styles.typeToggle}>
+          <button
+            className={`${styles.typeBtn} ${!isSubMeal ? styles.typeBtnActive : ""}`}
+            onClick={() => setIsSubMeal(false)}
+          >
+            Full Meal
+          </button>
+          <button
+            className={`${styles.typeBtn} ${isSubMeal ? styles.typeBtnActive : ""}`}
+            onClick={() => setIsSubMeal(true)}
+          >
+            Component
+          </button>
+          <span className={styles.typeHint}>
+            {isSubMeal ? "A part of other meals (e.g. white sauce)" : "A complete meal"}
+          </span>
+        </div>
+
+        {/* Sub-meals / Components */}
+        {filteredSubMeals.length > 0 && (
+          <>
+            <label className={styles.label}>Uses components</label>
+            <div className={styles.subMealList}>
+              {filteredSubMeals.map((sm) => (
+                <label key={sm.id} className={styles.subMealItem}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSubMealIds.includes(sm.id)}
+                    onChange={() => toggleSubMeal(sm.id)}
+                  />
+                  <span>{sm.name}</span>
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Ingredients */}
+        <label className={styles.label}>Ingredients</label>
+        <div className={styles.ingredientList} ref={autocompleteRef}>
           {ingredients.map((ing, i) => (
             <div key={i} className={styles.ingredientRow}>
-              <input
-                type="text"
-                value={ing.name}
-                onChange={(e) => updateIngredient(i, "name", e.target.value)}
-                className={styles.ingredientName}
-                placeholder="Ingredient"
-                maxLength={40}
-              />
+              <div className={styles.ingredientNameWrap}>
+                <input
+                  type="text"
+                  value={ing.name}
+                  onChange={(e) => updateIngredient(i, "name", e.target.value)}
+                  className={styles.ingredientName}
+                  placeholder="Ingredient"
+                  maxLength={40}
+                />
+                {activeAutocomplete === i && suggestions.length > 0 && (
+                  <div className={styles.autocomplete}>
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        className={styles.autocompleteItem}
+                        onMouseDown={(e) => { e.preventDefault(); selectSuggestion(i, s) }}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <input
                 type="text"
                 value={ing.amount}
                 onChange={(e) => updateIngredient(i, "amount", e.target.value)}
                 className={styles.ingredientAmount}
-                placeholder="Amount"
-                maxLength={20}
+                placeholder="Qty"
+                maxLength={10}
               />
+              <select
+                value={ing.unit}
+                onChange={(e) => updateIngredient(i, "unit", e.target.value)}
+                className={styles.ingredientUnit}
+              >
+                {UNITS.map((u) => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
               {ingredients.length > 1 && (
-                <button
-                  className={styles.removeBtn}
-                  onClick={() => removeIngredient(i)}
-                  title="Remove"
-                >
+                <button className={styles.removeBtn} onClick={() => removeIngredient(i)} title="Remove">
                   −
                 </button>
               )}
             </div>
           ))}
         </div>
-
-        <button className={styles.addIngredientBtn} onClick={addIngredient}>
+        <button className={styles.addBtn} onClick={addIngredient}>
           + Add ingredient
         </button>
 
-        <label className={styles.label}>How do you make it?</label>
-        <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          className={styles.textarea}
-          placeholder="Write the recipe steps here (optional)"
-          rows={4}
-        />
+        {/* Steps */}
+        <label className={styles.label}>Steps</label>
+        <div className={styles.stepList}>
+          {steps.map((step, i) => (
+            <div key={step.id} className={styles.stepRow}>
+              <span className={styles.stepNumber}>{i + 1}</span>
+              <div className={styles.stepContent}>
+                <input
+                  type="text"
+                  value={step.text}
+                  onChange={(e) => updateStepText(i, e.target.value)}
+                  className={styles.stepInput}
+                  placeholder={`Step ${i + 1}`}
+                  maxLength={200}
+                />
+
+                {/* Predecessor links */}
+                {i > 0 && (
+                  <div className={styles.stepMeta}>
+                    <span className={styles.stepMetaLabel}>After:</span>
+                    <div className={styles.stepDeps}>
+                      {steps.slice(0, i).map((dep, depIdx) => (
+                        <button
+                          key={dep.id}
+                          className={`${styles.stepDepBtn} ${step.afterStepIds.includes(dep.id) ? styles.stepDepActive : ""}`}
+                          onClick={() => toggleStepDependency(i, dep.id)}
+                          title={dep.text || `Step ${depIdx + 1}`}
+                        >
+                          {depIdx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-meal reference */}
+                {filteredSubMeals.length > 0 && (
+                  <div className={styles.stepMeta}>
+                    <select
+                      value={step.subMealId ?? ""}
+                      onChange={(e) => setStepSubMeal(i, e.target.value || undefined)}
+                      className={styles.stepSubMealSelect}
+                    >
+                      <option value="">No component</option>
+                      {filteredSubMeals.map((sm) => (
+                        <option key={sm.id} value={sm.id}>Uses: {sm.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              {steps.length > 1 && (
+                <button className={styles.removeBtn} onClick={() => removeStep(i)} title="Remove step">
+                  −
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <button className={styles.addBtn} onClick={addStep}>
+          + Add step
+        </button>
 
         <div className={styles.actions}>
           <Button onClick={handleSave} disabled={saving} size="large">
-            {saving ? "Saving..." : "Save Meal"}
+            {saving ? "Saving..." : "Save"}
           </Button>
           <Button onClick={onClose} variant="secondary" size="large">
             Cancel

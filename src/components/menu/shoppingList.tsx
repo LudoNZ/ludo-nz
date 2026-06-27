@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react"
 import styles from "./shoppingList.module.scss"
 import Button from "@/components/button/button"
-import { WeeklyPlan, Meal, ShoppingItem } from "./types"
+import { WeeklyPlan, Meal, ShoppingItem, getAllMealIngredients } from "./types"
 
 interface ShoppingListProps {
   plan: WeeklyPlan | null
@@ -13,28 +13,36 @@ interface ShoppingListProps {
 
 function buildShoppingList(plan: WeeklyPlan, meals: Meal[]): ShoppingItem[] {
   const mealMap = new Map(meals.map((m) => [m.id, m]))
-  const aggregated = new Map<string, string[]>()
+  const aggregated = new Map<string, { amount: string; unit: string }[]>()
 
   for (const day of plan.days) {
     for (const slot of [day.lunch, day.dinner]) {
       if (!slot) continue
       const meal = mealMap.get(slot.mealId)
       if (!meal) continue
-      for (const ing of meal.ingredients) {
+      const allIngs = getAllMealIngredients(meal, meals)
+      for (const ing of allIngs) {
         const key = ing.name.toLowerCase().trim()
         if (!key) continue
         if (!aggregated.has(key)) aggregated.set(key, [])
-        if (ing.amount) aggregated.get(key)!.push(ing.amount)
+        if (ing.amount) {
+          aggregated.get(key)!.push({ amount: ing.amount, unit: ing.unit || "" })
+        }
       }
     }
   }
 
   return Array.from(aggregated.entries())
-    .map(([name, amounts]) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      amounts,
-      displayAmount: amounts.join(", "),
-    }))
+    .map(([name, entries]) => {
+      const display = entries
+        .map((e) => `${e.amount}${e.unit ? ` ${e.unit}` : ""}`)
+        .join(", ")
+      return {
+        name: name.charAt(0).toUpperCase() + name.slice(1),
+        entries,
+        displayAmount: display,
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -81,7 +89,7 @@ const ShoppingList: React.FC<ShoppingListProps> = ({ plan, meals, onGoToPlan }) 
         <p className={styles.emptyText}>No plan yet!</p>
         <p className={styles.emptyHint}>Make a weekly plan first, then your shopping list will appear here.</p>
         <div className={styles.emptyAction}>
-          <Button onClick={onGoToPlan} size="large">Go to This Week</Button>
+          <Button onClick={onGoToPlan} size="large">Go to Plan</Button>
         </div>
       </div>
     )

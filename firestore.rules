@@ -55,9 +55,10 @@ service cloud.firestore {
 
       match /meals/{mealId} {
         allow read: if true;
-        allow create: if request.resource.data.keys().hasAll(['name', 'ingredients', 'instructions', 'createdAt'])
+        allow create: if request.resource.data.keys().hasAll(['name', 'ingredients', 'steps', 'createdAt'])
           && request.resource.data.name is string
-          && request.resource.data.ingredients is list;
+          && request.resource.data.ingredients is list
+          && request.resource.data.steps is list;
         allow update: if request.resource.data.name is string
           && request.resource.data.ingredients is list;
         allow delete: if true;
