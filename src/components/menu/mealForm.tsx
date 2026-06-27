@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import styles from "./mealForm.module.scss"
 import Button from "@/components/button/button"
-import { Meal, Ingredient, CookingStep, UNITS, generateStepId } from "./types"
+import { Meal, Ingredient, CookingStep, UNITS, generateStepId, MEAL_CATEGORIES, MealCategory, CATEGORY_LABELS, DIFFICULTY_LABELS } from "./types"
 import { SaveMealData } from "@/app/menu/[code]/menuSessionPage"
 
 interface MealFormProps {
@@ -33,6 +33,12 @@ const MealForm: React.FC<MealFormProps> = ({
     source?.steps?.length
       ? source.steps.map((s) => ({ ...s }))
       : [{ id: generateStepId(), text: "", afterStepIds: [] }]
+  )
+  const [categories, setCategories] = useState<MealCategory[]>(source?.categories ?? [])
+  const [difficulty, setDifficulty] = useState(source?.difficulty ?? 0)
+  const [rating, setRating] = useState(source?.rating ?? 0)
+  const [maxPerWeek, setMaxPerWeek] = useState<string>(
+    source?.maxPerWeek !== null && source?.maxPerWeek !== undefined ? String(source.maxPerWeek) : ""
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -167,9 +173,13 @@ const MealForm: React.FC<MealFormProps> = ({
         name: trimmedName,
         isSubMeal,
         parentId: variationParent ? variationParent.id : (meal?.parentId ?? null),
+        categories,
         ingredients: validIngredients,
         subMealIds: selectedSubMealIds,
         steps: validSteps,
+        difficulty,
+        rating,
+        maxPerWeek: maxPerWeek ? parseInt(maxPerWeek, 10) : null,
       })
     } catch {
       setError("Something went wrong. Try again.")
@@ -227,6 +237,74 @@ const MealForm: React.FC<MealFormProps> = ({
             {isSubMeal ? "A part of other meals (e.g. white sauce)" : "A complete meal"}
           </span>
         </div>
+
+        {/* Categories */}
+        {!isSubMeal && (
+          <>
+            <label className={styles.label}>When do you eat it?</label>
+            <div className={styles.categoryRow}>
+              {MEAL_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  className={`${styles.categoryBtn} ${categories.includes(cat) ? styles.categoryBtnActive : ""}`}
+                  onClick={() => setCategories((prev) =>
+                    prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+                  )}
+                >
+                  {CATEGORY_LABELS[cat]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Difficulty + Rating + Frequency */}
+        <div className={styles.metaRow}>
+          <div className={styles.metaGroup}>
+            <label className={styles.metaLabel}>Difficulty</label>
+            <div className={styles.difficultyRow}>
+              {DIFFICULTY_LABELS.map((label, i) => (
+                <button
+                  key={label}
+                  className={`${styles.difficultyBtn} ${difficulty === i + 1 ? styles.difficultyActive : ""}`}
+                  onClick={() => setDifficulty(difficulty === i + 1 ? 0 : i + 1)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.metaGroup}>
+            <label className={styles.metaLabel}>Rating</label>
+            <div className={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  className={`${styles.starBtn} ${rating >= star ? styles.starActive : ""}`}
+                  onClick={() => setRating(rating === star ? 0 : star)}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {!isSubMeal && (
+          <div className={styles.frequencyRow}>
+            <label className={styles.metaLabel}>Max per week</label>
+            <input
+              type="number"
+              value={maxPerWeek}
+              onChange={(e) => setMaxPerWeek(e.target.value)}
+              className={styles.frequencyInput}
+              placeholder="No limit"
+              min={1}
+              max={14}
+            />
+          </div>
+        )}
 
         {/* Sub-meals / Components */}
         {filteredSubMeals.length > 0 && (

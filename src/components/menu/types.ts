@@ -24,6 +24,18 @@ export interface Ingredient {
   unit: string
 }
 
+export const MEAL_CATEGORIES = ["breakfast", "lunch", "dinner", "dessert"] as const
+export type MealCategory = typeof MEAL_CATEGORIES[number]
+
+export const CATEGORY_LABELS: Record<MealCategory, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  dessert: "Dessert",
+}
+
+export const DIFFICULTY_LABELS = ["Easy", "Medium", "Hard"] as const
+
 export interface CookingStep {
   id: string
   text: string
@@ -36,9 +48,13 @@ export interface Meal {
   name: string
   isSubMeal: boolean
   parentId: string | null
+  categories: MealCategory[]
   ingredients: Ingredient[]
   subMealIds: string[]
   steps: CookingStep[]
+  difficulty: number
+  rating: number
+  maxPerWeek: number | null
   createdAt: Timestamp
   updatedAt: Timestamp
 }

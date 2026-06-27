@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react"
 import styles from "./mealList.module.scss"
 import Button from "@/components/button/button"
-import { Meal, getAllMealIngredients } from "./types"
+import { Meal, getAllMealIngredients, CATEGORY_LABELS, DIFFICULTY_LABELS, MealCategory } from "./types"
 
 interface MealListProps {
   meals: Meal[]
@@ -209,6 +209,15 @@ const MealCard: React.FC<MealCardProps> = ({
     <div className={`${styles.card} ${isVariation ? styles.variationCard : ""} ${isComponent ? styles.componentCard : ""}`}>
       <div className={styles.cardContent} onClick={() => onEdit(meal)}>
         <h3 className={styles.mealName}>{meal.name}</h3>
+        {meal.categories.length > 0 && (
+          <div className={styles.categoryBadges}>
+            {meal.categories.map((cat) => (
+              <span key={cat} className={styles.categoryBadge}>
+                {CATEGORY_LABELS[cat as MealCategory]}
+              </span>
+            ))}
+          </div>
+        )}
         <div className={styles.cardMeta}>
           <span className={styles.ingredientCount}>
             {meal.ingredients.length} ingredient{meal.ingredients.length !== 1 ? "s" : ""}
@@ -221,6 +230,21 @@ const MealCard: React.FC<MealCardProps> = ({
           {meal.subMealIds.length > 0 && (
             <span className={styles.subMealCount}>
               {meal.subMealIds.length} component{meal.subMealIds.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          {meal.difficulty > 0 && (
+            <span className={styles.difficultyBadge}>
+              {DIFFICULTY_LABELS[meal.difficulty - 1]}
+            </span>
+          )}
+          {meal.rating > 0 && (
+            <span className={styles.ratingBadge}>
+              {"★".repeat(meal.rating)}
+            </span>
+          )}
+          {meal.maxPerWeek !== null && (
+            <span className={styles.freqBadge}>
+              max {meal.maxPerWeek}/wk
             </span>
           )}
         </div>

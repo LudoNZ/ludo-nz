@@ -141,6 +141,139 @@
   width: 100%;
 }
 
+// --- Categories ---
+.categoryRow {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.categoryBtn {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: 100px;
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.15s;
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+.categoryBtnActive {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+// --- Meta row (difficulty + rating) ---
+.metaRow {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.metaGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.metaLabel {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.difficultyRow {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.difficultyBtn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  opacity: 0.5;
+
+  &:hover {
+    opacity: 0.8;
+  }
+}
+
+.difficultyActive {
+  opacity: 1;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.ratingRow {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.starBtn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  color: var(--foreground);
+  opacity: 0.2;
+  transition: opacity 0.1s;
+
+  &:hover {
+    opacity: 0.6;
+  }
+}
+
+.starActive {
+  opacity: 1;
+  color: var(--color-primary);
+}
+
+.frequencyRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.frequencyInput {
+  width: 80px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+  text-align: center;
+
+  &::placeholder {
+    opacity: 0.4;
+    font-size: 0.75rem;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+  }
+}
+
 // --- Sub-meals ---
 .subMealList {
   display: flex;

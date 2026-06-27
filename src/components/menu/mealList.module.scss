@@ -113,11 +113,43 @@
   flex-wrap: wrap;
 }
 
+.categoryBadges {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.categoryBadge {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 100px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  color: var(--color-primary);
+  opacity: 0.7;
+}
+
 .ingredientCount,
 .stepCount,
 .subMealCount {
   font-size: 0.7rem;
   opacity: 0.45;
+}
+
+.difficultyBadge {
+  font-size: 0.65rem;
+  opacity: 0.5;
+}
+
+.ratingBadge {
+  font-size: 0.6rem;
+  color: var(--color-primary);
+  letter-spacing: -0.05em;
+}
+
+.freqBadge {
+  font-size: 0.6rem;
+  opacity: 0.4;
 }
 
 // --- Stock bar ---

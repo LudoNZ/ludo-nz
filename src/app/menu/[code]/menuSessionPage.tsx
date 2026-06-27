@@ -25,9 +25,13 @@ export interface SaveMealData {
   name: string
   isSubMeal: boolean
   parentId: string | null
+  categories: string[]
   ingredients: { name: string; amount: string; unit: string }[]
   subMealIds: string[]
   steps: { id: string; text: string; afterStepIds: string[]; subMealId?: string }[]
+  difficulty: number
+  rating: number
+  maxPerWeek: number | null
 }
 
 const MenuSessionPage: React.FC = () => {
@@ -63,15 +67,22 @@ const MenuSessionPage: React.FC = () => {
       orderBy("createdAt", "asc")
     )
     const unsubMeals = onSnapshot(mealsQuery, (snap) => {
-      setMeals(snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        isSubMeal: d.data().isSubMeal ?? false,
-        parentId: d.data().parentId ?? null,
-        subMealIds: d.data().subMealIds ?? [],
-        steps: d.data().steps ?? [],
-        ingredients: d.data().ingredients ?? [],
-      } as Meal)))
+      setMeals(snap.docs.map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          ...data,
+          isSubMeal: data.isSubMeal ?? false,
+          parentId: data.parentId ?? null,
+          categories: data.categories ?? [],
+          subMealIds: data.subMealIds ?? [],
+          steps: data.steps ?? [],
+          ingredients: data.ingredients ?? [],
+          difficulty: data.difficulty ?? 0,
+          rating: data.rating ?? 0,
+          maxPerWeek: data.maxPerWeek ?? null,
+        } as Meal
+      }))
     })
 
     return () => {
@@ -88,9 +99,13 @@ const MenuSessionPage: React.FC = () => {
       name: data.name,
       isSubMeal: data.isSubMeal,
       parentId: data.parentId,
+      categories: data.categories,
       ingredients: data.ingredients,
       subMealIds: data.subMealIds,
       steps: data.steps,
+      difficulty: data.difficulty,
+      rating: data.rating,
+      maxPerWeek: data.maxPerWeek,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -103,9 +118,13 @@ const MenuSessionPage: React.FC = () => {
       name: data.name,
       isSubMeal: data.isSubMeal,
       parentId: data.parentId,
+      categories: data.categories,
       ingredients: data.ingredients,
       subMealIds: data.subMealIds,
       steps: data.steps,
+      difficulty: data.difficulty,
+      rating: data.rating,
+      maxPerWeek: data.maxPerWeek,
       updatedAt: serverTimestamp(),
     })
     setEditingMeal(null)
@@ -147,18 +166,32 @@ const MenuSessionPage: React.FC = () => {
     const mainMeals = meals.filter((m) => !m.isSubMeal)
     if (mainMeals.length === 0) return
 
-    const shuffled = [...mainMeals].sort(() => Math.random() - 0.5)
-    const days: DayPlan[] = DAYS.map((day, i) => {
-      const lunchMeal = shuffled[i % shuffled.length]
-      let dinnerMeal = shuffled[(i + Math.ceil(shuffled.length / 2)) % shuffled.length]
-      if (dinnerMeal.id === lunchMeal.id && shuffled.length > 1) {
-        dinnerMeal = shuffled[(i + 1) % shuffled.length]
+    const lunchPool = mainMeals.filter((m) => m.categories.length === 0 || m.categories.includes("lunch"))
+    const dinnerPool = mainMeals.filter((m) => m.categories.length === 0 || m.categories.includes("dinner"))
+
+    const usageCount = new Map<string, number>()
+
+    function pickMeal(pool: Meal[], exclude?: string): MealSlot | null {
+      const shuffled = [...pool].sort(() => Math.random() - 0.5)
+      for (const meal of shuffled) {
+        if (meal.id === exclude) continue
+        const count = usageCount.get(meal.id) ?? 0
+        if (meal.maxPerWeek !== null && count >= meal.maxPerWeek) continue
+        usageCount.set(meal.id, count + 1)
+        return { mealId: meal.id, mealName: meal.name }
       }
-      return {
-        day,
-        lunch: { mealId: lunchMeal.id, mealName: lunchMeal.name },
-        dinner: { mealId: dinnerMeal.id, mealName: dinnerMeal.name },
+      if (shuffled.length > 0) {
+        const fallback = shuffled[0]
+        usageCount.set(fallback.id, (usageCount.get(fallback.id) ?? 0) + 1)
+        return { mealId: fallback.id, mealName: fallback.name }
       }
+      return null
+    }
+
+    const days: DayPlan[] = DAYS.map((day) => {
+      const lunch = pickMeal(lunchPool)
+      const dinner = pickMeal(dinnerPool, lunch?.mealId)
+      return { day, lunch, dinner }
     })
 
     const now = new Date()
@@ -174,13 +207,14 @@ const MenuSessionPage: React.FC = () => {
   const handleSwapMeal = useCallback(async (dayIndex: number, slot: "lunch" | "dinner") => {
     if (!session?.activePlan) return
     const mainMeals = meals.filter((m) => !m.isSubMeal)
-    if (mainMeals.length === 0) return
+    const pool = mainMeals.filter((m) => m.categories.length === 0 || m.categories.includes(slot))
+    if (pool.length === 0) return
 
     const currentSlot = session.activePlan.days[dayIndex][slot]
-    const available = mainMeals.filter((m) => m.id !== currentSlot?.mealId)
+    const available = pool.filter((m) => m.id !== currentSlot?.mealId)
     const pick = available.length > 0
       ? available[Math.floor(Math.random() * available.length)]
-      : mainMeals[Math.floor(Math.random() * mainMeals.length)]
+      : pool[Math.floor(Math.random() * pool.length)]
 
     const newSlot: MealSlot = { mealId: pick.id, mealName: pick.name }
     const updatedDays = session.activePlan.days.map((d, i) =>
