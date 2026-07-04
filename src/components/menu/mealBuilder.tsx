@@ -3,7 +3,8 @@
 import React, { useState, useRef, useMemo, useEffect } from "react"
 import styles from "./mealBuilder.module.scss"
 import Button from "@/components/button/button"
-import { MealTemplate, Meal, DAYS, getAllMealIngredients, Ingredient } from "./types"
+import PlanPicker from "./planPicker"
+import { MealTemplate, Meal, getAllMealIngredients, Ingredient } from "./types"
 
 interface Props {
   template: MealTemplate
@@ -119,20 +120,14 @@ export default function MealBuilder({ template, allMeals, onBack, onSaveMeal, on
   }
 
   async function handlePlanPick(day: string, slot: "lunch" | "dinner") {
-    setSaving(true)
-    try {
-      let id = savedId
-      if (!id) {
-        id = await onSaveMeal(mealName.trim() || autoName, selectedSubMealIds)
-        setSavedId(id)
-      }
-      await onPlanMeal(id, mealName.trim() || autoName, day, slot)
-      setShowPlanPicker(false)
-      setSavedConfirm(true)
-      setTimeout(() => setSavedConfirm(false), 2500)
-    } finally {
-      setSaving(false)
+    let id = savedId
+    if (!id) {
+      id = await onSaveMeal(mealName.trim() || autoName, selectedSubMealIds)
+      setSavedId(id)
     }
+    await onPlanMeal(id, mealName.trim() || autoName, day, slot)
+    setSavedConfirm(true)
+    setTimeout(() => setSavedConfirm(false), 3000)
   }
 
   return (
@@ -289,37 +284,11 @@ export default function MealBuilder({ template, allMeals, onBack, onSaveMeal, on
       </div>
 
       {showPlanPicker && (
-        <div className={styles.overlay} onClick={() => setShowPlanPicker(false)}>
-          <div className={styles.planPickerModal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.planPickerHeader}>
-              <h3>Add to Plan</h3>
-              <button className={styles.closeBtn} onClick={() => setShowPlanPicker(false)}>✕</button>
-            </div>
-            <p className={styles.planPickerMealName}>{mealName || autoName}</p>
-            <div className={styles.dayGrid}>
-              {DAYS.map((day) => (
-                <div key={day} className={styles.dayColumn}>
-                  <span className={styles.dayLabel}>{day.slice(0, 3)}</span>
-                  <button
-                    className={styles.slotBtn}
-                    onClick={() => handlePlanPick(day, "lunch")}
-                    disabled={saving}
-                  >
-                    Lunch
-                  </button>
-                  <button
-                    className={styles.slotBtn}
-                    onClick={() => handlePlanPick(day, "dinner")}
-                    disabled={saving}
-                  >
-                    Dinner
-                  </button>
-                </div>
-              ))}
-            </div>
-            {savedConfirm && <p className={styles.planConfirm}>Added to plan ✓</p>}
-          </div>
-        </div>
+        <PlanPicker
+          mealName={mealName || autoName}
+          onPick={handlePlanPick}
+          onClose={() => setShowPlanPicker(false)}
+        />
       )}
     </div>
   )

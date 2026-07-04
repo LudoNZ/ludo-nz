@@ -2,8 +2,8 @@
 
 import React, { useState } from "react"
 import styles from "./templateList.module.scss"
-import { MealTemplate, Meal, DAYS } from "./types"
-import Button from "@/components/button/button"
+import { MealTemplate, Meal } from "./types"
+import PlanPicker from "./planPicker"
 
 interface PlanPickerState {
   mealId: string
@@ -50,10 +50,9 @@ export default function TemplateList({
     }
   }
 
-  function handlePlanPick(day: string, slot: "lunch" | "dinner") {
+  async function handlePlanPick(day: string, slot: "lunch" | "dinner") {
     if (!planPicker) return
     onPlanSavedMeal(planPicker.mealId, planPicker.mealName, day, slot)
-    setPlanPicker(null)
   }
 
   return (
@@ -153,24 +152,11 @@ export default function TemplateList({
       )}
 
       {planPicker && (
-        <div className={styles.overlay} onClick={() => setPlanPicker(null)}>
-          <div className={styles.planPickerModal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.planPickerHeader}>
-              <h3>Add to Plan</h3>
-              <button className={styles.closeBtn} onClick={() => setPlanPicker(null)}>✕</button>
-            </div>
-            <p className={styles.planPickerMealName}>{planPicker.mealName}</p>
-            <div className={styles.dayGrid}>
-              {DAYS.map((day) => (
-                <div key={day} className={styles.dayColumn}>
-                  <span className={styles.dayLabel}>{day.slice(0, 3)}</span>
-                  <Button size="small" variant="secondary" onClick={() => handlePlanPick(day, "lunch")}>Lunch</Button>
-                  <Button size="small" variant="secondary" onClick={() => handlePlanPick(day, "dinner")}>Dinner</Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <PlanPicker
+          mealName={planPicker.mealName}
+          onPick={handlePlanPick}
+          onClose={() => setPlanPicker(null)}
+        />
       )}
     </div>
   )
