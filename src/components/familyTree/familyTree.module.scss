@@ -209,6 +209,14 @@
   }
 }
 
+.cardFemale {
+  border-color: #b6879a;
+}
+
+.cardMale {
+  border-color: #8098b3;
+}
+
 .cardSelected {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -221,23 +229,20 @@
 
 .statusTab {
   position: absolute;
-  top: -1px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  padding: 3px 8px;
-  border-radius: 0 0 4px 4px;
+  font-size: 8px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .statusTabConfirmed {
-  background: var(--confirmed-bg);
   color: var(--confirmed);
 }
 
 .statusTabUnconfirmed {
-  background: var(--unconfirmed-bg);
   color: var(--unconfirmed);
 }
 
@@ -246,6 +251,7 @@
   font-size: 10px;
   color: var(--ink-soft);
   margin-top: 8px;
+  margin-right: 52px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -254,8 +260,32 @@
   font-family: "Fraunces", serif;
   font-size: 16px;
   font-weight: 500;
-  margin: 4px 0 4px;
+  margin: 4px 34px 4px 0;
   line-height: 1.25;
+}
+
+.cardGenderMark {
+  position: absolute;
+  bottom: 10px;
+  right: 12px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.genderMark {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 500;
+  margin-right: 5px;
+}
+
+.genderFemale {
+  color: #a6567a;
+}
+
+.genderMale {
+  color: #4a6fa5;
 }
 
 .cardYears {
@@ -266,6 +296,7 @@
 
 .srcCount {
   margin-top: 8px;
+  margin-right: 20px;
   font-size: 11px;
   color: var(--ink-soft);
 }

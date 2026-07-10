@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react"
 import styles from "./familyTree.module.scss"
-import { FamilyTreeData, LineageSide, formatYears } from "./types"
+import { FamilyTreeData, LineageSide, formatYears, genderSymbol } from "./types"
 
 interface TreeSummaryProps {
   data: FamilyTreeData
@@ -70,7 +70,16 @@ const TreeSummary: React.FC<TreeSummaryProps> = ({ data, gen, sideMap, onSelectP
             onClick={() => onSelectPerson(p.id)}
           >
             <span className={`${styles.dot} ${p.confirmed ? styles.dotConfirmed : styles.dotUnconfirmed}`} />
-            <span className={styles.personRowName}>{p.name}</span>
+            <span className={styles.personRowName}>
+              {genderSymbol(p.gender) && (
+                <span
+                  className={`${styles.genderMark} ${p.gender === "female" ? styles.genderFemale : styles.genderMale}`}
+                >
+                  {genderSymbol(p.gender)}
+                </span>
+              )}
+              {p.name}
+            </span>
             {p.label && <span className={styles.personRowLabel}>{p.label}</span>}
             <span className={styles.personRowMeta}>
               {formatYears(p)} · Gen {(gen[p.id] ?? 0) + 1} · {p.sources.length} source

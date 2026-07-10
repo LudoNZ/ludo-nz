@@ -167,13 +167,21 @@ export function formatYears(p: Person): string {
   return `${p.birthYear || "?"} – ${p.deathYear || "?"}`
 }
 
+export function genderSymbol(gender: Gender | undefined): string | null {
+  if (gender === "female") return "♀"
+  if (gender === "male") return "♂"
+  return null
+}
+
 export type LineageSide = "root" | "maternal" | "paternal" | "neutral"
 
 /**
- * Classifies everyone relative to a root person's mother/father: the mother (and her ancestors,
- * their siblings, and spouses) is "maternal"; the father's equivalent branch is "paternal". Only
- * meaningful once a root person and parent genders are set — otherwise everyone is "neutral", so
- * the maternal/paternal toggle has no visual effect until then.
+ * Classifies the root person's strict blood ancestors: the mother and everyone reached by
+ * repeatedly walking up parent-child edges from her is "maternal"; the same walk from the father
+ * is "paternal". Siblings, spouses, descendants, and anyone else are "neutral" — the point is to
+ * isolate the direct lineage line, not the extended family, so the maternal/paternal toggle can
+ * make just that line prominent. Only meaningful once a root person and parent genders are set —
+ * otherwise everyone is "neutral" and the toggle has no visual effect.
  */
 export function computeLineageSides(data: FamilyTreeData): Record<string, LineageSide> {
   const side: Record<string, LineageSide> = {}
@@ -189,7 +197,7 @@ export function computeLineageSides(data: FamilyTreeData): Record<string, Lineag
   const mother = parents.find((id) => genderOf(id) === "female")
   const father = parents.find((id) => genderOf(id) === "male")
 
-  const tagBranch = (startId: string | undefined, tag: "maternal" | "paternal") => {
+  const tagAncestors = (startId: string | undefined, tag: "maternal" | "paternal") => {
     if (!startId || side[startId]) return
     const queue = [startId]
     while (queue.length) {
@@ -198,19 +206,12 @@ export function computeLineageSides(data: FamilyTreeData): Record<string, Lineag
       side[id] = tag
       getParents(id, data.relationships).forEach((p) => {
         if (!side[p]) queue.push(p)
-        getChildren(p, data.relationships).forEach((sib) => {
-          if (!side[sib]) side[sib] = tag
-        })
-      })
-      getSpouseRelationships(id, data.relationships).forEach((r) => {
-        const sp = otherSpouse(r, id)
-        if (!side[sp]) side[sp] = tag
       })
     }
   }
 
-  tagBranch(mother, "maternal")
-  tagBranch(father, "paternal")
+  tagAncestors(mother, "maternal")
+  tagAncestors(father, "paternal")
   data.people.forEach((p) => {
     if (!side[p.id]) side[p.id] = "neutral"
   })

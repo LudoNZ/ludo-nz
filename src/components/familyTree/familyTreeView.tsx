@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import styles from "./familyTree.module.scss"
 import {
   FamilyTreeData,
-  LineageSide,
   Person,
   Source,
   computeGenerations,
@@ -12,6 +11,7 @@ import {
   orderWithSpouses,
   personById,
   formatYears,
+  genderSymbol,
 } from "./types"
 import PersonDetailPanel from "./personDetailPanel"
 import { AddPersonModal, AddRelationshipModal } from "./familyTreeModals"
@@ -60,7 +60,6 @@ const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
   const maxLevel = useMemo(() => Math.max(0, ...Object.values(gen)), [gen])
   const sideMap = useMemo(() => computeLineageSides(data), [data])
   const hasRoot = !!data.rootPersonId
-  const oppositeSide: LineageSide = lineageChoice === "maternal" ? "paternal" : "maternal"
 
   const rows = useMemo(() => {
     const out: { level: number; ids: string[] }[] = []
@@ -213,20 +212,23 @@ const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
                 {ids.map((id) => {
                   const p = personById(data.people, id)
                   if (!p) return null
-                  const dimmed = hasRoot && sideMap[id] === oppositeSide
+                  const dimmed = hasRoot && sideMap[id] !== "root" && sideMap[id] !== lineageChoice
+                  const genderBorder = p.gender === "female" ? styles.cardFemale : p.gender === "male" ? styles.cardMale : ""
                   return (
                     <div
                       key={id}
                       id={`ft-card-${id}`}
                       role="button"
                       tabIndex={0}
-                      className={`${styles.card} ${id === selectedId ? styles.cardSelected : ""} ${dimmed ? styles.cardDimmed : ""}`}
+                      className={`${styles.card} ${genderBorder} ${id === selectedId ? styles.cardSelected : ""} ${dimmed ? styles.cardDimmed : ""}`}
                       onClick={() => setSelectedId(id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") setSelectedId(id)
                       }}
                     >
-                      <div className={p.confirmed ? styles.statusTabConfirmed : styles.statusTabUnconfirmed}>
+                      <div
+                        className={`${styles.statusTab} ${p.confirmed ? styles.statusTabConfirmed : styles.statusTabUnconfirmed}`}
+                      >
                         {p.confirmed ? "Confirmed" : "Unconfirmed"}
                       </div>
                       {p.label && <div className={styles.cardLabel}>{p.label}</div>}
@@ -235,6 +237,13 @@ const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
                       <div className={styles.srcCount}>
                         {p.sources.length} source{p.sources.length !== 1 ? "s" : ""} attached
                       </div>
+                      {genderSymbol(p.gender) && (
+                        <span
+                          className={`${styles.cardGenderMark} ${p.gender === "female" ? styles.genderFemale : styles.genderMale}`}
+                        >
+                          {genderSymbol(p.gender)}
+                        </span>
+                      )}
                     </div>
                   )
                 })}
