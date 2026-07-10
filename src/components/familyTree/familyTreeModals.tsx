@@ -2,7 +2,7 @@
 
 import React, { useState } from "react"
 import styles from "./familyTree.module.scss"
-import { Person, newId } from "./types"
+import { Gender, Person, newId } from "./types"
 
 interface AddPersonModalProps {
   onClose: () => void
@@ -15,6 +15,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ onClose, onSubmi
   const [birthYear, setBirthYear] = useState("")
   const [deathYear, setDeathYear] = useState("")
   const [notes, setNotes] = useState("")
+  const [gender, setGender] = useState<Gender | "">("")
   const [error, setError] = useState("")
 
   const handleSubmit = () => {
@@ -31,6 +32,7 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ onClose, onSubmi
       notes: notes.trim() || undefined,
       confirmed: false,
       sources: [],
+      gender: gender || undefined,
     })
   }
 
@@ -54,6 +56,14 @@ export const AddPersonModal: React.FC<AddPersonModalProps> = ({ onClose, onSubmi
         <div className={styles.field}>
           <label>Death (optional, leave blank if unknown)</label>
           <input value={deathYear} onChange={(e) => setDeathYear(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label>Gender (optional — used for maternal/paternal grouping)</label>
+          <select value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+            <option value="">Unspecified</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+          </select>
         </div>
         <div className={styles.field}>
           <label>Notes (optional)</label>

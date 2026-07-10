@@ -31,6 +31,7 @@ const FamilyTreeSessionPage: React.FC<FamilyTreeSessionPageProps> = ({ code }) =
         setData({
           people: (snapData.people || []) as Person[],
           relationships: (snapData.relationships || []) as Relationship[],
+          rootPersonId: snapData.rootPersonId as string | undefined,
         })
       },
       () => setError("Failed to load family tree")
@@ -39,7 +40,7 @@ const FamilyTreeSessionPage: React.FC<FamilyTreeSessionPageProps> = ({ code }) =
   }, [code])
 
   const persist = useCallback(
-    async (updates: Partial<{ people: Person[]; relationships: Relationship[] }>) => {
+    async (updates: Partial<{ people: Person[]; relationships: Relationship[]; rootPersonId: string }>) => {
       try {
         await updateDoc(doc(firestore, "familyTreeSessions", code), updates)
       } catch {
@@ -110,6 +111,13 @@ const FamilyTreeSessionPage: React.FC<FamilyTreeSessionPageProps> = ({ code }) =
     [data, persist]
   )
 
+  const handleSetRoot = useCallback(
+    (personId: string) => {
+      persist({ rootPersonId: personId })
+    },
+    [persist]
+  )
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(code).then(() => {
       setCopied(true)
@@ -158,6 +166,7 @@ const FamilyTreeSessionPage: React.FC<FamilyTreeSessionPageProps> = ({ code }) =
         onAddSource={handleAddSource}
         onAddParentChild={handleAddParentChild}
         onAddSpouse={handleAddSpouse}
+        onSetRoot={handleSetRoot}
       />
     </div>
   )

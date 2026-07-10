@@ -4,6 +4,8 @@ export interface Source {
   location?: string
 }
 
+export type Gender = "female" | "male"
+
 export interface Person {
   id: string
   name: string
@@ -14,6 +16,7 @@ export interface Person {
   confirmed: boolean
   notes?: string
   sources: Source[]
+  gender?: Gender
 }
 
 export interface ParentChildRelationship {
@@ -37,6 +40,8 @@ export type Relationship = ParentChildRelationship | SpouseRelationship
 export interface FamilyTreeData {
   people: Person[]
   relationships: Relationship[]
+  /** The person whose perspective "maternal"/"paternal" is defined from. */
+  rootPersonId?: string
 }
 
 export function newId(prefix: string): string {
@@ -160,4 +165,54 @@ export function orderWithSpouses(ids: string[], relationships: Relationship[]): 
 
 export function formatYears(p: Person): string {
   return `${p.birthYear || "?"} – ${p.deathYear || "?"}`
+}
+
+export type LineageSide = "root" | "maternal" | "paternal" | "neutral"
+
+/**
+ * Classifies everyone relative to a root person's mother/father: the mother (and her ancestors,
+ * their siblings, and spouses) is "maternal"; the father's equivalent branch is "paternal". Only
+ * meaningful once a root person and parent genders are set — otherwise everyone is "neutral", so
+ * the maternal/paternal toggle has no visual effect until then.
+ */
+export function computeLineageSides(data: FamilyTreeData): Record<string, LineageSide> {
+  const side: Record<string, LineageSide> = {}
+  const rootId = data.rootPersonId
+  if (!rootId || !personById(data.people, rootId)) {
+    data.people.forEach((p) => (side[p.id] = "neutral"))
+    return side
+  }
+
+  side[rootId] = "root"
+  const genderOf = (id: string) => personById(data.people, id)?.gender
+  const parents = getParents(rootId, data.relationships)
+  const mother = parents.find((id) => genderOf(id) === "female")
+  const father = parents.find((id) => genderOf(id) === "male")
+
+  const tagBranch = (startId: string | undefined, tag: "maternal" | "paternal") => {
+    if (!startId || side[startId]) return
+    const queue = [startId]
+    while (queue.length) {
+      const id = queue.shift()!
+      if (side[id]) continue
+      side[id] = tag
+      getParents(id, data.relationships).forEach((p) => {
+        if (!side[p]) queue.push(p)
+        getChildren(p, data.relationships).forEach((sib) => {
+          if (!side[sib]) side[sib] = tag
+        })
+      })
+      getSpouseRelationships(id, data.relationships).forEach((r) => {
+        const sp = otherSpouse(r, id)
+        if (!side[sp]) side[sp] = tag
+      })
+    }
+  }
+
+  tagBranch(mother, "maternal")
+  tagBranch(father, "paternal")
+  data.people.forEach((p) => {
+    if (!side[p.id]) side[p.id] = "neutral"
+  })
+  return side
 }

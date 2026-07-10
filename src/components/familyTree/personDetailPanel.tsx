@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import styles from "./familyTree.module.scss"
 import {
   FamilyTreeData,
+  Gender,
   Person,
   Source,
   formatYears,
@@ -17,17 +18,21 @@ import {
 interface PersonDetailPanelProps {
   person: Person
   data: FamilyTreeData
+  isRoot: boolean
   onClose: () => void
   onUpdatePerson: (personId: string, updates: Partial<Person>) => void
   onAddSource: (personId: string, source: Source) => void
+  onSetRoot: (personId: string) => void
 }
 
 const PersonDetailPanel: React.FC<PersonDetailPanelProps> = ({
   person,
   data,
+  isRoot,
   onClose,
   onUpdatePerson,
   onAddSource,
+  onSetRoot,
 }) => {
   const [details, setDetails] = useState({
     birthYear: person.birthYear || "",
@@ -120,6 +125,25 @@ const PersonDetailPanel: React.FC<PersonDetailPanelProps> = ({
         {dirty && (
           <button className={`${styles.ghost} ${styles.selfStart}`} onClick={handleSaveDetails}>
             Save details
+          </button>
+        )}
+      </div>
+
+      <div className={styles.sectionLabel}>Lineage</div>
+      <div className={styles.formStack}>
+        <select
+          value={person.gender || ""}
+          onChange={(e) => onUpdatePerson(person.id, { gender: (e.target.value || undefined) as Gender | undefined })}
+        >
+          <option value="">Gender unspecified</option>
+          <option value="female">Female</option>
+          <option value="male">Male</option>
+        </select>
+        {isRoot ? (
+          <div className={styles.rootBadge}>★ Root — maternal/paternal is defined from this person</div>
+        ) : (
+          <button className={`${styles.ghost} ${styles.selfStart}`} onClick={() => onSetRoot(person.id)}>
+            Set as root person
           </button>
         )}
       </div>

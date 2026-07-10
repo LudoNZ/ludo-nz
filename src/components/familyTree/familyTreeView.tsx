@@ -4,15 +4,18 @@ import React, { useEffect, useMemo, useRef, useState } from "react"
 import styles from "./familyTree.module.scss"
 import {
   FamilyTreeData,
+  LineageSide,
   Person,
   Source,
   computeGenerations,
+  computeLineageSides,
   orderWithSpouses,
   personById,
   formatYears,
 } from "./types"
 import PersonDetailPanel from "./personDetailPanel"
 import { AddPersonModal, AddRelationshipModal } from "./familyTreeModals"
+import TreeSummary from "./treeSummary"
 
 interface FamilyTreeViewProps {
   data: FamilyTreeData
@@ -21,9 +24,14 @@ interface FamilyTreeViewProps {
   onAddSource: (personId: string, source: Source) => void
   onAddParentChild: (parent: string, child: string) => void
   onAddSpouse: (personA: string, personB: string, marriedYear?: string, location?: string) => void
+  onSetRoot: (personId: string) => void
 }
 
 const LINE_COLOR = "#9C8F78"
+const MOBILE_BREAKPOINT = 700
+
+type ViewMode = "tree" | "summary"
+type LineageChoice = "maternal" | "paternal"
 
 const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
   data,
@@ -32,15 +40,27 @@ const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
   onAddSource,
   onAddParentChild,
   onAddSpouse,
+  onSetRoot,
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showPersonModal, setShowPersonModal] = useState(false)
   const [showRelModal, setShowRelModal] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>("tree")
+  const [lineageChoice, setLineageChoice] = useState<LineageChoice>("maternal")
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT) {
+      setViewMode("summary")
+    }
+  }, [])
+
   const gen = useMemo(() => computeGenerations(data), [data])
   const maxLevel = useMemo(() => Math.max(0, ...Object.values(gen)), [gen])
+  const sideMap = useMemo(() => computeLineageSides(data), [data])
+  const hasRoot = !!data.rootPersonId
+  const oppositeSide: LineageSide = lineageChoice === "maternal" ? "paternal" : "maternal"
 
   const rows = useMemo(() => {
     const out: { level: number; ids: string[] }[] = []
@@ -135,51 +155,104 @@ const FamilyTreeView: React.FC<FamilyTreeViewProps> = ({
         <span className={styles.legendHint}>Click a card to view sources &amp; edit</span>
       </div>
 
-      <div className={styles.treeWrap} ref={wrapRef}>
-        <svg ref={svgRef} className={styles.lines}></svg>
-        {rows.map(({ level, ids }) => (
-          <div key={level} className={styles.generationBlock}>
-            <div className={styles.genLabel}>Generation {level + 1}</div>
-            <div className={styles.generationRow}>
-              {ids.map((id) => {
-                const p = personById(data.people, id)
-                if (!p) return null
-                return (
-                  <div
-                    key={id}
-                    id={`ft-card-${id}`}
-                    role="button"
-                    tabIndex={0}
-                    className={`${styles.card} ${id === selectedId ? styles.cardSelected : ""}`}
-                    onClick={() => setSelectedId(id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") setSelectedId(id)
-                    }}
-                  >
-                    <div className={p.confirmed ? styles.statusTabConfirmed : styles.statusTabUnconfirmed}>
-                      {p.confirmed ? "Confirmed" : "Unconfirmed"}
-                    </div>
-                    {p.label && <div className={styles.cardLabel}>{p.label}</div>}
-                    <div className={styles.cardName}>{p.name}</div>
-                    <div className={styles.cardYears}>{formatYears(p)}</div>
-                    <div className={styles.srcCount}>
-                      {p.sources.length} source{p.sources.length !== 1 ? "s" : ""} attached
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+      <div className={styles.controlsRow}>
+        <div className={styles.typeToggle}>
+          <button
+            className={viewMode === "tree" ? styles.typeToggleBtnActive : styles.typeToggleBtn}
+            onClick={() => setViewMode("tree")}
+          >
+            Tree
+          </button>
+          <button
+            className={viewMode === "summary" ? styles.typeToggleBtnActive : styles.typeToggleBtn}
+            onClick={() => setViewMode("summary")}
+          >
+            Summary
+          </button>
+        </div>
+
+        <div className={styles.lineageControl}>
+          <div className={styles.typeToggle}>
+            <button
+              className={lineageChoice === "maternal" ? styles.typeToggleBtnActive : styles.typeToggleBtn}
+              disabled={!hasRoot}
+              onClick={() => setLineageChoice("maternal")}
+            >
+              Maternal
+            </button>
+            <button
+              className={lineageChoice === "paternal" ? styles.typeToggleBtnActive : styles.typeToggleBtn}
+              disabled={!hasRoot}
+              onClick={() => setLineageChoice("paternal")}
+            >
+              Paternal
+            </button>
           </div>
-        ))}
+          {!hasRoot && (
+            <span className={styles.legendHint}>Set a root person (in their detail panel) to enable</span>
+          )}
+        </div>
       </div>
+
+      {viewMode === "summary" ? (
+        <TreeSummary
+          data={data}
+          gen={gen}
+          sideMap={sideMap}
+          onSelectPerson={(id) => {
+            setSelectedId(id)
+          }}
+        />
+      ) : (
+        <div className={styles.treeWrap} ref={wrapRef}>
+          <svg ref={svgRef} className={styles.lines}></svg>
+          {rows.map(({ level, ids }) => (
+            <div key={level} className={styles.generationBlock}>
+              <div className={styles.genLabel}>Generation {level + 1}</div>
+              <div className={styles.generationRow}>
+                {ids.map((id) => {
+                  const p = personById(data.people, id)
+                  if (!p) return null
+                  const dimmed = hasRoot && sideMap[id] === oppositeSide
+                  return (
+                    <div
+                      key={id}
+                      id={`ft-card-${id}`}
+                      role="button"
+                      tabIndex={0}
+                      className={`${styles.card} ${id === selectedId ? styles.cardSelected : ""} ${dimmed ? styles.cardDimmed : ""}`}
+                      onClick={() => setSelectedId(id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") setSelectedId(id)
+                      }}
+                    >
+                      <div className={p.confirmed ? styles.statusTabConfirmed : styles.statusTabUnconfirmed}>
+                        {p.confirmed ? "Confirmed" : "Unconfirmed"}
+                      </div>
+                      {p.label && <div className={styles.cardLabel}>{p.label}</div>}
+                      <div className={styles.cardName}>{p.name}</div>
+                      <div className={styles.cardYears}>{formatYears(p)}</div>
+                      <div className={styles.srcCount}>
+                        {p.sources.length} source{p.sources.length !== 1 ? "s" : ""} attached
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selected && (
         <PersonDetailPanel
           person={selected}
           data={data}
+          isRoot={selected.id === data.rootPersonId}
           onClose={() => setSelectedId(null)}
           onUpdatePerson={onUpdatePerson}
           onAddSource={onAddSource}
+          onSetRoot={onSetRoot}
         />
       )}
 
