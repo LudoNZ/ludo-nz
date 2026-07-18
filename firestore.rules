@@ -100,21 +100,6 @@ service cloud.firestore {
       }
     }
 
-    // Family Tree sessions
-    match /familyTreeSessions/{sessionId} {
-      allow get: if true;
-      allow list: if false;
-      allow create: if request.resource.data.keys().hasAll(['createdAt', 'creatorName', 'people', 'relationships'])
-        && request.resource.data.creatorName is string
-        && request.resource.data.people is list
-        && request.resource.data.relationships is list;
-      allow update: if request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.creatorName == resource.data.creatorName
-        && request.resource.data.people is list
-        && request.resource.data.relationships is list;
-      allow delete: if false;
-    }
-
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;
