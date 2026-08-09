@@ -75,6 +75,7 @@ const DeckForm: React.FC<{
       boardDirection: state.boardDirection,
       skeletonInterval: state.skeletonInterval,
       layoutSeed: state.layoutSeed,
+      completedSegmentIds: state.completedSegmentIds,
       stock,
     })
   }

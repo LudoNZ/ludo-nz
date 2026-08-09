@@ -41,6 +41,8 @@ export interface DeckConfig {
   /** seeds the fill-in randomisation so the pattern is stable across
    * re-renders; change it (e.g. via a "shuffle" action) to get a new mix */
   layoutSeed: number
+  /** ids (BoardSegment.id) of boards marked as physically cut & placed */
+  completedSegmentIds: string[]
   updatedAt: Date
 }
 
@@ -66,6 +68,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     boardDirection: "intoRake",
     skeletonInterval: 4,
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
+    completedSegmentIds: [],
   }
 }
 

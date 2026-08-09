@@ -7,6 +7,7 @@ import {
   query,
   setDoc,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { DeckConfig, StockItem } from "./types"
@@ -45,6 +46,7 @@ export const subscribeToDecks = (
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,
           layoutSeed: data.layoutSeed ?? 1,
+          completedSegmentIds: Array.isArray(data.completedSegmentIds) ? data.completedSegmentIds : [],
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         }
       })
@@ -64,4 +66,11 @@ export const saveDeck = async (uid: string, deck: Omit<DeckConfig, "updatedAt">)
 
 export const deleteDeck = async (uid: string, deckId: string) => {
   await deleteDoc(doc(firestore, "users", uid, "decks", deckId))
+}
+
+export const setCompletedSegments = async (uid: string, deckId: string, completedSegmentIds: string[]) => {
+  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+    completedSegmentIds,
+    updatedAt: Timestamp.now(),
+  })
 }

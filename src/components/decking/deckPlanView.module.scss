@@ -24,8 +24,38 @@
   stroke-dasharray: 1.2% 1%;
 }
 
-.row {
+.segment {
   fill: rgba(27, 177, 47, 0.16);
+  stroke: var(--background);
+  stroke-width: 0.15%;
+  cursor: pointer;
+  transition: fill 0.15s ease;
+
+  &:hover {
+    fill: rgba(27, 177, 47, 0.3);
+  }
+}
+
+.segmentUnresolved {
+  fill: rgba(177, 27, 27, 0.18);
+
+  &:hover {
+    fill: rgba(177, 27, 27, 0.3);
+  }
+}
+
+.segmentPlaced {
+  fill: rgba(27, 177, 47, 0.6);
+
+  &:hover {
+    fill: rgba(27, 177, 47, 0.72);
+  }
+}
+
+.checkMark {
+  fill: var(--background);
+  font-weight: 700;
+  pointer-events: none;
 }
 
 .joinSkeleton {

@@ -7,7 +7,7 @@ import Button from "@/components/button/button"
 import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import CutList from "@/components/decking/cutList"
-import { deleteDeck, saveDeck, subscribeToDecks } from "@/components/decking/data"
+import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
 import { computeDeckLayout } from "@/components/decking/layout"
 import { DeckConfig } from "@/components/decking/types"
 import styles from "./deckDetailPage.module.scss"
@@ -89,7 +89,21 @@ const DeckDetailPage = () => {
       boardDirection: deck.boardDirection,
       skeletonInterval: deck.skeletonInterval,
       layoutSeed: Math.floor(Math.random() * 2 ** 31),
+      completedSegmentIds: deck.completedSegmentIds,
     })
+  }
+
+  const handleToggleSegment = (id: string) => {
+    const set = new Set(deck.completedSegmentIds)
+    if (set.has(id)) set.delete(id)
+    else set.add(id)
+    setCompletedSegments(auth.currentUser!.uid, deck.id, Array.from(set))
+  }
+
+  const handleClearCompleted = () => {
+    if (confirm("Clear all placed marks on this deck?")) {
+      setCompletedSegments(auth.currentUser!.uid, deck.id, [])
+    }
   }
 
   return (
@@ -125,13 +139,23 @@ const DeckDetailPage = () => {
           <section>
             <h2>Plan</h2>
             <div className={styles.card}>
-              <DeckPlanView config={deck} layout={layout} />
+              <DeckPlanView
+                config={deck}
+                layout={layout}
+                completedSegmentIds={deck.completedSegmentIds}
+                onToggleSegment={handleToggleSegment}
+              />
             </div>
           </section>
 
           <section>
             <h2>Cut list</h2>
-            <CutList layout={layout} />
+            <CutList
+              layout={layout}
+              completedSegmentIds={deck.completedSegmentIds}
+              onToggleSegment={handleToggleSegment}
+              onClearCompleted={handleClearCompleted}
+            />
           </section>
         </>
       )}

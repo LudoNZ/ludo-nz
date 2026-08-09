@@ -5,8 +5,14 @@ import { DeckLayout } from "./layout"
 import { DeckConfig, formatLength, rakeAngleDeg } from "./types"
 import styles from "./deckPlanView.module.scss"
 
-const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ config, layout }) => {
+const DeckPlanView: React.FC<{
+  config: DeckConfig
+  layout: DeckLayout
+  completedSegmentIds: string[]
+  onToggleSegment: (id: string) => void
+}> = ({ config, layout, completedSegmentIds, onToggleSegment }) => {
   const clipId = useId()
+  const completedSet = new Set(completedSegmentIds)
   const { sideA, sideB, width } = config
   const intoRake = config.boardDirection !== "alongRake"
 
@@ -65,13 +71,46 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
               const labelY = intoRake ? row.rowStart + rowThickness / 2 : labelFontSize * 0.9
               return (
                 <g key={row.index}>
-                  <rect
-                    x={intoRake ? 0 : row.rowStart}
-                    y={intoRake ? row.rowStart : 0}
-                    width={intoRake ? row.targetLength : rowThickness}
-                    height={intoRake ? rowThickness : row.targetLength}
-                    className={styles.row}
-                  />
+                  {row.boards.map((b) => {
+                    const placed = completedSet.has(b.id)
+                    const cx = intoRake ? (b.start + b.end) / 2 : row.rowStart + rowThickness / 2
+                    const cy = intoRake ? row.rowStart + rowThickness / 2 : (b.start + b.end) / 2
+                    const checkSize = Math.min(rowThickness * 0.55, fontSize)
+                    return (
+                      <g key={b.id}>
+                        <rect
+                          x={intoRake ? b.start : row.rowStart}
+                          y={intoRake ? row.rowStart : b.start}
+                          width={intoRake ? b.end - b.start : rowThickness}
+                          height={intoRake ? rowThickness : b.end - b.start}
+                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""}`}
+                          tabIndex={0}
+                          role="button"
+                          aria-pressed={placed}
+                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"} — tap to toggle`}
+                          onClick={() => onToggleSegment(b.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              onToggleSegment(b.id)
+                            }
+                          }}
+                        />
+                        {placed && (
+                          <text
+                            x={cx}
+                            y={cy}
+                            fontSize={checkSize}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            className={styles.checkMark}
+                          >
+                            ✓
+                          </text>
+                        )}
+                      </g>
+                    )
+                  })}
                   {row.joins.map((j) => {
                     const markClass = !j.staggered
                       ? styles.joinWarning

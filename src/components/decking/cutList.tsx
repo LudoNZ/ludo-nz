@@ -1,10 +1,21 @@
 "use client"
 
+import Button from "@/components/button/button"
 import { DeckLayout } from "./layout"
 import { formatLength } from "./types"
 import styles from "./cutList.module.scss"
 
-const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
+const CutList: React.FC<{
+  layout: DeckLayout
+  completedSegmentIds: string[]
+  onToggleSegment: (id: string) => void
+  onClearCompleted: () => void
+}> = ({ layout, completedSegmentIds, onToggleSegment, onClearCompleted }) => {
+  const completedSet = new Set(completedSegmentIds)
+  const placedCount = layout.rows.reduce(
+    (sum, r) => sum + r.boards.filter((b) => completedSet.has(b.id)).length,
+    0
+  )
   const unstaggeredCount = layout.rows.reduce(
     (sum, r) => sum + r.joins.filter((j) => !j.staggered).length,
     0
@@ -28,6 +39,12 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
         <div className={styles.stat}>
           <strong>{formatLength(layout.totalWasteMm)}</strong>
           <span>total offcut</span>
+        </div>
+        <div className={styles.stat}>
+          <strong>
+            {placedCount}/{layout.totalBoards}
+          </strong>
+          <span>placed</span>
         </div>
       </div>
 
@@ -64,7 +81,15 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
       </div>
 
       <div className={styles.table}>
-        <h3>Row-by-row cut plan</h3>
+        <div className={styles.tableHeader}>
+          <h3>Row-by-row cut plan</h3>
+          {placedCount > 0 && (
+            <Button size="small" variant="secondary" onClick={onClearCompleted}>
+              Clear all marks
+            </Button>
+          )}
+        </div>
+        <p className={styles.hint}>Tap a segment once it&apos;s cut &amp; placed — tap again to undo.</p>
         <div className={styles.head}>
           <span>Row</span>
           <span>Segments (cut length from stock length)</span>
@@ -78,15 +103,21 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
               {formatLength(row.rowStart)}
             </span>
             <span className={styles.segments}>
-              {row.boards.map((b, i) => (
-                <span
-                  key={i}
-                  className={`${styles.segment} ${b.stockLength === null ? styles.unresolved : ""}`}
-                >
-                  {formatLength(b.cutLength)}
-                  {b.stockLength !== null ? ` (from ${formatLength(b.stockLength)})` : " — no stock long enough"}
-                </span>
-              ))}
+              {row.boards.map((b) => {
+                const placed = completedSet.has(b.id)
+                return (
+                  <button
+                    type="button"
+                    key={b.id}
+                    onClick={() => onToggleSegment(b.id)}
+                    className={`${styles.segment} ${b.stockLength === null ? styles.unresolved : ""} ${placed ? styles.placed : ""}`}
+                  >
+                    {placed && "✓ "}
+                    {formatLength(b.cutLength)}
+                    {b.stockLength !== null ? ` (from ${formatLength(b.stockLength)})` : " — no stock long enough"}
+                  </button>
+                )
+              })}
             </span>
           </div>
         ))}

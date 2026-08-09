@@ -1,6 +1,9 @@
 import { DeckConfig, lengthAt, StockItem, widthAt } from "./types"
 
 export interface BoardSegment {
+  /** stable id (row index + position within the row) for tracking completion,
+   * stable as long as the deck's config and layout seed don't change */
+  id: string
   /** mm, position along the row from the square end */
   start: number
   end: number
@@ -122,20 +125,20 @@ function planRowLongestFirst(
     const finish = inv.smallestAtLeast(remaining)
     if (finish !== null) {
       inv.take(finish)
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
       break
     }
 
     const longest = inv.longest()
     if (longest === null) {
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
       break
     }
     const candidates = joistPositions
       .filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
       .sort((a, b) => b - a)
     if (!candidates.length) {
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
       break
     }
 
@@ -147,7 +150,7 @@ function planRowLongestFirst(
     }
 
     inv.take(longest)
-    boards.push({ start: p, end: chosen, cutLength: chosen - p, stockLength: longest })
+    boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: longest })
     joins.push({ position: chosen, staggered })
     p = chosen
   }
@@ -176,13 +179,13 @@ function planRowRandomFirst(
     const finish = inv.smallestAtLeast(remaining)
     if (finish !== null) {
       inv.take(finish)
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
       break
     }
 
     const avail = inv.available()
     if (!avail.length) {
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
       break
     }
 
@@ -211,7 +214,7 @@ function planRowRandomFirst(
       }
     }
     if (chosenLength === null) {
-      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
       break
     }
 
@@ -224,7 +227,7 @@ function planRowRandomFirst(
     }
 
     inv.take(chosenLength)
-    boards.push({ start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
+    boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
     joins.push({ position: chosen, staggered })
     p = chosen
   }
@@ -248,6 +251,9 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
 
   const inv = new Inventory(stock)
   const rand = mulberry32(config.layoutSeed || 1)
+  // which rows within each group of `skeletonInterval` are skeleton rows also
+  // shuffles with the seed, so "shuffle" changes more than just the fill-in mix
+  const skeletonOffset = Math.floor(rand() * skeletonInterval)
 
   type Slot = { index: number; rowStart: number; rowEnd: number; targetLength: number; isSkeleton: boolean }
   const slots: Slot[] = []
@@ -263,7 +269,13 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
     if (targetLength < 1) continue // deck has tapered to nothing here
 
-    slots.push({ index: slots.length, rowStart, rowEnd, targetLength, isSkeleton: slots.length % skeletonInterval === 0 })
+    slots.push({
+      index: slots.length,
+      rowStart,
+      rowEnd,
+      targetLength,
+      isSkeleton: slots.length % skeletonInterval === skeletonOffset,
+    })
   }
 
   const rowJoins = new Map<number, number[]>() // index -> join positions, filled as each row is planned
@@ -296,7 +308,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       rowStart: slot.rowStart,
       rowEnd: slot.rowEnd,
       targetLength: slot.targetLength,
-      boards: r.boards,
+      boards: r.boards.map((b, i) => ({ ...b, id: `${slot.index}-${i}` })),
       joins: r.joins,
     }
   })
