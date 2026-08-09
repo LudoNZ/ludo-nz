@@ -106,9 +106,13 @@ function staggerOk(position: number, prevJoins: number[], minStagger: number): b
   return prevJoins.every((pj) => Math.abs(pj - position) >= minStagger)
 }
 
-/** Rows that need a join: consume the LONGEST board on hand to reach as far as
- * possible, preferring the previous skeleton row's stagger. Used for skeleton rows. */
-function planRowLongestFirst(
+/** Skeleton rows: try to cover the row in one board first. Where a join is
+ * unavoidable, reach as far as the longest board on hand *could* go (to keep
+ * joins to a minimum) but then cut that join from the smallest board that
+ * actually reaches the chosen position — not the literal longest one, so
+ * skeleton rows don't needlessly burn through the biggest stock when a
+ * shorter board would land on the exact same joist. */
+function planSkeletonRow(
   targetLength: number,
   joistPositions: number[],
   inv: Inventory,
@@ -129,13 +133,13 @@ function planRowLongestFirst(
       break
     }
 
-    const longest = inv.longest()
-    if (longest === null) {
+    const maxReach = inv.longest()
+    if (maxReach === null) {
       boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
       break
     }
     const candidates = joistPositions
-      .filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
+      .filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
       .sort((a, b) => b - a)
     if (!candidates.length) {
       boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
@@ -149,8 +153,10 @@ function planRowLongestFirst(
       staggered = false
     }
 
-    inv.take(longest)
-    boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: longest })
+    const cutLength = chosen - p
+    const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
+    inv.take(stockLength)
+    boards.push({ id: "", start: p, end: chosen, cutLength, stockLength })
     joins.push({ position: chosen, staggered })
     p = chosen
   }
@@ -284,7 +290,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   // Phase 1: skeleton rows, staggered against the previous skeleton row only.
   let prevSkeletonJoins: number[] = []
   for (const slot of slots.filter((s) => s.isSkeleton)) {
-    const result = planRowLongestFirst(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger)
+    const result = planSkeletonRow(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
     prevSkeletonJoins = result.joins.map((j) => j.position)
