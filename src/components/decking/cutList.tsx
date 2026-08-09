@@ -33,8 +33,8 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
 
       {layout.unresolvedSegments > 0 && (
         <div className={styles.warning}>
-          ⚠ {layout.unresolvedSegments} segment(s) need a board longer than any in your stock
-          list — add a longer length or allow more joins.
+          ⚠ {layout.unresolvedSegments} segment(s) couldn&apos;t be covered — you&apos;re out of
+          suitable stock. Add more of a length (or a longer one) below.
         </div>
       )}
       {unstaggeredCount > 0 && (
@@ -50,12 +50,14 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
       )}
 
       <div>
-        <h3>Shopping list</h3>
+        <h3>Stock usage</h3>
         <div className={styles.shoppingList}>
           {layout.shoppingList.map((item) => (
             <div key={item.stockLength} className={styles.item}>
               <span>{formatLength(item.stockLength)} boards</span>
-              <strong>× {item.count}</strong>
+              <strong>
+                {item.used} used / {item.onHand} on hand
+              </strong>
             </div>
           ))}
         </div>
@@ -71,6 +73,7 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
           <div key={row.index} className={styles.rowItem}>
             <span>
               #{row.index + 1}
+              {row.isSkeleton && <span className={styles.skeletonTag}> skeleton</span>}
               <br />
               {formatLength(row.rowStart)}
             </span>

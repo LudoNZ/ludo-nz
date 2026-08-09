@@ -2,16 +2,26 @@
 
 import { useState } from "react"
 import Button from "@/components/button/button"
-import { BoardDirection, DeckConfig } from "./types"
+import { BoardDirection, DeckConfig, StockItem } from "./types"
 import styles from "./deckForm.module.scss"
 
-type FormState = Omit<DeckConfig, "id" | "updatedAt" | "stockLengths"> & {
-  stockLengthsText: string
+type StockRow = { key: number; lengthText: string; quantity: number }
+
+type FormState = Omit<DeckConfig, "id" | "updatedAt" | "stock"> & {
+  stockRows: StockRow[]
 }
+
+let stockRowKeySeq = 0
+const nextKey = () => stockRowKeySeq++
+
+const toStockRows = (stock: StockItem[]): StockRow[] =>
+  stock.length
+    ? stock.map((s) => ({ key: nextKey(), lengthText: (s.length / 1000).toString(), quantity: s.quantity }))
+    : [{ key: nextKey(), lengthText: "", quantity: 1 }]
 
 const toFormState = (deck: Omit<DeckConfig, "id" | "updatedAt">): FormState => ({
   ...deck,
-  stockLengthsText: deck.stockLengths.map((mm) => (mm / 1000).toString()).join(", "),
+  stockRows: toStockRows(deck.stock),
 })
 
 const DeckForm: React.FC<{
@@ -25,14 +35,20 @@ const DeckForm: React.FC<{
   const num = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setState((s) => ({ ...s, [key]: Number(e.target.value) || 0 }))
 
+  const updateRow = (key: number, patch: Partial<StockRow>) =>
+    setState((s) => ({ ...s, stockRows: s.stockRows.map((r) => (r.key === key ? { ...r, ...patch } : r)) }))
+
+  const addRow = () => setState((s) => ({ ...s, stockRows: [...s.stockRows, { key: nextKey(), lengthText: "", quantity: 1 }] }))
+
+  const removeRow = (key: number) =>
+    setState((s) => ({ ...s, stockRows: s.stockRows.filter((r) => r.key !== key) }))
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const stockLengths = state.stockLengthsText
-      .split(",")
-      .map((v) => parseFloat(v.trim()))
-      .filter((v) => !isNaN(v) && v > 0)
-      .map((v) => Math.round(v * 1000))
-      .sort((a, b) => a - b)
+    const stock: StockItem[] = state.stockRows
+      .map((r) => ({ length: Math.round(parseFloat(r.lengthText) * 1000), quantity: Math.max(0, Math.round(r.quantity)) }))
+      .filter((s) => !isNaN(s.length) && s.length > 0 && s.quantity > 0)
+      .sort((a, b) => a.length - b.length)
 
     onSave({
       name: state.name,
@@ -44,7 +60,9 @@ const DeckForm: React.FC<{
       boardGap: state.boardGap,
       minStagger: state.minStagger,
       boardDirection: state.boardDirection,
-      stockLengths,
+      skeletonInterval: state.skeletonInterval,
+      layoutSeed: state.layoutSeed,
+      stock,
     })
   }
 
@@ -138,15 +156,58 @@ const DeckForm: React.FC<{
       </div>
 
       <div className={styles.field}>
-        <label htmlFor="stockLengths">Available board lengths (m)</label>
-        <span className={styles.hint}>Comma-separated, e.g. 3.6, 4.2, 4.8, 5.4, 6.0</span>
+        <label htmlFor="skeletonInterval">Skeleton row interval</label>
+        <span className={styles.hint}>
+          Every Nth row is laid first from your longest stock, staggered against the previous
+          skeleton row; the rows in between are filled in afterwards from a randomised mix
+        </span>
         <input
-          id="stockLengths"
-          type="text"
-          value={state.stockLengthsText}
-          onChange={(e) => setState((s) => ({ ...s, stockLengthsText: e.target.value }))}
+          id="skeletonInterval"
+          type="number"
+          min={2}
+          value={state.skeletonInterval}
+          onChange={num("skeletonInterval")}
           required
         />
+      </div>
+
+      <div className={styles.field}>
+        <label>Board stock on hand</label>
+        <span className={styles.hint}>Length (m) and how many of that length you have</span>
+        <div className={styles.stockList}>
+          {state.stockRows.map((row) => (
+            <div key={row.key} className={styles.stockRow}>
+              <input
+                type="number"
+                step="0.1"
+                min={0}
+                placeholder="Length (m)"
+                value={row.lengthText}
+                onChange={(e) => updateRow(row.key, { lengthText: e.target.value })}
+                aria-label="Board length in metres"
+              />
+              <span className={styles.stockX}>×</span>
+              <input
+                type="number"
+                min={0}
+                value={row.quantity}
+                onChange={(e) => updateRow(row.key, { quantity: Number(e.target.value) || 0 })}
+                aria-label="Quantity"
+              />
+              <button
+                type="button"
+                className={styles.removeRow}
+                onClick={() => removeRow(row.key)}
+                aria-label="Remove this length"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <Button size="small" variant="secondary" onClick={addRow}>
+          Add length
+        </Button>
       </div>
 
       <div className={styles.actions}>

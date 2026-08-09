@@ -1,12 +1,11 @@
-import { DeckConfig, lengthAt, widthAt } from "./types"
+import { DeckConfig, lengthAt, StockItem, widthAt } from "./types"
 
 export interface BoardSegment {
   /** mm, position along the row from the square end */
   start: number
   end: number
   cutLength: number
-  /** shortest available stock length this segment can be cut from; null if it
-   * exceeds every available stock length */
+  /** stock length this segment was cut from; null if nothing on hand could cover it */
   stockLength: number | null
 }
 
@@ -18,6 +17,7 @@ export interface JoinMark {
 
 export interface RowPlan {
   index: number
+  isSkeleton: boolean
   /** position along the row-stacking axis (width, if boards run into the rake;
    * length, if boards run along the rake) */
   rowStart: number
@@ -31,7 +31,7 @@ export interface RowPlan {
 export interface DeckLayout {
   rows: RowPlan[]
   joistPositions: number[]
-  shoppingList: { stockLength: number; count: number }[]
+  shoppingList: { stockLength: number; used: number; onHand: number }[]
   totalBoards: number
   totalJoins: number
   totalWasteMm: number
@@ -39,62 +39,206 @@ export interface DeckLayout {
   hasNarrowLastRow: boolean
 }
 
-function smallestStockAtLeast(need: number, stockLengths: number[]): number | null {
-  let best: number | null = null
-  for (const s of stockLengths) {
-    if (s + 1e-6 >= need && (best === null || s < best)) best = s
+// ---- deterministic PRNG (mulberry32) so a saved deck's fill pattern is stable ----
+function mulberry32(seed: number) {
+  let a = seed | 0
+  return function rand() {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
-  return best
 }
 
-function planRow(
+// ---- board inventory ----
+class Inventory {
+  private stock = new Map<number, number>()
+  private onHand = new Map<number, number>()
+
+  constructor(items: StockItem[]) {
+    for (const { length, quantity } of items) {
+      if (length <= 0 || quantity <= 0) continue
+      this.stock.set(length, (this.stock.get(length) ?? 0) + quantity)
+      this.onHand.set(length, (this.onHand.get(length) ?? 0) + quantity)
+    }
+  }
+
+  available(): number[] {
+    return Array.from(this.stock.entries())
+      .filter(([, q]) => q > 0)
+      .map(([len]) => len)
+  }
+
+  take(length: number) {
+    const q = this.stock.get(length) ?? 0
+    if (q > 0) this.stock.set(length, q - 1)
+  }
+
+  smallestAtLeast(need: number): number | null {
+    let best: number | null = null
+    for (const [len, q] of this.stock.entries()) {
+      if (q > 0 && len + 1e-6 >= need && (best === null || len < best)) best = len
+    }
+    return best
+  }
+
+  longest(): number | null {
+    let best: number | null = null
+    for (const [len, q] of this.stock.entries()) {
+      if (q > 0 && (best === null || len > best)) best = len
+    }
+    return best
+  }
+
+  onHandOf(length: number): number {
+    return this.onHand.get(length) ?? 0
+  }
+
+  originalLengths(): number[] {
+    return Array.from(this.onHand.keys())
+  }
+}
+
+function staggerOk(position: number, prevJoins: number[], minStagger: number): boolean {
+  return prevJoins.every((pj) => Math.abs(pj - position) >= minStagger)
+}
+
+/** Rows that need a join: consume the LONGEST board on hand to reach as far as
+ * possible, preferring the previous skeleton row's stagger. Used for skeleton rows. */
+function planRowLongestFirst(
   targetLength: number,
   joistPositions: number[],
-  stockLengths: number[],
+  inv: Inventory,
   prevJoins: number[],
   minStagger: number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
-  const maxStock = stockLengths.length ? Math.max(...stockLengths) : 0
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
   let p = 0
-
-  // guard against pathological configs (e.g. maxStock shorter than one joist bay)
   let safety = 0
-  while (targetLength - p > maxStock + 1e-6 && safety < 200) {
-    safety++
-    const candidates = joistPositions.filter((j) => j > p + 1e-6 && j <= p + maxStock + 1e-6)
-    if (!candidates.length) break
-    candidates.sort((a, b) => b - a)
 
-    let chosen = candidates.find((j) => prevJoins.every((pj) => Math.abs(pj - j) >= minStagger))
+  while (safety++ < 200) {
+    const remaining = targetLength - p
+    const finish = inv.smallestAtLeast(remaining)
+    if (finish !== null) {
+      inv.take(finish)
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+      break
+    }
+
+    const longest = inv.longest()
+    if (longest === null) {
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      break
+    }
+    const candidates = joistPositions
+      .filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
+      .sort((a, b) => b - a)
+    if (!candidates.length) {
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      break
+    }
+
+    let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
     let staggered = true
     if (chosen === undefined) {
       chosen = candidates[0]
       staggered = false
     }
 
-    const cutLength = chosen - p
-    boards.push({ start: p, end: chosen, cutLength, stockLength: smallestStockAtLeast(cutLength, stockLengths) })
+    inv.take(longest)
+    boards.push({ start: p, end: chosen, cutLength: chosen - p, stockLength: longest })
     joins.push({ position: chosen, staggered })
     p = chosen
   }
 
-  const cutLength = targetLength - p
-  boards.push({ start: p, end: targetLength, cutLength, stockLength: smallestStockAtLeast(cutLength, stockLengths) })
+  return { boards, joins }
+}
+
+/** Rows that need a join: pick a RANDOM board on hand for each join, so the
+ * pattern doesn't repeat, falling back to the longest on hand if the random
+ * pick can't even reach the next joist. Used for the fill-in rows. */
+function planRowRandomFirst(
+  targetLength: number,
+  joistPositions: number[],
+  inv: Inventory,
+  prevJoins: number[],
+  minStagger: number,
+  rand: () => number
+): { boards: BoardSegment[]; joins: JoinMark[] } {
+  const boards: BoardSegment[] = []
+  const joins: JoinMark[] = []
+  let p = 0
+  let safety = 0
+
+  while (safety++ < 200) {
+    const remaining = targetLength - p
+    const finish = inv.smallestAtLeast(remaining)
+    if (finish !== null) {
+      inv.take(finish)
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+      break
+    }
+
+    const avail = inv.available()
+    if (!avail.length) {
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      break
+    }
+
+    let chosenLength: number | null = null
+    let candidates: number[] = []
+    const tried = new Set<number>()
+    for (let attempt = 0; attempt < 8 && tried.size < avail.length; attempt++) {
+      const pick = avail[Math.floor(rand() * avail.length)]
+      if (tried.has(pick)) continue
+      tried.add(pick)
+      const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + pick + 1e-6)
+      if (js.length) {
+        chosenLength = pick
+        candidates = js
+        break
+      }
+    }
+    if (chosenLength === null) {
+      const longest = inv.longest()
+      if (longest !== null) {
+        const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
+        if (js.length) {
+          chosenLength = longest
+          candidates = js
+        }
+      }
+    }
+    if (chosenLength === null) {
+      boards.push({ start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      break
+    }
+
+    candidates.sort((a, b) => b - a)
+    let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
+    let staggered = true
+    if (chosen === undefined) {
+      chosen = candidates[0]
+      staggered = false
+    }
+
+    inv.take(chosenLength)
+    boards.push({ start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
+    joins.push({ position: chosen, staggered })
+    p = chosen
+  }
 
   return { boards, joins }
 }
 
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
-  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stockLengths, minStagger } = config
+  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock, minStagger } = config
   const pitch = boardWidth + boardGap
   const intoRake = config.boardDirection !== "alongRake"
   const maxLen = Math.max(sideA, sideB)
+  const skeletonInterval = Math.max(1, Math.round(config.skeletonInterval || 4))
 
-  // rows stack along the width when boards run into the rake, or along the
-  // length when boards run along it; joists always run perpendicular to the
-  // boards, spaced along whichever axis the boards themselves run.
   const rowAxisExtent = intoRake ? width : maxLen
   const joistAxisMax = intoRake ? maxLen : width
   const rowCount = Math.max(1, Math.ceil(rowAxisExtent / pitch))
@@ -102,10 +246,11 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const joistPositions: number[] = []
   for (let x = 0; x <= joistAxisMax + 1e-6; x += joistSpacing) joistPositions.push(Math.round(x))
 
-  const sortedStock = [...stockLengths].sort((a, b) => a - b)
+  const inv = new Inventory(stock)
+  const rand = mulberry32(config.layoutSeed || 1)
 
-  const rows: RowPlan[] = []
-  let prevJoins: number[] = []
+  type Slot = { index: number; rowStart: number; rowEnd: number; targetLength: number; isSkeleton: boolean }
+  const slots: Slot[] = []
   let hasNarrowLastRow = false
 
   for (let i = 0; i < rowCount; i++) {
@@ -118,13 +263,45 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
     if (targetLength < 1) continue // deck has tapered to nothing here
 
-    const { boards, joins } = planRow(targetLength, joistPositions, sortedStock, prevJoins, minStagger)
-
-    rows.push({ index: rows.length, rowStart, rowEnd, targetLength, boards, joins })
-    prevJoins = joins.map((j) => j.position)
+    slots.push({ index: slots.length, rowStart, rowEnd, targetLength, isSkeleton: slots.length % skeletonInterval === 0 })
   }
 
-  const shoppingMap = new Map<number, number>()
+  const rowJoins = new Map<number, number[]>() // index -> join positions, filled as each row is planned
+  const results = new Map<number, { boards: BoardSegment[]; joins: JoinMark[] }>()
+
+  // Phase 1: skeleton rows, staggered against the previous skeleton row only.
+  let prevSkeletonJoins: number[] = []
+  for (const slot of slots.filter((s) => s.isSkeleton)) {
+    const result = planRowLongestFirst(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger)
+    results.set(slot.index, result)
+    rowJoins.set(slot.index, result.joins.map((j) => j.position))
+    prevSkeletonJoins = result.joins.map((j) => j.position)
+  }
+
+  // Phase 2: fill-in rows, in physical order, staggered against whichever row
+  // (skeleton or already-placed fill-in) sits directly before them.
+  for (const slot of slots) {
+    if (slot.isSkeleton) continue
+    const prevJoins = rowJoins.get(slot.index - 1) ?? []
+    const result = planRowRandomFirst(slot.targetLength, joistPositions, inv, prevJoins, minStagger, rand)
+    results.set(slot.index, result)
+    rowJoins.set(slot.index, result.joins.map((j) => j.position))
+  }
+
+  const rows: RowPlan[] = slots.map((slot) => {
+    const r = results.get(slot.index)!
+    return {
+      index: slot.index,
+      isSkeleton: slot.isSkeleton,
+      rowStart: slot.rowStart,
+      rowEnd: slot.rowEnd,
+      targetLength: slot.targetLength,
+      boards: r.boards,
+      joins: r.joins,
+    }
+  })
+
+  const usedMap = new Map<number, number>()
   let totalWasteMm = 0
   let unresolvedSegments = 0
   let totalJoins = 0
@@ -138,13 +315,18 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
         unresolvedSegments++
         continue
       }
-      shoppingMap.set(b.stockLength, (shoppingMap.get(b.stockLength) ?? 0) + 1)
+      usedMap.set(b.stockLength, (usedMap.get(b.stockLength) ?? 0) + 1)
       totalWasteMm += b.stockLength - b.cutLength
     }
   }
 
-  const shoppingList = Array.from(shoppingMap.entries())
-    .map(([stockLength, count]) => ({ stockLength, count }))
+  const allLengths = new Set<number>([...inv.originalLengths(), ...usedMap.keys()])
+  const shoppingList = Array.from(allLengths)
+    .map((stockLength) => ({
+      stockLength,
+      used: usedMap.get(stockLength) ?? 0,
+      onHand: inv.onHandOf(stockLength),
+    }))
     .sort((a, b) => a.stockLength - b.stockLength)
 
   return {

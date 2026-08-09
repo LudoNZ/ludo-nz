@@ -9,7 +9,7 @@ import {
   Timestamp,
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
-import { DeckConfig } from "./types"
+import { DeckConfig, StockItem } from "./types"
 
 const decksRef = (uid: string) => collection(firestore, "users", uid, "decks")
 
@@ -26,6 +26,11 @@ export const subscribeToDecks = (
     (snap) => {
       const decks: DeckConfig[] = snap.docs.map((d) => {
         const data = d.data()
+        // migrate pre-inventory decks: an unlimited stockLengths list becomes a
+        // generous quantity so an old deck doesn't suddenly run "out of stock"
+        const stock: StockItem[] = Array.isArray(data.stock)
+          ? data.stock
+          : (data.stockLengths ?? []).map((length: number) => ({ length, quantity: 99 }))
         return {
           id: d.id,
           name: data.name,
@@ -35,9 +40,11 @@ export const subscribeToDecks = (
           joistSpacing: data.joistSpacing,
           boardWidth: data.boardWidth,
           boardGap: data.boardGap,
-          stockLengths: data.stockLengths ?? [],
+          stock,
           minStagger: data.minStagger,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
+          skeletonInterval: data.skeletonInterval || 4,
+          layoutSeed: data.layoutSeed ?? 1,
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         }
       })

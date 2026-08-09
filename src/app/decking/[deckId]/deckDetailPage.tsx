@@ -74,11 +74,34 @@ const DeckDetailPage = () => {
     }
   }
 
+  const handleShuffle = async () => {
+    await saveDeck(auth.currentUser!.uid, {
+      id: deck.id,
+      name: deck.name,
+      width: deck.width,
+      sideA: deck.sideA,
+      sideB: deck.sideB,
+      joistSpacing: deck.joistSpacing,
+      boardWidth: deck.boardWidth,
+      boardGap: deck.boardGap,
+      stock: deck.stock,
+      minStagger: deck.minStagger,
+      boardDirection: deck.boardDirection,
+      skeletonInterval: deck.skeletonInterval,
+      layoutSeed: Math.floor(Math.random() * 2 ** 31),
+    })
+  }
+
   return (
     <div className={styles.detailPage}>
       <div className={styles.headerRow}>
         <h1>{deck.name}</h1>
         <div className={styles.actions}>
+          {!editing && (
+            <Button size="medium" variant="secondary" onClick={handleShuffle}>
+              Shuffle fill pattern
+            </Button>
+          )}
           <Button size="medium" variant="secondary" onClick={() => setEditing((e) => !e)}>
             {editing ? "Close" : "Edit"}
           </Button>

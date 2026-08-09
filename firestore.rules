@@ -118,12 +118,12 @@ service cloud.firestore {
     match /users/{userId}/decks/{deckId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasAll(['name', 'width', 'sideA', 'sideB', 'joistSpacing', 'boardWidth', 'boardGap', 'stockLengths', 'minStagger', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['name', 'width', 'sideA', 'sideB', 'joistSpacing', 'boardWidth', 'boardGap', 'stock', 'minStagger', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.width is number
         && request.resource.data.sideA is number
         && request.resource.data.sideB is number
-        && request.resource.data.stockLengths is list;
+        && request.resource.data.stock is list;
     }
 
     // Default: deny all other access

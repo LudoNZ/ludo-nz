@@ -7,6 +7,13 @@
  */
 export type BoardDirection = "intoRake" | "alongRake"
 
+/** A length of board you have on hand and how many of it. */
+export interface StockItem {
+  /** mm */
+  length: number
+  quantity: number
+}
+
 export interface DeckConfig {
   id: string
   name: string
@@ -22,15 +29,28 @@ export interface DeckConfig {
   boardWidth: number
   /** mm, gap between boards */
   boardGap: number
-  /** mm, available stock lengths, ascending */
-  stockLengths: number[]
+  /** board lengths on hand, with quantity of each */
+  stock: StockItem[]
   /** mm, minimum distance between a join and the nearest join in the adjacent row */
   minStagger: number
   boardDirection: BoardDirection
+  /** every Nth row is laid first as a "skeleton" from the longest stock,
+   * staggered against the previous skeleton row; the rows in between are
+   * filled in afterwards from a randomised mix of what's left */
+  skeletonInterval: number
+  /** seeds the fill-in randomisation so the pattern is stable across
+   * re-renders; change it (e.g. via a "shuffle" action) to get a new mix */
+  layoutSeed: number
   updatedAt: Date
 }
 
-export const DEFAULT_STOCK_LENGTHS = [3600, 4200, 4800, 5400, 6000]
+export const DEFAULT_STOCK: StockItem[] = [
+  { length: 3600, quantity: 6 },
+  { length: 4200, quantity: 6 },
+  { length: 4800, quantity: 6 },
+  { length: 5400, quantity: 4 },
+  { length: 6000, quantity: 4 },
+]
 
 export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "updatedAt"> {
   return {
@@ -41,9 +61,11 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     joistSpacing: 400,
     boardWidth: 140,
     boardGap: 5,
-    stockLengths: [...DEFAULT_STOCK_LENGTHS],
+    stock: DEFAULT_STOCK.map((s) => ({ ...s })),
     minStagger: 300,
     boardDirection: "intoRake",
+    skeletonInterval: 4,
+    layoutSeed: Math.floor(Math.random() * 2 ** 31),
   }
 }
 
