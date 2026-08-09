@@ -109,56 +109,105 @@ function staggerOk(position: number, prevJoins: number[], minStagger: number): b
 /** Skeleton rows: try to cover the row in one board first. Where a join is
  * unavoidable, reach as far as the longest board on hand *could* go (to keep
  * joins to a minimum) but then cut that join from the smallest board that
- * actually reaches the chosen position — not the literal longest one, so
- * skeleton rows don't needlessly burn through the biggest stock when a
- * shorter board would land on the exact same joist. */
+ * actually reaches the chosen position — not the literal longest one, so two
+ * shorter boards are fine as long as the join count doesn't grow.
+ *
+ * `reversed` builds the row from the raked end backward instead of from the
+ * square end forward, so the long piece sits at the opposite end of the row —
+ * alternating this between skeleton rows spreads their joins across genuinely
+ * different positions instead of all landing in the same neighbourhood, which
+ * a minimum-stagger check alone doesn't guarantee. */
 function planSkeletonRow(
   targetLength: number,
   joistPositions: number[],
   inv: Inventory,
   prevJoins: number[],
-  minStagger: number
+  minStagger: number,
+  reversed: boolean
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
-  let p = 0
   let safety = 0
 
-  while (safety++ < 200) {
-    const remaining = targetLength - p
-    const finish = inv.smallestAtLeast(remaining)
-    if (finish !== null) {
-      inv.take(finish)
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
-      break
-    }
+  if (!reversed) {
+    let p = 0
+    while (safety++ < 200) {
+      const remaining = targetLength - p
+      const finish = inv.smallestAtLeast(remaining)
+      if (finish !== null) {
+        inv.take(finish)
+        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+        break
+      }
 
-    const maxReach = inv.longest()
-    if (maxReach === null) {
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
-      break
-    }
-    const candidates = joistPositions
-      .filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
-      .sort((a, b) => b - a)
-    if (!candidates.length) {
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
-      break
-    }
+      const maxReach = inv.longest()
+      if (maxReach === null) {
+        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+        break
+      }
+      const candidates = joistPositions
+        .filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
+        .sort((a, b) => b - a)
+      if (!candidates.length) {
+        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+        break
+      }
 
-    let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
-    let staggered = true
-    if (chosen === undefined) {
-      chosen = candidates[0]
-      staggered = false
-    }
+      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
+      let staggered = true
+      if (chosen === undefined) {
+        chosen = candidates[0]
+        staggered = false
+      }
 
-    const cutLength = chosen - p
-    const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
-    inv.take(stockLength)
-    boards.push({ id: "", start: p, end: chosen, cutLength, stockLength })
-    joins.push({ position: chosen, staggered })
-    p = chosen
+      const cutLength = chosen - p
+      const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
+      inv.take(stockLength)
+      boards.push({ id: "", start: p, end: chosen, cutLength, stockLength })
+      joins.push({ position: chosen, staggered })
+      p = chosen
+    }
+  } else {
+    // mirror of the forward walk: p is the far boundary of the not-yet-placed
+    // region [0, p]; step backward, keeping joins on real joist positions.
+    let p = targetLength
+    while (safety++ < 200) {
+      const remaining = p
+      const finish = inv.smallestAtLeast(remaining)
+      if (finish !== null) {
+        inv.take(finish)
+        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: finish })
+        break
+      }
+
+      const maxReach = inv.longest()
+      if (maxReach === null) {
+        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
+        break
+      }
+      const candidates = joistPositions
+        .filter((j) => j < p - 1e-6 && j >= p - maxReach - 1e-6)
+        .sort((a, b) => a - b)
+      if (!candidates.length) {
+        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
+        break
+      }
+
+      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
+      let staggered = true
+      if (chosen === undefined) {
+        chosen = candidates[0]
+        staggered = false
+      }
+
+      const cutLength = p - chosen
+      const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
+      inv.take(stockLength)
+      boards.push({ id: "", start: chosen, end: p, cutLength, stockLength })
+      joins.push({ position: chosen, staggered })
+      p = chosen
+    }
+    boards.sort((a, b) => a.start - b.start)
   }
 
   return { boards, joins }
@@ -288,12 +337,17 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const results = new Map<number, { boards: BoardSegment[]; joins: JoinMark[] }>()
 
   // Phase 1: skeleton rows, staggered against the previous skeleton row only.
+  // Alternates which end the long piece starts from, so joins land at
+  // genuinely different positions rather than clustering on one side.
   let prevSkeletonJoins: number[] = []
+  let skeletonSeq = 0
   for (const slot of slots.filter((s) => s.isSkeleton)) {
-    const result = planSkeletonRow(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger)
+    const reversed = skeletonSeq % 2 === 1
+    const result = planSkeletonRow(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger, reversed)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
     prevSkeletonJoins = result.joins.map((j) => j.position)
+    skeletonSeq++
   }
 
   // Phase 2: fill-in rows, in physical order, staggered against whichever row
