@@ -1,0 +1,60 @@
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  font-size: 0.95rem;
+
+  &.maxRow {
+    border-color: #eb6834;
+  }
+}
+
+.date {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+
+  .band {
+    font-weight: 600;
+  }
+
+  .stat {
+    opacity: 0.75;
+  }
+}
+
+.total {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.deleteBtn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.25rem;
+}
+
+.empty {
+  opacity: 0.6;
+  text-align: center;
+  padding: 1rem;
+}

@@ -59,6 +59,9 @@ const Header = () => {
           {!!auth &&
             !!auth.currentUser && ( //user loged in
               <>
+                <li>
+                  <Link href={"/exercise"}>Exercise</Link>
+                </li>
                 <li className={styles.authLink}>{`Hi ${auth.currentUser.displayName}`}</li>
                 <LogoutButton />
               </>

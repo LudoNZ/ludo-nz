@@ -100,6 +100,20 @@ service cloud.firestore {
       }
     }
 
+    // Per-user pull-up / exercise tracking
+    match /users/{userId}/pullupSessions/{sessionId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['createdAt', 'assistanceBands', 'isMaxTest', 'targetReps', 'intervalSeconds', 'sets', 'totalReps'])
+        && request.resource.data.assistanceBands is int
+        && request.resource.data.assistanceBands >= 0
+        && request.resource.data.assistanceBands <= 3
+        && request.resource.data.isMaxTest is bool
+        && request.resource.data.sets is list
+        && request.resource.data.totalReps is int;
+      allow update: if false;
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

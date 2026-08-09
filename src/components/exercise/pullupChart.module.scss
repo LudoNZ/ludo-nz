@@ -1,0 +1,134 @@
+.chartRoot {
+  color-scheme: light;
+  --surface-1: var(--background);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--foreground);
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --baseline: #c3c2b7;
+  --tier-3: #86b6ef;
+  --tier-2: #5598e7;
+  --tier-1: #2a78d6;
+  --tier-0: #1c5cab;
+  --accent-max: #eb6834;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chartRoot {
+    color-scheme: dark;
+    --text-secondary: var(--foreground);
+    --text-muted: #a3a29b;
+    --gridline: #3a3a37;
+    --baseline: #4a4a46;
+    --accent-max: #d95926;
+  }
+}
+:root[data-theme="dark"] .chartRoot {
+  color-scheme: dark;
+  --text-muted: #a3a29b;
+  --gridline: #3a3a37;
+  --baseline: #4a4a46;
+  --accent-max: #d95926;
+}
+
+.readout {
+  min-height: 1.6rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+
+  .muted {
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+}
+
+.svgWrap {
+  width: 100%;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: pan-y;
+}
+
+.gridline {
+  stroke: var(--gridline);
+  stroke-width: 1;
+}
+
+.baseline {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+
+.tick {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+.xtick {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+.line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hitTarget {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.marker {
+  stroke: var(--surface-1);
+  stroke-width: 2;
+  transition: r 0.15s ease;
+}
+
+.markerActive {
+  r: 7;
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  font-size: 0.95rem;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+}
+
+.legendSwatch {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.legendDiamond {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+}

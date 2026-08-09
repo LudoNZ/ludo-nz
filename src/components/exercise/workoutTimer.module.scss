@@ -1,0 +1,173 @@
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 26rem;
+  margin: 0 auto;
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+
+    label {
+      font-weight: 600;
+    }
+  }
+
+  .segmented {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+
+    button {
+      flex: 1;
+      min-width: 5rem;
+      padding: 0.7rem 0.5rem;
+      border: 2px solid var(--color-primary);
+      border-radius: var(--borderRadius);
+      background: none;
+      color: var(--foreground);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 1rem;
+
+      &.active {
+        background-color: var(--color-primary);
+        color: var(--background);
+      }
+    }
+  }
+
+  select,
+  input[type="number"] {
+    padding: 0.65rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: 1.1rem;
+  }
+}
+
+.running {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  text-align: center;
+}
+
+.elapsed {
+  font-size: clamp(2.5rem, 12vw, 3.5rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.nextSetBlock {
+  width: 100%;
+  max-width: 22rem;
+
+  .nextLabel {
+    font-size: 0.95rem;
+    opacity: 0.75;
+    margin-bottom: 0.4rem;
+  }
+
+  .nextTime {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 0.5rem;
+  }
+
+  .progressTrack {
+    height: 0.6rem;
+    border-radius: 999px;
+    background-color: rgba(27, 177, 47, 0.15);
+    overflow: hidden;
+  }
+
+  .progressFill {
+    height: 100%;
+    background-color: var(--color-primary);
+    transition: width 0.2s linear;
+  }
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+
+  button {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 999px;
+    border: 2px solid var(--color-primary);
+    background: none;
+    color: var(--foreground);
+    font-size: 1.8rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .repsValue {
+    font-size: 2.5rem;
+    font-weight: 700;
+    min-width: 4rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.repsLabel {
+  opacity: 0.7;
+  margin-top: -1rem;
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.stats {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 1rem;
+  opacity: 0.85;
+
+  strong {
+    font-size: 1.2rem;
+  }
+}
+
+.setList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  max-width: 30rem;
+}
+
+.setChip {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+
+  &.short {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+}
+
+.muteToggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.4rem;
+  opacity: 0.7;
+}
