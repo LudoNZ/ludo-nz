@@ -29,16 +29,25 @@
 }
 
 .joinSkeleton {
-  fill: var(--color-primary);
+  fill: var(--color-secondary);
 }
 
 .joinFill {
   fill: var(--foreground);
-  opacity: 0.75;
+  opacity: 0.6;
 }
 
 .joinWarning {
   fill: var(--color-danger);
+}
+
+.rowLabel {
+  fill: var(--foreground);
+  font-weight: 700;
+  dominant-baseline: middle;
+  paint-order: stroke;
+  stroke: var(--background);
+  stroke-linejoin: round;
 }
 
 .dimText {
@@ -76,7 +85,7 @@
     border-radius: 1px;
 
     &.skeleton {
-      background-color: var(--color-primary);
+      background-color: var(--color-secondary);
     }
     &.fill {
       background-color: var(--foreground);

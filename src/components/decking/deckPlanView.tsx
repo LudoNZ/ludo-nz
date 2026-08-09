@@ -59,7 +59,10 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
             {layout.rows.map((row) => {
               const rowThickness = row.rowEnd - row.rowStart
               const overhang = rowThickness * 0.35
-              const joinThickness = strokeW * 3.5
+              const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
+              const labelFontSize = Math.min(rowThickness * 0.65, fontSize * 0.8)
+              const labelX = intoRake ? maxLen * 0.015 : row.rowStart + rowThickness / 2
+              const labelY = intoRake ? row.rowStart + rowThickness / 2 : labelFontSize * 0.9
               return (
                 <g key={row.index}>
                   <rect
@@ -97,6 +100,18 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
                       />
                     )
                   })}
+                  {row.isSkeleton && (
+                    <text
+                      x={labelX}
+                      y={labelY}
+                      fontSize={labelFontSize}
+                      strokeWidth={labelFontSize * 0.18}
+                      textAnchor={intoRake ? "start" : "middle"}
+                      className={styles.rowLabel}
+                    >
+                      {row.index + 1}
+                    </text>
+                  )}
                 </g>
               )
             })}
