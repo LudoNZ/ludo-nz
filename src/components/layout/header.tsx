@@ -62,6 +62,9 @@ const Header = () => {
                 <li>
                   <Link href={"/exercise"}>Exercise</Link>
                 </li>
+                <li>
+                  <Link href={"/decking"}>Decking</Link>
+                </li>
                 <li className={styles.authLink}>{`Hi ${auth.currentUser.displayName}`}</li>
                 <LogoutButton />
               </>

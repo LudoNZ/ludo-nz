@@ -1,0 +1,73 @@
+.planRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.svgWrap {
+  width: 100%;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.outline {
+  fill: rgba(27, 177, 47, 0.06);
+  stroke: var(--color-primary);
+}
+
+.joist {
+  stroke: #898781;
+  stroke-dasharray: 1.2% 1%;
+}
+
+.row {
+  fill: rgba(27, 177, 47, 0.16);
+}
+
+.joinGap {
+  fill: var(--background);
+}
+
+.joinWarning {
+  fill: var(--color-danger);
+}
+
+.dimText {
+  fill: var(--foreground);
+  opacity: 0.75;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  font-size: 0.9rem;
+  opacity: 0.8;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    background-color: var(--color-danger);
+  }
+
+  .dash {
+    width: 16px;
+    height: 0;
+    border-top: 1px dashed #898781;
+    display: inline-block;
+  }
+}
