@@ -17,7 +17,7 @@ const SessionPage = () => {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (auth && !auth.currentUser) {
+    if (auth && !auth.authLoading && !auth.currentUser) {
       router.push("/login")
     }
   }, [auth, router])

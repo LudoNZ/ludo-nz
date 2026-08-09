@@ -14,6 +14,11 @@ import { removeToken, setToken } from "./actions"
 
 type AuthContextType = {
   currentUser: User | null
+  /** true until the initial auth state has been resolved (e.g. restored from a
+   * previous session on page load) — guard redirects on this, not on
+   * `!currentUser` alone, or a refresh will bounce a logged-in user to /login
+   * during the brief window before Firebase confirms the session. */
+  authLoading: boolean
   logout: () => Promise<void>
   loginWithGoogle: () => Promise<void>
   loginWithEmail: (email: string, password: string) => Promise<void>
@@ -25,6 +30,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [customClaims, setCustomClaims] = useState<ParsedToken | null>(null)
 
   useEffect(() => {
@@ -46,6 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         await removeToken()
       }
+      setAuthLoading(false)
     })
     return () => unsubscribe()
   }, [])
@@ -71,6 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider
       value={{
         currentUser,
+        authLoading,
         logout,
         loginWithGoogle,
         loginWithEmail,

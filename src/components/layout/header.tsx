@@ -69,7 +69,7 @@ const Header = () => {
                 <LogoutButton />
               </>
             )}
-          {!auth?.currentUser && ( // anonymous visitor
+          {!auth?.currentUser && auth?.authLoading === false && ( // anonymous visitor (once auth state is resolved)
             <>
               <li className={styles.authLink}>
                 <Link href={"/login"}>Login</Link>

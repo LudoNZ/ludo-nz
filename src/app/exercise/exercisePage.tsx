@@ -19,7 +19,7 @@ const ExercisePage = () => {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    if (auth && !auth.currentUser) {
+    if (auth && !auth.authLoading && !auth.currentUser) {
       router.push("/login")
     }
   }, [auth, router])
