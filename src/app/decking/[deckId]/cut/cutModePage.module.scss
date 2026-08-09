@@ -1,0 +1,114 @@
+.cutPage {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+
+  h1 {
+    font-size: clamp(1.4rem, 4vw, 1.9rem);
+    color: var(--color-primary);
+  }
+
+  a {
+    font-size: 0.95rem;
+    text-decoration: underline;
+    opacity: 0.8;
+    white-space: nowrap;
+  }
+}
+
+.progressBlock {
+  margin-bottom: 1.75rem;
+
+  .progressLabel {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+
+  .progressTrack {
+    height: 0.9rem;
+    border-radius: 999px;
+    background-color: rgba(27, 177, 47, 0.15);
+    overflow: hidden;
+  }
+
+  .progressFill {
+    height: 100%;
+    background-color: var(--color-primary);
+    transition: width 0.3s ease;
+  }
+}
+
+.nextCard {
+  padding: 1.5rem;
+  border: 2px solid #2a78d6;
+  border-radius: var(--borderRadius);
+  background-color: rgba(42, 120, 214, 0.06);
+  text-align: center;
+  margin-bottom: 1.5rem;
+
+  .tag {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.65;
+    font-weight: 600;
+  }
+
+  .cutLine {
+    font-size: clamp(1.4rem, 5vw, 1.9rem);
+    font-weight: 700;
+    margin: 0.5rem 0 0.3rem;
+  }
+
+  .subLine {
+    opacity: 0.75;
+    margin-bottom: 1.25rem;
+  }
+
+  .joinNote {
+    font-size: 0.9rem;
+    margin-bottom: 1.25rem;
+
+    &.warn {
+      color: var(--color-danger);
+    }
+  }
+}
+
+.doneCard {
+  padding: 2rem 1.5rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.undoRow {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.card {
+  padding: 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+}
+
+.loading {
+  padding: 3rem 1rem;
+  text-align: center;
+  opacity: 0.7;
+}

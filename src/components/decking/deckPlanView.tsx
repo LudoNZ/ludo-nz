@@ -10,7 +10,8 @@ const DeckPlanView: React.FC<{
   layout: DeckLayout
   completedSegmentIds: string[]
   onToggleSegment: (id: string) => void
-}> = ({ config, layout, completedSegmentIds, onToggleSegment }) => {
+  activeSegmentId?: string | null
+}> = ({ config, layout, completedSegmentIds, onToggleSegment, activeSegmentId = null }) => {
   const clipId = useId()
   const completedSet = new Set(completedSegmentIds)
   const { sideA, sideB, width } = config
@@ -73,6 +74,7 @@ const DeckPlanView: React.FC<{
                 <g key={row.index}>
                   {row.boards.map((b) => {
                     const placed = completedSet.has(b.id)
+                    const active = b.id === activeSegmentId
                     const cx = intoRake ? (b.start + b.end) / 2 : row.rowStart + rowThickness / 2
                     const cy = intoRake ? row.rowStart + rowThickness / 2 : (b.start + b.end) / 2
                     const checkSize = Math.min(rowThickness * 0.55, fontSize)
@@ -83,11 +85,11 @@ const DeckPlanView: React.FC<{
                           y={intoRake ? row.rowStart : b.start}
                           width={intoRake ? b.end - b.start : rowThickness}
                           height={intoRake ? rowThickness : b.end - b.start}
-                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""}`}
+                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""} ${active ? styles.segmentActive : ""}`}
                           tabIndex={0}
                           role="button"
                           aria-pressed={placed}
-                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"} — tap to toggle`}
+                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""} — tap to toggle`}
                           onClick={() => onToggleSegment(b.id)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {

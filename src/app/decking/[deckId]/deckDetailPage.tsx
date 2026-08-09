@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import DeckForm from "@/components/decking/deckForm"
@@ -111,6 +112,13 @@ const DeckDetailPage = () => {
       <div className={styles.headerRow}>
         <h1>{deck.name}</h1>
         <div className={styles.actions}>
+          {!editing && (
+            <Link href={`/decking/${deck.id}/cut`}>
+              <Button size="medium" onClick={() => {}}>
+                Start cutting
+              </Button>
+            </Link>
+          )}
           {!editing && (
             <Button size="medium" variant="secondary" onClick={handleShuffle}>
               Shuffle fill pattern
