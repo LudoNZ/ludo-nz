@@ -10,7 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
-import { DeckConfig, StockItem } from "./types"
+import { DeckConfig, LockedRow, StockItem } from "./types"
 
 const decksRef = (uid: string) => collection(firestore, "users", uid, "decks")
 
@@ -43,10 +43,12 @@ export const subscribeToDecks = (
           boardGap: data.boardGap,
           stock,
           minStagger: data.minStagger,
+          minEdgeJoists: data.minEdgeJoists ?? 2,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,
           layoutSeed: data.layoutSeed ?? 1,
           completedSegmentIds: Array.isArray(data.completedSegmentIds) ? data.completedSegmentIds : [],
+          lockedRows: (data.lockedRows ?? {}) as Record<string, LockedRow>,
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         }
       })
@@ -68,9 +70,15 @@ export const deleteDeck = async (uid: string, deckId: string) => {
   await deleteDoc(doc(firestore, "users", uid, "decks", deckId))
 }
 
-export const setCompletedSegments = async (uid: string, deckId: string, completedSegmentIds: string[]) => {
+export const setCompletedSegments = async (
+  uid: string,
+  deckId: string,
+  completedSegmentIds: string[],
+  lockedRows: Record<string, LockedRow>
+) => {
   await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
     completedSegmentIds,
+    lockedRows,
     updatedAt: Timestamp.now(),
   })
 }

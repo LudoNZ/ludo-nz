@@ -20,6 +20,7 @@ const CutList: React.FC<{
     (sum, r) => sum + r.joins.filter((j) => !j.staggered).length,
     0
   )
+  const nearEdgeCount = layout.rows.reduce((sum, r) => sum + r.joins.filter((j) => j.nearEdge).length, 0)
   const maxStockLength = Math.max(1, ...layout.shoppingList.map((s) => s.stockLength))
   const totalUsed = layout.shoppingList.reduce((sum, s) => sum + s.used, 0)
   const totalOnHand = layout.shoppingList.reduce((sum, s) => sum + s.onHand, 0)
@@ -61,6 +62,12 @@ const CutList: React.FC<{
         <div className={styles.warning}>
           ⚠ {unstaggeredCount} join(s) couldn&apos;t meet the minimum stagger from the row next
           to them — marked in red on the plan.
+        </div>
+      )}
+      {nearEdgeCount > 0 && (
+        <div className={styles.warning}>
+          ⚠ {nearEdgeCount} join(s) had to land within the edge buffer of a row — nothing else was
+          reachable there.
         </div>
       )}
       {layout.hasNarrowLastRow && (

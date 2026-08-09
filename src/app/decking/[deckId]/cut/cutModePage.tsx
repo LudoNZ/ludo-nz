@@ -7,7 +7,7 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import { setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
-import { computeDeckLayout } from "@/components/decking/layout"
+import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
 import { getCutOrder, lastCompletedStep, nextCutStep } from "@/components/decking/cuttingOrder"
 import { DeckConfig, formatLength } from "@/components/decking/types"
 import styles from "./cutModePage.module.scss"
@@ -66,7 +66,9 @@ const CutModePage = () => {
     const set = new Set(deck.completedSegmentIds)
     if (set.has(id)) set.delete(id)
     else set.add(id)
-    setCompletedSegments(auth.currentUser!.uid, deck.id, Array.from(set))
+    const completedSegmentIds = Array.from(set)
+    const lockedRows = computeLockedRows(layout, deck.lockedRows, completedSegmentIds)
+    setCompletedSegments(auth.currentUser!.uid, deck.id, completedSegmentIds, lockedRows)
   }
 
   const next = nextCutStep(order, deck.completedSegmentIds)
@@ -109,10 +111,15 @@ const CutModePage = () => {
               : "⚠ no stock length long enough — source one manually"}
           </div>
           {nextJoin && (
-            <div className={`${styles.joinNote} ${nextJoin.staggered ? "" : styles.warn}`}>
+            <div className={`${styles.joinNote} ${nextJoin.staggered && !nextJoin.nearEdge ? "" : styles.warn}`}>
               {nextJoin.staggered
                 ? "Join lands on a joist, stagger OK"
                 : `⚠ Join couldn't meet the ${formatLength(deck.minStagger)} stagger`}
+              {nextJoin.nearEdge && (
+                <>
+                  <br />⚠ Closer than {deck.minEdgeJoists} joist(s) to the row&apos;s edge
+                </>
+              )}
             </div>
           )}
           <Button size="large" onClick={() => toggle(next.segment.id)}>

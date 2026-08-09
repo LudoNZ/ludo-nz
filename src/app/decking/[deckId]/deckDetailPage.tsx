@@ -9,7 +9,7 @@ import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import CutList from "@/components/decking/cutList"
 import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
-import { computeDeckLayout } from "@/components/decking/layout"
+import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
 import { DeckConfig } from "@/components/decking/types"
 import styles from "./deckDetailPage.module.scss"
 
@@ -87,10 +87,12 @@ const DeckDetailPage = () => {
       boardGap: deck.boardGap,
       stock: deck.stock,
       minStagger: deck.minStagger,
+      minEdgeJoists: deck.minEdgeJoists,
       boardDirection: deck.boardDirection,
       skeletonInterval: deck.skeletonInterval,
       layoutSeed: Math.floor(Math.random() * 2 ** 31),
       completedSegmentIds: deck.completedSegmentIds,
+      lockedRows: deck.lockedRows,
     })
   }
 
@@ -98,12 +100,14 @@ const DeckDetailPage = () => {
     const set = new Set(deck.completedSegmentIds)
     if (set.has(id)) set.delete(id)
     else set.add(id)
-    setCompletedSegments(auth.currentUser!.uid, deck.id, Array.from(set))
+    const completedSegmentIds = Array.from(set)
+    const lockedRows = computeLockedRows(layout, deck.lockedRows, completedSegmentIds)
+    setCompletedSegments(auth.currentUser!.uid, deck.id, completedSegmentIds, lockedRows)
   }
 
   const handleClearCompleted = () => {
-    if (confirm("Clear all placed marks on this deck?")) {
-      setCompletedSegments(auth.currentUser!.uid, deck.id, [])
+    if (confirm("Clear all placed marks on this deck? This also unlocks every row for reshuffling.")) {
+      setCompletedSegments(auth.currentUser!.uid, deck.id, [], {})
     }
   }
 

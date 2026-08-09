@@ -72,10 +72,12 @@ const DeckForm: React.FC<{
       boardWidth: state.boardWidth,
       boardGap: state.boardGap,
       minStagger: state.minStagger,
+      minEdgeJoists: state.minEdgeJoists,
       boardDirection: state.boardDirection,
       skeletonInterval: state.skeletonInterval,
       layoutSeed: state.layoutSeed,
       completedSegmentIds: state.completedSegmentIds,
+      lockedRows: state.lockedRows,
       stock,
     })
   }
@@ -167,6 +169,19 @@ const DeckForm: React.FC<{
             required
           />
         </div>
+      </div>
+
+      <div className={styles.field}>
+        <label htmlFor="minEdgeJoists">Min. joist bays from row edge</label>
+        <span className={styles.hint}>No join is allowed within this many joist bays of either end of a row</span>
+        <input
+          id="minEdgeJoists"
+          type="number"
+          min={0}
+          value={state.minEdgeJoists}
+          onChange={num("minEdgeJoists")}
+          required
+        />
       </div>
 
       <div className={styles.field}>

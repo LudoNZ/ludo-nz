@@ -1,4 +1,4 @@
-import { DeckConfig, lengthAt, StockItem, widthAt } from "./types"
+import { DeckConfig, lengthAt, LockedRow, StockItem, widthAt } from "./types"
 
 export interface BoardSegment {
   /** stable id (row index + position within the row) for tracking completion,
@@ -16,6 +16,9 @@ export interface JoinMark {
   position: number
   /** false if the minimum stagger from the adjacent row could not be honoured here */
   staggered: boolean
+  /** true if this join had to land within minEdgeJoists joist bays of either
+   * end of the row because nothing else was reachable */
+  nearEdge: boolean
 }
 
 export interface RowPlan {
@@ -106,6 +109,21 @@ function staggerOk(position: number, prevJoins: number[], minStagger: number): b
   return prevJoins.every((pj) => Math.abs(pj - position) >= minStagger)
 }
 
+function isEdgeSafe(position: number, targetLength: number, edgeBuffer: number): boolean {
+  return position >= edgeBuffer - 1e-6 && position <= targetLength - edgeBuffer + 1e-6
+}
+
+/** Prefer candidates clear of both row ends; fall back to the full set (and
+ * flag it) only if nothing reachable clears the edge buffer at all. */
+function applyEdgeBuffer(
+  candidates: number[],
+  targetLength: number,
+  edgeBuffer: number
+): { candidates: number[]; nearEdge: boolean } {
+  const safe = candidates.filter((j) => isEdgeSafe(j, targetLength, edgeBuffer))
+  return safe.length ? { candidates: safe, nearEdge: false } : { candidates, nearEdge: true }
+}
+
 /** Skeleton rows: try to cover the row in one board first. Where a join is
  * unavoidable, reach as far as the longest board on hand *could* go (to keep
  * joins to a minimum) but then cut that join from the smallest board that
@@ -123,6 +141,7 @@ function planSkeletonRow(
   inv: Inventory,
   prevJoins: number[],
   minStagger: number,
+  edgeBuffer: number,
   reversed: boolean
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
@@ -145,9 +164,9 @@ function planSkeletonRow(
         boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
         break
       }
-      const candidates = joistPositions
-        .filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
-        .sort((a, b) => b - a)
+      const reach = joistPositions.filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
+      const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
+      candidates.sort((a, b) => b - a)
       if (!candidates.length) {
         boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
         break
@@ -164,7 +183,7 @@ function planSkeletonRow(
       const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
       inv.take(stockLength)
       boards.push({ id: "", start: p, end: chosen, cutLength, stockLength })
-      joins.push({ position: chosen, staggered })
+      joins.push({ position: chosen, staggered, nearEdge })
       p = chosen
     }
   } else {
@@ -185,9 +204,9 @@ function planSkeletonRow(
         boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
         break
       }
-      const candidates = joistPositions
-        .filter((j) => j < p - 1e-6 && j >= p - maxReach - 1e-6)
-        .sort((a, b) => a - b)
+      const reach = joistPositions.filter((j) => j < p - 1e-6 && j >= p - maxReach - 1e-6)
+      const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
+      candidates.sort((a, b) => a - b)
       if (!candidates.length) {
         boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
         break
@@ -204,7 +223,7 @@ function planSkeletonRow(
       const stockLength = inv.smallestAtLeast(cutLength) ?? maxReach
       inv.take(stockLength)
       boards.push({ id: "", start: chosen, end: p, cutLength, stockLength })
-      joins.push({ position: chosen, staggered })
+      joins.push({ position: chosen, staggered, nearEdge })
       p = chosen
     }
     boards.sort((a, b) => a.start - b.start)
@@ -222,6 +241,7 @@ function planRowRandomFirst(
   inv: Inventory,
   prevJoins: number[],
   minStagger: number,
+  edgeBuffer: number,
   rand: () => number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
@@ -246,25 +266,40 @@ function planRowRandomFirst(
 
     let chosenLength: number | null = null
     let candidates: number[] = []
+    let nearEdge = false
     const tried = new Set<number>()
+    // prefer a random pick that has an edge-safe reachable joist; accept a
+    // near-edge one only if none of the tried picks offer anything better
+    let bestNearEdgeFallback: { chosenLength: number; candidates: number[] } | null = null
     for (let attempt = 0; attempt < 8 && tried.size < avail.length; attempt++) {
       const pick = avail[Math.floor(rand() * avail.length)]
       if (tried.has(pick)) continue
       tried.add(pick)
       const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + pick + 1e-6)
-      if (js.length) {
+      if (!js.length) continue
+      const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
+      if (!fellBack) {
         chosenLength = pick
-        candidates = js
+        candidates = safe
+        nearEdge = false
         break
       }
+      if (!bestNearEdgeFallback) bestNearEdgeFallback = { chosenLength: pick, candidates: safe }
+    }
+    if (chosenLength === null && bestNearEdgeFallback) {
+      chosenLength = bestNearEdgeFallback.chosenLength
+      candidates = bestNearEdgeFallback.candidates
+      nearEdge = true
     }
     if (chosenLength === null) {
       const longest = inv.longest()
       if (longest !== null) {
         const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
         if (js.length) {
+          const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
           chosenLength = longest
-          candidates = js
+          candidates = safe
+          nearEdge = fellBack
         }
       }
     }
@@ -283,7 +318,7 @@ function planRowRandomFirst(
 
     inv.take(chosenLength)
     boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
-    joins.push({ position: chosen, staggered })
+    joins.push({ position: chosen, staggered, nearEdge })
     p = chosen
   }
 
@@ -296,6 +331,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const intoRake = config.boardDirection !== "alongRake"
   const maxLen = Math.max(sideA, sideB)
   const skeletonInterval = Math.max(1, Math.round(config.skeletonInterval || 4))
+  const edgeBuffer = joistSpacing * Math.max(0, config.minEdgeJoists ?? 2)
+  const lockedRows = config.lockedRows ?? {}
 
   const rowAxisExtent = intoRake ? width : maxLen
   const joistAxisMax = intoRake ? maxLen : width
@@ -310,7 +347,14 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   // shuffles with the seed, so "shuffle" changes more than just the fill-in mix
   const skeletonOffset = Math.floor(rand() * skeletonInterval)
 
-  type Slot = { index: number; rowStart: number; rowEnd: number; targetLength: number; isSkeleton: boolean }
+  type Slot = {
+    index: number
+    rowStart: number
+    rowEnd: number
+    targetLength: number
+    isSkeleton: boolean
+    locked?: { boards: BoardSegment[]; joins: JoinMark[] }
+  }
   const slots: Slot[] = []
   let hasNarrowLastRow = false
 
@@ -324,26 +368,46 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
     if (targetLength < 1) continue // deck has tapered to nothing here
 
+    const locked = lockedRows[String(slots.length)]
     slots.push({
       index: slots.length,
       rowStart,
       rowEnd,
       targetLength,
-      isSkeleton: slots.length % skeletonInterval === skeletonOffset,
+      isSkeleton: locked ? locked.isSkeleton : slots.length % skeletonInterval === skeletonOffset,
+      locked: locked ? { boards: locked.boards, joins: locked.joins } : undefined,
     })
   }
 
   const rowJoins = new Map<number, number[]>() // index -> join positions, filled as each row is planned
   const results = new Map<number, { boards: BoardSegment[]; joins: JoinMark[] }>()
 
+  const applyLockedRow = (slot: Slot): { boards: BoardSegment[]; joins: JoinMark[] } => {
+    const locked = slot.locked!
+    for (const b of locked.boards) {
+      if (b.stockLength !== null) inv.take(b.stockLength)
+    }
+    return locked
+  }
+
   // Phase 1: skeleton rows, staggered against the previous skeleton row only.
   // Alternates which end the long piece starts from, so joins land at
   // genuinely different positions rather than clustering on one side.
+  // Locked rows (already have a cut board) keep their frozen arrangement.
   let prevSkeletonJoins: number[] = []
   let skeletonSeq = 0
   for (const slot of slots.filter((s) => s.isSkeleton)) {
-    const reversed = skeletonSeq % 2 === 1
-    const result = planSkeletonRow(slot.targetLength, joistPositions, inv, prevSkeletonJoins, minStagger, reversed)
+    const result = slot.locked
+      ? applyLockedRow(slot)
+      : planSkeletonRow(
+          slot.targetLength,
+          joistPositions,
+          inv,
+          prevSkeletonJoins,
+          minStagger,
+          edgeBuffer,
+          skeletonSeq % 2 === 1
+        )
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
     prevSkeletonJoins = result.joins.map((j) => j.position)
@@ -351,11 +415,14 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   }
 
   // Phase 2: fill-in rows, in physical order, staggered against whichever row
-  // (skeleton or already-placed fill-in) sits directly before them.
+  // (skeleton or already-placed fill-in) sits directly before them. Locked
+  // rows keep their frozen arrangement.
   for (const slot of slots) {
     if (slot.isSkeleton) continue
     const prevJoins = rowJoins.get(slot.index - 1) ?? []
-    const result = planRowRandomFirst(slot.targetLength, joistPositions, inv, prevJoins, minStagger, rand)
+    const result = slot.locked
+      ? applyLockedRow(slot)
+      : planRowRandomFirst(slot.targetLength, joistPositions, inv, prevJoins, minStagger, edgeBuffer, rand)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
   }
@@ -411,4 +478,27 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     unresolvedSegments,
     hasNarrowLastRow,
   }
+}
+
+/** Recomputes which rows should be locked given a new set of completed
+ * segment ids: any row with at least one completed board gets its current
+ * arrangement frozen (or keeps its existing freeze); any row with none gets
+ * unlocked again. Call this before persisting completedSegmentIds so a
+ * future reshuffle can't touch rows you've already started cutting. */
+export function computeLockedRows(
+  layout: DeckLayout,
+  existingLocked: Record<string, LockedRow>,
+  completedSegmentIds: string[]
+): Record<string, LockedRow> {
+  const completed = new Set(completedSegmentIds)
+  const next: Record<string, LockedRow> = { ...existingLocked }
+  for (const row of layout.rows) {
+    const hasCompleted = row.boards.some((b) => completed.has(b.id))
+    if (hasCompleted) {
+      next[String(row.index)] = { isSkeleton: row.isSkeleton, boards: row.boards, joins: row.joins }
+    } else {
+      delete next[String(row.index)]
+    }
+  }
+  return next
 }

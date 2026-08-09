@@ -36,7 +36,7 @@ const DeckPlanView: React.FC<{
     }
   }, [sideA, sideB, width])
 
-  const hasWarnings = layout.rows.some((r) => r.joins.some((j) => !j.staggered))
+  const hasWarnings = layout.rows.some((r) => r.joins.some((j) => !j.staggered || j.nearEdge))
 
   return (
     <div className={styles.planRoot}>
@@ -114,7 +114,7 @@ const DeckPlanView: React.FC<{
                     )
                   })}
                   {row.joins.map((j) => {
-                    const markClass = !j.staggered
+                    const markClass = !j.staggered || j.nearEdge
                       ? styles.joinWarning
                       : row.isSkeleton
                         ? styles.joinSkeleton
@@ -193,7 +193,7 @@ const DeckPlanView: React.FC<{
         </span>
         {hasWarnings && (
           <span>
-            <span className={styles.dot} /> Join could not meet {formatLength(config.minStagger)} stagger
+            <span className={styles.dot} /> Join couldn&apos;t meet the stagger or edge-buffer rule
           </span>
         )}
       </div>

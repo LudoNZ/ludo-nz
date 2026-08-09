@@ -14,6 +14,15 @@ export interface StockItem {
   quantity: number
 }
 
+/** A row's board arrangement, snapshotted the moment any of its boards gets
+ * marked as cut & placed — kept exactly as-is on every future recompute
+ * (including reshuffles), so already-cut boards never stop matching the plan. */
+export interface LockedRow {
+  isSkeleton: boolean
+  boards: { id: string; start: number; end: number; cutLength: number; stockLength: number | null }[]
+  joins: { position: number; staggered: boolean; nearEdge: boolean }[]
+}
+
 export interface DeckConfig {
   id: string
   name: string
@@ -33,6 +42,8 @@ export interface DeckConfig {
   stock: StockItem[]
   /** mm, minimum distance between a join and the nearest join in the adjacent row */
   minStagger: number
+  /** no join may fall within this many joist bays of either end of a row */
+  minEdgeJoists: number
   boardDirection: BoardDirection
   /** every Nth row is laid first as a "skeleton" from the longest stock,
    * staggered against the previous skeleton row; the rows in between are
@@ -43,6 +54,9 @@ export interface DeckConfig {
   layoutSeed: number
   /** ids (BoardSegment.id) of boards marked as physically cut & placed */
   completedSegmentIds: string[]
+  /** rows with at least one completed board, frozen at the arrangement they
+   * had when first marked — see LockedRow */
+  lockedRows: Record<string, LockedRow>
   updatedAt: Date
 }
 
@@ -65,10 +79,12 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     boardGap: 5,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),
     minStagger: 300,
+    minEdgeJoists: 2,
     boardDirection: "intoRake",
     skeletonInterval: 4,
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
     completedSegmentIds: [],
+    lockedRows: {},
   }
 }
 
