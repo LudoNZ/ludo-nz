@@ -72,7 +72,7 @@ const CutList: React.FC<{ layout: DeckLayout }> = ({ layout }) => {
             <span>
               #{row.index + 1}
               <br />
-              {formatLength(row.yStart)}
+              {formatLength(row.rowStart)}
             </span>
             <span className={styles.segments}>
               {row.boards.map((b, i) => (

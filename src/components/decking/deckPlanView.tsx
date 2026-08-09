@@ -8,6 +8,7 @@ import styles from "./deckPlanView.module.scss"
 const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ config, layout }) => {
   const clipId = useId()
   const { sideA, sideB, width } = config
+  const intoRake = config.boardDirection !== "alongRake"
 
   const { viewBox, padLeft, padTop, fontSize, strokeW, maxLen } = useMemo(() => {
     const maxLen = Math.max(sideA, sideB)
@@ -46,38 +47,45 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
             strokeWidth={strokeW * 1.5}
           />
 
-          {layout.joistPositions.map((x) => (
-            <line
-              key={x}
-              x1={x}
-              y1={0}
-              x2={x}
-              y2={width}
-              className={styles.joist}
-              strokeWidth={strokeW}
-            />
-          ))}
+          {layout.joistPositions.map((pos) =>
+            intoRake ? (
+              <line key={pos} x1={pos} y1={0} x2={pos} y2={width} className={styles.joist} strokeWidth={strokeW} />
+            ) : (
+              <line key={pos} x1={0} y1={pos} x2={maxLen} y2={pos} className={styles.joist} strokeWidth={strokeW} />
+            )
+          )}
 
           <g clipPath={`url(#${clipId})`}>
             {layout.rows.map((row) => (
               <g key={row.index}>
                 <rect
-                  x={0}
-                  y={row.yStart}
-                  width={row.targetLength}
-                  height={row.yEnd - row.yStart}
+                  x={intoRake ? 0 : row.rowStart}
+                  y={intoRake ? row.rowStart : 0}
+                  width={intoRake ? row.targetLength : row.rowEnd - row.rowStart}
+                  height={intoRake ? row.rowEnd - row.rowStart : row.targetLength}
                   className={styles.row}
                 />
-                {row.joins.map((j) => (
-                  <rect
-                    key={j.position}
-                    x={j.position - strokeW}
-                    y={row.yStart}
-                    width={strokeW * 2}
-                    height={row.yEnd - row.yStart}
-                    className={j.staggered ? styles.joinGap : styles.joinWarning}
-                  />
-                ))}
+                {row.joins.map((j) =>
+                  intoRake ? (
+                    <rect
+                      key={j.position}
+                      x={j.position - strokeW}
+                      y={row.rowStart}
+                      width={strokeW * 2}
+                      height={row.rowEnd - row.rowStart}
+                      className={j.staggered ? styles.joinGap : styles.joinWarning}
+                    />
+                  ) : (
+                    <rect
+                      key={j.position}
+                      x={row.rowStart}
+                      y={j.position - strokeW}
+                      width={row.rowEnd - row.rowStart}
+                      height={strokeW * 2}
+                      className={j.staggered ? styles.joinGap : styles.joinWarning}
+                    />
+                  )
+                )}
               </g>
             ))}
           </g>
@@ -105,6 +113,7 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
       </div>
 
       <div className={styles.legend}>
+        <span>{intoRake ? "↦" : "↧"} Boards run {intoRake ? "into" : "along"} the rake</span>
         <span>
           <span className={styles.dash} /> Joist @ {formatLength(config.joistSpacing)} centres
         </span>

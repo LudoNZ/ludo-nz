@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Button from "@/components/button/button"
-import { DeckConfig } from "./types"
+import { BoardDirection, DeckConfig } from "./types"
 import styles from "./deckForm.module.scss"
 
 type FormState = Omit<DeckConfig, "id" | "updatedAt" | "stockLengths"> & {
@@ -43,6 +43,7 @@ const DeckForm: React.FC<{
       boardWidth: state.boardWidth,
       boardGap: state.boardGap,
       minStagger: state.minStagger,
+      boardDirection: state.boardDirection,
       stockLengths,
     })
   }
@@ -74,6 +75,29 @@ const DeckForm: React.FC<{
         <div className={styles.field}>
           <label htmlFor="sideB">Raked-end length (mm)</label>
           <input id="sideB" type="number" min={100} value={state.sideB} onChange={num("sideB")} required />
+        </div>
+      </div>
+
+      <div className={styles.field}>
+        <label>Board direction</label>
+        <span className={styles.hint}>
+          Which way the boards run relative to the raked end
+        </span>
+        <div className={styles.segmented}>
+          <button
+            type="button"
+            className={state.boardDirection !== "alongRake" ? styles.active : ""}
+            onClick={() => setState((s) => ({ ...s, boardDirection: "intoRake" as BoardDirection }))}
+          >
+            Into the rake
+          </button>
+          <button
+            type="button"
+            className={state.boardDirection === "alongRake" ? styles.active : ""}
+            onClick={() => setState((s) => ({ ...s, boardDirection: "alongRake" as BoardDirection }))}
+          >
+            Along the rake
+          </button>
         </div>
       </div>
 

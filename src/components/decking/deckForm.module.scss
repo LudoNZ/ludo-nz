@@ -48,3 +48,25 @@
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+
+.segmented {
+  display: flex;
+  gap: 0.5rem;
+
+  button {
+    flex: 1;
+    padding: 0.65rem 0.5rem;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background: none;
+    color: var(--foreground);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+
+    &.active {
+      background-color: var(--color-primary);
+      color: var(--background);
+    }
+  }
+}

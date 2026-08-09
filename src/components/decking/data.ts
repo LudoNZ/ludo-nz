@@ -37,6 +37,7 @@ export const subscribeToDecks = (
           boardGap: data.boardGap,
           stockLengths: data.stockLengths ?? [],
           minStagger: data.minStagger,
+          boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         }
       })

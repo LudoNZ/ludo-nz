@@ -1,4 +1,4 @@
-import { DeckConfig, lengthAt } from "./types"
+import { DeckConfig, lengthAt, widthAt } from "./types"
 
 export interface BoardSegment {
   /** mm, position along the row from the square end */
@@ -18,8 +18,10 @@ export interface JoinMark {
 
 export interface RowPlan {
   index: number
-  yStart: number
-  yEnd: number
+  /** position along the row-stacking axis (width, if boards run into the rake;
+   * length, if boards run along the rake) */
+  rowStart: number
+  rowEnd: number
   /** stock length the row's board(s) must cover before the raked end is trimmed */
   targetLength: number
   boards: BoardSegment[]
@@ -87,11 +89,18 @@ function planRow(
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stockLengths, minStagger } = config
   const pitch = boardWidth + boardGap
-  const rowCount = Math.max(1, Math.ceil(width / pitch))
+  const intoRake = config.boardDirection !== "alongRake"
   const maxLen = Math.max(sideA, sideB)
 
+  // rows stack along the width when boards run into the rake, or along the
+  // length when boards run along it; joists always run perpendicular to the
+  // boards, spaced along whichever axis the boards themselves run.
+  const rowAxisExtent = intoRake ? width : maxLen
+  const joistAxisMax = intoRake ? maxLen : width
+  const rowCount = Math.max(1, Math.ceil(rowAxisExtent / pitch))
+
   const joistPositions: number[] = []
-  for (let x = 0; x <= maxLen + 1e-6; x += joistSpacing) joistPositions.push(Math.round(x))
+  for (let x = 0; x <= joistAxisMax + 1e-6; x += joistSpacing) joistPositions.push(Math.round(x))
 
   const sortedStock = [...stockLengths].sort((a, b) => a - b)
 
@@ -100,14 +109,18 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   let hasNarrowLastRow = false
 
   for (let i = 0; i < rowCount; i++) {
-    const yStart = i * pitch
-    const yEnd = Math.min(yStart + boardWidth, width)
-    if (yEnd - yStart < boardWidth - 1e-6) hasNarrowLastRow = true
+    const rowStart = i * pitch
+    const rowEnd = Math.min(rowStart + boardWidth, rowAxisExtent)
+    if (rowEnd - rowStart < boardWidth - 1e-6) hasNarrowLastRow = true
 
-    const targetLength = Math.max(lengthAt(config, yStart), lengthAt(config, yEnd))
+    const targetLength = intoRake
+      ? Math.max(lengthAt(config, rowStart), lengthAt(config, rowEnd))
+      : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
+    if (targetLength < 1) continue // deck has tapered to nothing here
+
     const { boards, joins } = planRow(targetLength, joistPositions, sortedStock, prevJoins, minStagger)
 
-    rows.push({ index: i, yStart, yEnd, targetLength, boards, joins })
+    rows.push({ index: rows.length, rowStart, rowEnd, targetLength, boards, joins })
     prevJoins = joins.map((j) => j.position)
   }
 
