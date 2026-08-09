@@ -43,6 +43,19 @@ const DeckForm: React.FC<{
   const removeRow = (key: number) =>
     setState((s) => ({ ...s, stockRows: s.stockRows.filter((r) => r.key !== key) }))
 
+  const sortRows = () =>
+    setState((s) => ({
+      ...s,
+      stockRows: [...s.stockRows].sort((a, b) => {
+        const la = parseFloat(a.lengthText)
+        const lb = parseFloat(b.lengthText)
+        if (isNaN(la) && isNaN(lb)) return 0
+        if (isNaN(la)) return 1 // blanks sort to the end
+        if (isNaN(lb)) return -1
+        return la - lb
+      }),
+    }))
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const stock: StockItem[] = state.stockRows
@@ -184,6 +197,7 @@ const DeckForm: React.FC<{
                 placeholder="Length (m)"
                 value={row.lengthText}
                 onChange={(e) => updateRow(row.key, { lengthText: e.target.value })}
+                onBlur={sortRows}
                 aria-label="Board length in metres"
               />
               <span className={styles.stockX}>×</span>
@@ -205,9 +219,14 @@ const DeckForm: React.FC<{
             </div>
           ))}
         </div>
-        <Button size="small" variant="secondary" onClick={addRow}>
-          Add length
-        </Button>
+        <div className={styles.stockActions}>
+          <Button size="small" variant="secondary" onClick={addRow}>
+            Add length
+          </Button>
+          <Button size="small" variant="secondary" onClick={sortRows}>
+            Sort by size
+          </Button>
+        </div>
       </div>
 
       <div className={styles.actions}>

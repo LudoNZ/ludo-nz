@@ -72,6 +72,12 @@
   font-weight: 600;
 }
 
+.stockActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .removeRow {
   background: none;
   border: none;
