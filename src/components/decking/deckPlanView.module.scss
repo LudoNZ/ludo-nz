@@ -28,8 +28,13 @@
   fill: rgba(27, 177, 47, 0.16);
 }
 
-.joinGap {
-  fill: var(--background);
+.joinSkeleton {
+  fill: var(--color-primary);
+}
+
+.joinFill {
+  fill: var(--foreground);
+  opacity: 0.75;
 }
 
 .joinWarning {
@@ -62,6 +67,21 @@
     border-radius: 999px;
     display: inline-block;
     background-color: var(--color-danger);
+  }
+
+  .tick {
+    width: 3px;
+    height: 14px;
+    display: inline-block;
+    border-radius: 1px;
+
+    &.skeleton {
+      background-color: var(--color-primary);
+    }
+    &.fill {
+      background-color: var(--foreground);
+      opacity: 0.75;
+    }
   }
 
   .dash {

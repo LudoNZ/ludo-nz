@@ -56,38 +56,50 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
           )}
 
           <g clipPath={`url(#${clipId})`}>
-            {layout.rows.map((row) => (
-              <g key={row.index}>
-                <rect
-                  x={intoRake ? 0 : row.rowStart}
-                  y={intoRake ? row.rowStart : 0}
-                  width={intoRake ? row.targetLength : row.rowEnd - row.rowStart}
-                  height={intoRake ? row.rowEnd - row.rowStart : row.targetLength}
-                  className={styles.row}
-                />
-                {row.joins.map((j) =>
-                  intoRake ? (
-                    <rect
-                      key={j.position}
-                      x={j.position - strokeW}
-                      y={row.rowStart}
-                      width={strokeW * 2}
-                      height={row.rowEnd - row.rowStart}
-                      className={j.staggered ? styles.joinGap : styles.joinWarning}
-                    />
-                  ) : (
-                    <rect
-                      key={j.position}
-                      x={row.rowStart}
-                      y={j.position - strokeW}
-                      width={row.rowEnd - row.rowStart}
-                      height={strokeW * 2}
-                      className={j.staggered ? styles.joinGap : styles.joinWarning}
-                    />
-                  )
-                )}
-              </g>
-            ))}
+            {layout.rows.map((row) => {
+              const rowThickness = row.rowEnd - row.rowStart
+              const overhang = rowThickness * 0.35
+              const joinThickness = strokeW * 3.5
+              return (
+                <g key={row.index}>
+                  <rect
+                    x={intoRake ? 0 : row.rowStart}
+                    y={intoRake ? row.rowStart : 0}
+                    width={intoRake ? row.targetLength : rowThickness}
+                    height={intoRake ? rowThickness : row.targetLength}
+                    className={styles.row}
+                  />
+                  {row.joins.map((j) => {
+                    const markClass = !j.staggered
+                      ? styles.joinWarning
+                      : row.isSkeleton
+                        ? styles.joinSkeleton
+                        : styles.joinFill
+                    return intoRake ? (
+                      <rect
+                        key={j.position}
+                        x={j.position - joinThickness / 2}
+                        y={row.rowStart - overhang}
+                        width={joinThickness}
+                        height={rowThickness + overhang * 2}
+                        rx={joinThickness / 3}
+                        className={markClass}
+                      />
+                    ) : (
+                      <rect
+                        key={j.position}
+                        x={row.rowStart - overhang}
+                        y={j.position - joinThickness / 2}
+                        width={rowThickness + overhang * 2}
+                        height={joinThickness}
+                        rx={joinThickness / 3}
+                        className={markClass}
+                      />
+                    )
+                  })}
+                </g>
+              )
+            })}
           </g>
 
           {/* dimension labels */}
@@ -116,6 +128,12 @@ const DeckPlanView: React.FC<{ config: DeckConfig; layout: DeckLayout }> = ({ co
         <span>{intoRake ? "↦" : "↧"} Boards run {intoRake ? "into" : "along"} the rake</span>
         <span>
           <span className={styles.dash} /> Joist @ {formatLength(config.joistSpacing)} centres
+        </span>
+        <span>
+          <span className={`${styles.tick} ${styles.skeleton}`} /> Skeleton row join
+        </span>
+        <span>
+          <span className={`${styles.tick} ${styles.fill}`} /> Fill-in row join
         </span>
         {hasWarnings && (
           <span>
