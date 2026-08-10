@@ -8,6 +8,7 @@ import Button from "@/components/button/button"
 import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import CutList from "@/components/decking/cutList"
+import CutTimeline from "@/components/decking/cutTimeline"
 import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
 import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
 import { DeckConfig } from "@/components/decking/types"
@@ -93,6 +94,9 @@ const DeckDetailPage = () => {
       layoutSeed: Math.floor(Math.random() * 2 ** 31),
       completedSegmentIds: deck.completedSegmentIds,
       lockedRows: deck.lockedRows,
+      cutLog: deck.cutLog,
+      activeCutSegmentId: deck.activeCutSegmentId,
+      activeCutAccumulatedMs: deck.activeCutAccumulatedMs,
     })
   }
 
@@ -168,6 +172,11 @@ const DeckDetailPage = () => {
               onToggleSegment={handleToggleSegment}
               onClearCompleted={handleClearCompleted}
             />
+          </section>
+
+          <section id="cutting-time">
+            <h2>Cutting time</h2>
+            <CutTimeline cutLog={deck.cutLog} />
           </section>
         </>
       )}

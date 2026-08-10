@@ -78,6 +78,9 @@ const DeckForm: React.FC<{
       layoutSeed: state.layoutSeed,
       completedSegmentIds: state.completedSegmentIds,
       lockedRows: state.lockedRows,
+      cutLog: state.cutLog,
+      activeCutSegmentId: state.activeCutSegmentId,
+      activeCutAccumulatedMs: state.activeCutAccumulatedMs,
       stock,
     })
   }

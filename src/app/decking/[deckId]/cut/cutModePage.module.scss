@@ -49,6 +49,37 @@
   }
 }
 
+.timerBlock {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+
+  .timerStat {
+    strong {
+      display: block;
+      font-size: 1.3rem;
+    }
+    span {
+      font-size: 0.8rem;
+      opacity: 0.65;
+    }
+  }
+}
+
+.breakdownLink {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+
+  a {
+    text-decoration: underline;
+    opacity: 0.8;
+  }
+}
+
 .nextCard {
   padding: 1.5rem;
   border: 2px solid #2a78d6;

@@ -10,7 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
-import { DeckConfig, LockedRow, StockItem } from "./types"
+import { CutLogEntry, DeckConfig, LockedRow, StockItem } from "./types"
 
 const decksRef = (uid: string) => collection(firestore, "users", uid, "decks")
 
@@ -49,6 +49,14 @@ export const subscribeToDecks = (
           layoutSeed: data.layoutSeed ?? 1,
           completedSegmentIds: Array.isArray(data.completedSegmentIds) ? data.completedSegmentIds : [],
           lockedRows: (data.lockedRows ?? {}) as Record<string, LockedRow>,
+          cutLog: Array.isArray(data.cutLog)
+            ? data.cutLog.map((e: CutLogEntry & { completedAt: { toDate?: () => Date } }) => ({
+                ...e,
+                completedAt: e.completedAt?.toDate?.() ?? new Date(),
+              }))
+            : [],
+          activeCutSegmentId: data.activeCutSegmentId ?? null,
+          activeCutAccumulatedMs: data.activeCutAccumulatedMs ?? 0,
           updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
         }
       })
@@ -79,6 +87,41 @@ export const setCompletedSegments = async (
   await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
     completedSegmentIds,
     lockedRows,
+    updatedAt: Timestamp.now(),
+  })
+}
+
+/** Used by Cutting mode: same as setCompletedSegments, plus whatever cut-log
+ * entries changed as a result (a finished board logged, or an undone one
+ * removed). Doesn't touch activeCutSegmentId/activeCutAccumulatedMs — that's
+ * reconciled separately via setActiveCut once the new "next" step is known. */
+export const setCompletedSegmentsWithLog = async (
+  uid: string,
+  deckId: string,
+  completedSegmentIds: string[],
+  lockedRows: Record<string, LockedRow>,
+  cutLog: CutLogEntry[]
+) => {
+  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+    completedSegmentIds,
+    lockedRows,
+    cutLog,
+    updatedAt: Timestamp.now(),
+  })
+}
+
+/** Points the running timer at a (possibly new) board. Called with
+ * accumulatedMs 0 whenever the "next" step changes, and with the paused
+ * elapsed total when Cutting mode is closed. */
+export const setActiveCut = async (
+  uid: string,
+  deckId: string,
+  activeCutSegmentId: string | null,
+  activeCutAccumulatedMs: number
+) => {
+  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+    activeCutSegmentId,
+    activeCutAccumulatedMs,
     updatedAt: Timestamp.now(),
   })
 }

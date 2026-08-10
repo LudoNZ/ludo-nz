@@ -23,6 +23,16 @@ export interface LockedRow {
   joins: { position: number; staggered: boolean; nearEdge: boolean }[]
 }
 
+/** One completed board's timing, logged in Cutting mode via the sequential
+ * "Mark cut & placed" action (arbitrary taps elsewhere aren't timed). */
+export interface CutLogEntry {
+  segmentId: string
+  rowIndex: number
+  cutLength: number
+  durationMs: number
+  completedAt: Date
+}
+
 export interface DeckConfig {
   id: string
   name: string
@@ -57,6 +67,14 @@ export interface DeckConfig {
   /** rows with at least one completed board, frozen at the arrangement they
    * had when first marked — see LockedRow */
   lockedRows: Record<string, LockedRow>
+  /** per-board timings, logged as each is marked done in Cutting mode */
+  cutLog: CutLogEntry[]
+  /** the board Cutting mode is currently timing (null once everything's done
+   * or before cutting has started) */
+  activeCutSegmentId: string | null
+  /** ms accumulated toward activeCutSegmentId while Cutting mode was closed —
+   * the live timer adds elapsed time since the page was opened on top of this */
+  activeCutAccumulatedMs: number
   updatedAt: Date
 }
 
@@ -85,6 +103,9 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
     completedSegmentIds: [],
     lockedRows: {},
+    cutLog: [],
+    activeCutSegmentId: null,
+    activeCutAccumulatedMs: 0,
   }
 }
 
@@ -120,4 +141,14 @@ export function formatLength(mm: number): string {
     return `${m.toFixed(m % 1 === 0 ? 0 : 2)}m`
   }
   return `${Math.round(mm)}mm`
+}
+
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
 }
