@@ -101,8 +101,16 @@ const CutList: React.FC<{
         <div className={styles.stockTable}>
           {layout.shoppingList.map((item) => {
             const placed = placedByLength.get(item.stockLength) ?? 0
+            const spare = Math.max(0, item.onHand - item.used)
             const lengthPct = Math.min(100, (item.stockLength / maxStockLength) * 100)
-            const placedPct = item.used > 0 ? Math.min(100, (placed / item.used) * 100) : 0
+            // the bar's own width is the length comparison across rows; within
+            // that, three segments split 100% of what you have on hand (or, if
+            // this length isn't in current stock at all — a locked-only length
+            // — 100% of what's used, since there's no "on hand" to speak of)
+            const denom = item.onHand > 0 ? item.onHand : item.used
+            const placedPct = denom > 0 ? Math.min(100, (placed / denom) * 100) : 0
+            const allocatedPct = denom > 0 ? Math.max(0, Math.min(100 - placedPct, ((item.used - placed) / denom) * 100)) : 0
+            const sparePct = Math.max(0, 100 - placedPct - allocatedPct)
             return (
               <div
                 key={item.stockLength}
@@ -111,12 +119,15 @@ const CutList: React.FC<{
                 <span className={styles.stockLength}>{formatLength(item.stockLength)}</span>
                 <div className={styles.stockTrack}>
                   <div className={styles.stockFill} style={{ width: `${lengthPct}%` }}>
-                    {placedPct > 0 && <div className={styles.stockPlaced} style={{ width: `${placedPct}%` }} />}
+                    {placedPct > 0 && <div className={styles.segPlaced} style={{ width: `${placedPct}%` }} />}
+                    {allocatedPct > 0 && <div className={styles.segAllocated} style={{ width: `${allocatedPct}%` }} />}
+                    {sparePct > 0 && <div className={styles.segSpare} style={{ width: `${sparePct}%` }} />}
                   </div>
                 </div>
                 <span className={styles.stockCount}>
                   {placed > 0 && <span className={styles.placedBadge}>✓{placed}</span>}
                   {item.used}/{item.onHand}
+                  {spare > 0 && <span className={styles.spareBadge}>+{spare} spare</span>}
                 </span>
               </div>
             )

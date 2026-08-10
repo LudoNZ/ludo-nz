@@ -70,20 +70,38 @@
   overflow: hidden;
 }
 
+// three stacked segments splitting the bar's own width 100% across placed /
+// allocated-but-not-placed / spare (on hand but not needed for this deck)
 .stockFill {
   position: relative;
   height: 100%;
   border-radius: 999px;
-  // the "planned, not yet placed" shade — the darker .stockPlaced overlay
-  // covers the fraction of this that's actually been cut
+  display: flex;
+  overflow: hidden;
+  background-color: rgba(27, 177, 47, 0.08);
+}
+
+.segPlaced {
+  height: 100%;
+  background-color: var(--color-primary);
+}
+
+.segAllocated {
+  height: 100%;
   background-color: rgba(27, 177, 47, 0.4);
 }
 
-.stockPlaced {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-color: var(--color-primary);
+// hatched rather than a flat fill, so "extra stock you don't need for this
+// deck" reads as visually distinct from "planned but not yet cut"
+.segSpare {
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(137, 135, 129, 0.4),
+    rgba(137, 135, 129, 0.4) 3px,
+    transparent 3px,
+    transparent 6px
+  );
 }
 
 .stockCount {
@@ -101,6 +119,11 @@
   font-weight: 700;
   font-size: 0.8rem;
   opacity: 1;
+}
+
+.spareBadge {
+  opacity: 0.6;
+  font-size: 0.75rem;
 }
 
 .warning {
