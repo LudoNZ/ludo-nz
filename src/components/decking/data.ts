@@ -43,7 +43,7 @@ export const subscribeToDecks = (
           boardGap: data.boardGap,
           stock,
           minStagger: data.minStagger,
-          minEdgeJoists: data.minEdgeJoists ?? 2,
+          minEdgeJoists: data.minEdgeJoists ?? 3,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,
           layoutSeed: data.layoutSeed ?? 1,

@@ -97,7 +97,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     boardGap: 5,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),
     minStagger: 300,
-    minEdgeJoists: 2,
+    minEdgeJoists: 3,
     boardDirection: "intoRake",
     skeletonInterval: 4,
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
