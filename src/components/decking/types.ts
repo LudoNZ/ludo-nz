@@ -7,6 +7,8 @@
  */
 export type BoardDirection = "intoRake" | "alongRake"
 
+import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
+
 /** A length of board you have on hand and how many of it. */
 export interface StockItem {
   /** mm */
@@ -33,6 +35,23 @@ export interface CutLogEntry {
   completedAt: Date
 }
 
+/** Freeform names for the deck's four edges (e.g. "House wall", "Front
+ * door", "Fence line") — purely descriptive, shown alongside each edge's
+ * measurement wherever the shape is drawn. */
+export interface EdgeLabels {
+  sideA: string
+  sideB: string
+  width: string
+  rake: string
+}
+
+export const DEFAULT_EDGE_LABELS: EdgeLabels = {
+  sideA: "Square end",
+  sideB: "Raked end",
+  width: "Width",
+  rake: "Rake",
+}
+
 export interface DeckConfig {
   id: string
   name: string
@@ -42,6 +61,9 @@ export interface DeckConfig {
   sideA: number
   /** mm, length along the raked end (y = width) */
   sideB: number
+  /** names for the sideA/sideB/width/diagonal edges, shown wherever the
+   * shape is drawn — defaults to generic terms, editable per deck */
+  edgeLabels: EdgeLabels
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults
@@ -53,11 +75,15 @@ export interface DeckConfig {
   boardGap: number
   /** board lengths on hand, with quantity of each */
   stock: StockItem[]
-  /** no join may fall within this many joist bays of a join at the same
-   * position in the row directly above or below it */
+  /** which (rows-away, bays-away) combinations a join isn't allowed to
+   * repeat in — freely toggled per-cell in the JoistExclusionMap editor.
+   * See joinRules.ts. */
+  joinExclusions: JoinExclusionCell[]
+  /** @deprecated superseded by joinExclusions; kept only so older Firestore
+   * documents (and the rules' required-field check) still validate. Not
+   * read by the layout algorithm or shown in the form any more. */
   minStaggerJoists: number
-  /** within a single row, no two joins (i.e. no board shorter than this) may
-   * fall within this many joist bays of each other */
+  /** @deprecated superseded by joinExclusions; see minStaggerJoists */
   minSameRowJoinJoists: number
   /** no join may fall within this many joist bays of either end of a row */
   minEdgeJoists: number
@@ -99,11 +125,13 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     width: 3000,
     sideA: 4200,
     sideB: 4200,
+    edgeLabels: { ...DEFAULT_EDGE_LABELS },
     joistSpacing: 400,
     firstBaySpacing: 400,
     boardWidth: 140,
     boardGap: 5,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),
+    joinExclusions: defaultExclusionCells(2, 2),
     minStaggerJoists: 2,
     minSameRowJoinJoists: 2,
     minEdgeJoists: 3,
@@ -142,6 +170,14 @@ export function rakeAngleDeg(config: Pick<DeckConfig, "sideA" | "sideB" | "width
   const { sideA, sideB, width } = config
   if (width <= 0) return 0
   return (Math.atan2(Math.abs(sideB - sideA), width) * 180) / Math.PI
+}
+
+/** mm, the diagonal (raked) edge's actual length — not an independent
+ * measurement, but fully determined by sideA/sideB/width since the other
+ * three edges fix a right trapezoid's shape. */
+export function rakeLength(config: Pick<DeckConfig, "sideA" | "sideB" | "width">): number {
+  const { sideA, sideB, width } = config
+  return Math.sqrt((sideB - sideA) ** 2 + width ** 2)
 }
 
 export function formatLength(mm: number): string {

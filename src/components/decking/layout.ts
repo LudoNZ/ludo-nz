@@ -1,5 +1,5 @@
 import { DeckConfig, lengthAt, LockedRow, StockItem, widthAt } from "./types"
-import { inExclusionZone } from "./joinRules"
+import { defaultExclusionCells, exclusionBounds, exclusionSetFromCells, isExcluded } from "./joinRules"
 
 export interface BoardSegment {
   /** stable id (row index + position within the row) for tracking completion,
@@ -117,8 +117,7 @@ type RowHistoryEntry = { distance: number; joins: number[] }
 function positionOk(
   candidate: number,
   history: RowHistoryEntry[],
-  minStaggerJoists: number,
-  minSameRowJoinJoists: number,
+  exclusions: Set<string>,
   joistIndex: Map<number, number>
 ): boolean {
   const cIdx = joistIndex.get(candidate)
@@ -127,10 +126,32 @@ function positionOk(
     for (const pos of joins) {
       const pIdx = joistIndex.get(pos)
       if (pIdx === undefined) continue
-      if (inExclusionZone(distance, Math.abs(cIdx - pIdx), minStaggerJoists, minSameRowJoinJoists)) return false
+      if (isExcluded(distance, cIdx - pIdx, exclusions)) return false
     }
   }
   return true
+}
+
+/** Joist positions reachable within a stock length ahead of `p` (or behind
+ * it, if `direction` is -1), filtered against the same-row exclusion cells
+ * (distance 0) — the toggle grid may forbid a non-contiguous set of bay
+ * offsets, so this can't just be a single mm threshold any more. */
+function reachableJoists(
+  p: number,
+  maxReach: number,
+  direction: 1 | -1,
+  joistPositions: number[],
+  joistIndex: Map<number, number>,
+  exclusions: Set<string>
+): number[] {
+  const pIdx = joistIndex.get(p)
+  if (pIdx === undefined) return []
+  return joistPositions.filter((j) => {
+    const withinReach = direction === 1 ? j > p + 1e-6 && j <= p + maxReach + 1e-6 : j < p - 1e-6 && j >= p - maxReach - 1e-6
+    if (!withinReach) return false
+    const jIdx = joistIndex.get(j)
+    return jIdx !== undefined && !isExcluded(0, jIdx - pIdx, exclusions)
+  })
 }
 
 function isEdgeSafe(position: number, targetLength: number, edgeBuffer: number): boolean {
@@ -165,9 +186,7 @@ function planSkeletonRow(
   joistIndex: Map<number, number>,
   inv: Inventory,
   history: RowHistoryEntry[],
-  minStaggerJoists: number,
-  minSameRowJoinJoists: number,
-  minSameRowGap: number,
+  exclusions: Set<string>,
   edgeBuffer: number,
   reversed: boolean
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
@@ -191,7 +210,7 @@ function planSkeletonRow(
         boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
         break
       }
-      const reach = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + maxReach + 1e-6)
+      const reach = reachableJoists(p, maxReach, 1, joistPositions, joistIndex, exclusions)
       const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
       candidates.sort((a, b) => b - a)
       if (!candidates.length) {
@@ -199,7 +218,7 @@ function planSkeletonRow(
         break
       }
 
-      let chosen = candidates.find((j) => positionOk(j, history, minStaggerJoists, minSameRowJoinJoists, joistIndex))
+      let chosen = candidates.find((j) => positionOk(j, history, exclusions, joistIndex))
       let staggered = true
       if (chosen === undefined) {
         chosen = candidates[0]
@@ -231,7 +250,7 @@ function planSkeletonRow(
         boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
         break
       }
-      const reach = joistPositions.filter((j) => j <= p - minSameRowGap + 1e-6 && j >= p - maxReach - 1e-6)
+      const reach = reachableJoists(p, maxReach, -1, joistPositions, joistIndex, exclusions)
       const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
       candidates.sort((a, b) => a - b)
       if (!candidates.length) {
@@ -239,7 +258,7 @@ function planSkeletonRow(
         break
       }
 
-      let chosen = candidates.find((j) => positionOk(j, history, minStaggerJoists, minSameRowJoinJoists, joistIndex))
+      let chosen = candidates.find((j) => positionOk(j, history, exclusions, joistIndex))
       let staggered = true
       if (chosen === undefined) {
         chosen = candidates[0]
@@ -268,9 +287,7 @@ function planRowRandomFirst(
   joistIndex: Map<number, number>,
   inv: Inventory,
   history: RowHistoryEntry[],
-  minStaggerJoists: number,
-  minSameRowJoinJoists: number,
-  minSameRowGap: number,
+  exclusions: Set<string>,
   edgeBuffer: number,
   rand: () => number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
@@ -305,7 +322,7 @@ function planRowRandomFirst(
       const pick = avail[Math.floor(rand() * avail.length)]
       if (tried.has(pick)) continue
       tried.add(pick)
-      const js = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + pick + 1e-6)
+      const js = reachableJoists(p, pick, 1, joistPositions, joistIndex, exclusions)
       if (!js.length) continue
       const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
       if (!fellBack) {
@@ -324,7 +341,7 @@ function planRowRandomFirst(
     if (chosenLength === null) {
       const longest = inv.longest()
       if (longest !== null) {
-        const js = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + longest + 1e-6)
+        const js = reachableJoists(p, longest, 1, joistPositions, joistIndex, exclusions)
         if (js.length) {
           const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
           chosenLength = longest
@@ -344,7 +361,7 @@ function planRowRandomFirst(
     // there are only a handful of "farthest" positions to land on. Preferring
     // the stagger-safe subset (still landing on a real joist either way) keeps
     // the safety net while letting the actual position vary properly.
-    const staggerSafe = candidates.filter((j) => positionOk(j, history, minStaggerJoists, minSameRowJoinJoists, joistIndex))
+    const staggerSafe = candidates.filter((j) => positionOk(j, history, exclusions, joistIndex))
     const pool = staggerSafe.length ? staggerSafe : candidates
     const chosen = pool[Math.floor(rand() * pool.length)]
     const staggered = staggerSafe.length > 0
@@ -366,9 +383,9 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const maxLen = Math.max(sideA, sideB)
   const skeletonInterval = Math.max(1, Math.round(config.skeletonInterval || 4))
   const edgeBuffer = joistSpacing * Math.max(0, config.minEdgeJoists ?? 2)
-  const minStaggerJoists = Math.max(0, config.minStaggerJoists ?? 2)
-  const minSameRowJoinJoists = Math.max(0, config.minSameRowJoinJoists ?? 2)
-  const minSameRowGap = joistSpacing * minSameRowJoinJoists
+  const exclusionCells = config.joinExclusions ?? defaultExclusionCells(config.minStaggerJoists ?? 2, config.minSameRowJoinJoists ?? 2)
+  const exclusions = exclusionSetFromCells(exclusionCells)
+  const rowsAwayLimit = exclusionBounds(exclusionCells).maxD
   const lockedRows = config.lockedRows ?? {}
 
   const rowAxisExtent = intoRake ? width : maxLen
@@ -468,26 +485,15 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     const history: RowHistoryEntry[] = skeletonHistory.map((joins, i) => ({ distance: i + 1, joins }))
     const result = slot.locked
       ? applyLockedRow(slot)
-      : planSkeletonRow(
-          slot.targetLength,
-          joistPositions,
-          joistIndex,
-          inv,
-          history,
-          minStaggerJoists,
-          minSameRowJoinJoists,
-          minSameRowGap,
-          edgeBuffer,
-          skeletonSeq % 2 === 1
-        )
+      : planSkeletonRow(slot.targetLength, joistPositions, joistIndex, inv, history, exclusions, edgeBuffer, skeletonSeq % 2 === 1)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
-    skeletonHistory = [result.joins.map((j) => j.position), ...skeletonHistory].slice(0, Math.max(1, minStaggerJoists))
+    skeletonHistory = [result.joins.map((j) => j.position), ...skeletonHistory].slice(0, Math.max(1, rowsAwayLimit))
     skeletonSeq++
   }
 
   // Phase 2: fill-in rows, in physical order, checked against up to
-  // minStaggerJoists rows before them (skeleton or already-placed fill-in) —
+  // rowsAwayLimit rows before them (skeleton or already-placed fill-in) —
   // and, looking the other way, any skeleton row within range that comes
   // AFTER it too. Skeleton rows are all fixed by the end of phase 1, so a
   // fill-in row can (and should) work around one it hasn't reached yet; a
@@ -496,11 +502,11 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   for (const slot of slots) {
     if (slot.isSkeleton) continue
     const history: RowHistoryEntry[] = []
-    for (let d = 1; d <= minStaggerJoists; d++) {
+    for (let d = 1; d <= rowsAwayLimit; d++) {
       const joins = rowJoins.get(slot.index - d)
       if (joins) history.push({ distance: d, joins })
     }
-    for (let d = 1; d <= minStaggerJoists; d++) {
+    for (let d = 1; d <= rowsAwayLimit; d++) {
       const ahead = slots[slot.index + d]
       if (!ahead?.isSkeleton) continue
       const joins = rowJoins.get(ahead.index)
@@ -514,9 +520,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
           joistIndex,
           inv,
           history,
-          minStaggerJoists,
-          minSameRowJoinJoists,
-          minSameRowGap,
+          exclusions,
           edgeBuffer,
           mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
         )

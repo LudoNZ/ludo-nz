@@ -70,10 +70,12 @@ const DeckForm: React.FC<{
       width: state.width,
       sideA: state.sideA,
       sideB: state.sideB,
+      edgeLabels: state.edgeLabels,
       joistSpacing: state.joistSpacing,
       firstBaySpacing: state.firstBaySpacing,
       boardWidth: state.boardWidth,
       boardGap: state.boardGap,
+      joinExclusions: state.joinExclusions,
       minStaggerJoists: state.minStaggerJoists,
       minSameRowJoinJoists: state.minSameRowJoinJoists,
       minEdgeJoists: state.minEdgeJoists,
@@ -110,10 +112,12 @@ const DeckForm: React.FC<{
           sideA={state.sideA}
           sideB={state.sideB}
           boardDirection={state.boardDirection}
+          edgeLabels={state.edgeLabels}
           onWidthChange={(n) => setState((s) => ({ ...s, width: n }))}
           onSideAChange={(n) => setState((s) => ({ ...s, sideA: n }))}
           onSideBChange={(n) => setState((s) => ({ ...s, sideB: n }))}
           onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
+          onLabelChange={(key, label) => setState((s) => ({ ...s, edgeLabels: { ...s.edgeLabels, [key]: label } }))}
         />
       </div>
 
@@ -158,15 +162,12 @@ const DeckForm: React.FC<{
       <div className={styles.field}>
         <label>Join spacing</label>
         <span className={styles.hint}>
-          ↕ no join in the row above/below may land within that many joist bays of this one ·
-          ↔ where a row needs more than one board, its own joins can&apos;t land within that many
-          joist bays of each other
+          Where a red × sits, a join can&apos;t repeat that many rows and that many joist bays from
+          another join — tap any cell to allow or forbid it
         </span>
         <JoistExclusionMap
-          rowValue={state.minStaggerJoists}
-          colValue={state.minSameRowJoinJoists}
-          onRowChange={(n) => setState((s) => ({ ...s, minStaggerJoists: n }))}
-          onColChange={(n) => setState((s) => ({ ...s, minSameRowJoinJoists: n }))}
+          cells={state.joinExclusions}
+          onChange={(cells) => setState((s) => ({ ...s, joinExclusions: cells }))}
         />
       </div>
 

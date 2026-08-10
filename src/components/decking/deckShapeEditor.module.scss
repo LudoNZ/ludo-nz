@@ -20,6 +20,14 @@
   stroke: var(--color-primary);
 }
 
+// the raked edge is calculated, not independently editable — trace it in
+// the same blue as its readout chip so the connection is obvious
+.rakeEdge {
+  stroke: #2a78d6;
+  stroke-dasharray: 1% 0.8%;
+  fill: none;
+}
+
 .previewLine {
   stroke: #898781;
   stroke-dasharray: 1.5% 1.2%;
@@ -34,60 +42,83 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
+  gap: 0.1rem;
   padding: 0.3rem 0.6rem;
   border: 1.5px solid var(--color-primary);
   border-radius: 999px;
   background-color: var(--background);
   color: var(--foreground);
-  cursor: pointer;
   line-height: 1.1;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 
-  &:hover {
-    background-color: rgba(27, 177, 47, 0.08);
-  }
-
+  // the width/rake chips sit to the side of a (usually) tall, narrow
+  // shape, where a horizontal value-then-label layout reads better than
+  // the default stack
   &.vertical {
     flex-direction: row;
-    gap: 0.3rem;
+    gap: 0.4rem;
+  }
+
+  &.calculated {
+    border-color: #2a78d6;
   }
 }
 
-.dimValue {
+.dimValueBtn,
+.dimLabelBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.1);
+  }
+}
+
+.dimValueBtn {
   font-weight: 700;
   font-size: 0.95rem;
+}
+
+.calculated .dimValue {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #2a78d6;
 }
 
 .dimUnit {
   font-size: 0.7rem;
   opacity: 0.6;
-  margin-left: 0.2rem;
+  margin-left: 0.15rem;
 }
 
-.dimName {
+.dimLabelBtn {
   font-size: 0.68rem;
-  opacity: 0.65;
+  opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+
+  &:hover {
+    opacity: 1;
+  }
 }
 
-.vertical .dimName {
-  margin-left: 0.1rem;
-}
-
-.dimInput {
+.dimInput,
+.labelInput {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 5.5rem;
   padding: 0.35rem 0.5rem;
   border: 1.5px solid var(--color-primary);
   border-radius: 999px;
   background-color: var(--background);
   color: var(--foreground);
   text-align: center;
-  font-weight: 700;
   font-family: inherit;
   // 16px is the iOS Safari threshold below which focusing an input
   // auto-zooms the page; stay at/above it regardless of root font-size
@@ -97,6 +128,15 @@
     outline: none;
     box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.15);
   }
+}
+
+.dimInput {
+  width: 5.5rem;
+  font-weight: 700;
+}
+
+.labelInput {
+  width: 8rem;
 }
 
 .rotateBtn {
@@ -128,4 +168,10 @@
   font-size: 0.68rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.hint {
+  font-size: 0.8rem;
+  opacity: 0.65;
+  margin: 0;
 }

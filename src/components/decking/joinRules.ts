@@ -1,27 +1,58 @@
-/** Whether a join at row-distance `rowsAway` (0 = same row) and joist-bay
- * offset `baysAway` from another join falls inside the combined exclusion
- * zone, given the two configured thresholds. Shared between the layout
- * algorithm and the JoistExclusionMap editor so the picture always matches
- * what actually gets enforced.
- *
- * - Same row (rowsAway === 0): governed entirely by minSameRowJoinJoists —
- *   a flat "at least this many bays apart" rule.
- * - Adjacent row (rowsAway === 1): governed entirely by minStaggerJoists —
- *   the classic "don't land on/near the previous row's join" rule, at full
- *   width regardless of same-row spacing.
- * - Further rows (2..minStaggerJoists): an additional, tapering exclusion
- *   seeded from minSameRowJoinJoists — the column clearance required
- *   shrinks by one bay per extra row of distance, so the "diagonal" danger
- *   zone narrows the further out you look instead of staying a full-width
- *   band all the way out to minStaggerJoists. */
-export function inExclusionZone(
-  rowsAway: number,
-  baysAway: number,
-  minStaggerJoists: number,
-  minSameRowJoinJoists: number
-): boolean {
-  const d = Math.abs(rowsAway)
-  const b = Math.abs(baysAway)
+/** A single forbidden cell in the join-exclusion grid: `d` joist rows away
+ * (0 = same row) and `b` joist bays away, both non-negative. Symmetric —
+ * toggling one cell forbids joins that distance/offset apart in every
+ * direction (above/below, left/right), so the same {d,b} pair covers up to
+ * four mirrored positions in the visual grid. */
+export interface JoinExclusionCell {
+  d: number
+  b: number
+}
+
+function key(d: number, b: number): string {
+  return `${d}:${b}`
+}
+
+export function exclusionSetFromCells(cells: JoinExclusionCell[]): Set<string> {
+  return new Set(cells.map((c) => key(Math.abs(c.d), Math.abs(c.b))))
+}
+
+/** Whether a join `rowsAway` rows and `baysAway` bays from another falls in
+ * the given exclusion set. Direction-agnostic, per the type above. */
+export function isExcluded(rowsAway: number, baysAway: number, exclusions: Set<string>): boolean {
+  return exclusions.has(key(Math.abs(rowsAway), Math.abs(baysAway)))
+}
+
+/** The largest row-distance and bay-offset present in a cell set (0 if
+ * empty) — how far the layout algorithm needs to look, and how far the
+ * visual grid needs to reach to show every toggled cell. */
+export function exclusionBounds(cells: JoinExclusionCell[]): { maxD: number; maxB: number } {
+  let maxD = 0
+  let maxB = 0
+  for (const c of cells) {
+    if (Math.abs(c.d) > maxD) maxD = Math.abs(c.d)
+    if (Math.abs(c.b) > maxB) maxB = Math.abs(c.b)
+  }
+  return { maxD, maxB }
+}
+
+/** The old two-threshold rule (adjacent-row stagger + same-row spacing,
+ * tapering beyond the immediate neighbour), expanded into an explicit cell
+ * list — used to seed a new deck's default pattern and to migrate decks
+ * saved before per-cell toggling existed. */
+export function defaultExclusionCells(minStaggerJoists: number, minSameRowJoinJoists: number): JoinExclusionCell[] {
+  const cells: JoinExclusionCell[] = []
+  const maxD = Math.max(minStaggerJoists, 0)
+  const maxB = Math.max(minSameRowJoinJoists, 0)
+  for (let d = 0; d <= maxD; d++) {
+    for (let b = 0; b <= maxB; b++) {
+      if (d === 0 && b === 0) continue
+      if (taperedRule(d, b, minStaggerJoists, minSameRowJoinJoists)) cells.push({ d, b })
+    }
+  }
+  return cells
+}
+
+function taperedRule(d: number, b: number, minStaggerJoists: number, minSameRowJoinJoists: number): boolean {
   if (d === 0) return b < minSameRowJoinJoists
   if (d === 1) return b < minStaggerJoists
   if (d > minStaggerJoists) return false

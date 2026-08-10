@@ -10,7 +10,8 @@ import {
   updateDoc,
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
-import { CutLogEntry, DeckConfig, LockedRow, StockItem } from "./types"
+import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
+import { CutLogEntry, DeckConfig, DEFAULT_EDGE_LABELS, LockedRow, StockItem } from "./types"
 
 const decksRef = (uid: string) => collection(firestore, "users", uid, "decks")
 
@@ -38,6 +39,7 @@ export const subscribeToDecks = (
           width: data.width,
           sideA: data.sideA,
           sideB: data.sideB,
+          edgeLabels: { ...DEFAULT_EDGE_LABELS, ...(data.edgeLabels ?? {}) },
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,
@@ -49,6 +51,14 @@ export const subscribeToDecks = (
             data.minStaggerJoists ??
             Math.max(1, Math.round((data.minStagger || 800) / (data.joistSpacing || 400))),
           minSameRowJoinJoists: data.minSameRowJoinJoists ?? 2,
+          // migrate decks saved before per-cell toggling existed: expand
+          // whatever the two thresholds worked out to into explicit cells
+          joinExclusions: Array.isArray(data.joinExclusions)
+            ? (data.joinExclusions as JoinExclusionCell[])
+            : defaultExclusionCells(
+                data.minStaggerJoists ?? Math.max(1, Math.round((data.minStagger || 800) / (data.joistSpacing || 400))),
+                data.minSameRowJoinJoists ?? 2
+              ),
           minEdgeJoists: data.minEdgeJoists ?? 3,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,
