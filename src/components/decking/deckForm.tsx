@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import Button from "@/components/button/button"
-import { BoardDirection, DeckConfig, StockItem } from "./types"
+import { DeckConfig, StockItem } from "./types"
+import DeckShapeEditor from "./deckShapeEditor"
 import JoistExclusionMap from "./joistExclusionMap"
 import styles from "./deckForm.module.scss"
 
@@ -102,43 +103,18 @@ const DeckForm: React.FC<{
       </div>
 
       <div className={styles.field}>
-        <label htmlFor="width">Width (mm)</label>
-        <span className={styles.hint}>Across the deck — perpendicular to the boards</span>
-        <input id="width" type="number" min={100} value={state.width} onChange={num("width")} required />
-      </div>
-
-      <div className={styles.row}>
-        <div className={styles.field}>
-          <label htmlFor="sideA">Square-end length (mm)</label>
-          <input id="sideA" type="number" min={100} value={state.sideA} onChange={num("sideA")} required />
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="sideB">Raked-end length (mm)</label>
-          <input id="sideB" type="number" min={100} value={state.sideB} onChange={num("sideB")} required />
-        </div>
-      </div>
-
-      <div className={styles.field}>
-        <label>Board direction</label>
-        <span className={styles.hint}>
-          Which way the boards run relative to the raked end
-        </span>
-        <div className={styles.segmented}>
-          <button
-            type="button"
-            className={state.boardDirection !== "alongRake" ? styles.active : ""}
-            onClick={() => setState((s) => ({ ...s, boardDirection: "intoRake" as BoardDirection }))}
-          >
-            Into the rake
-          </button>
-          <button
-            type="button"
-            className={state.boardDirection === "alongRake" ? styles.active : ""}
-            onClick={() => setState((s) => ({ ...s, boardDirection: "alongRake" as BoardDirection }))}
-          >
-            Along the rake
-          </button>
-        </div>
+        <label>Deck shape</label>
+        <span className={styles.hint}>Tap a measurement to edit it · tap the arrow to rotate the boards 90°</span>
+        <DeckShapeEditor
+          width={state.width}
+          sideA={state.sideA}
+          sideB={state.sideB}
+          boardDirection={state.boardDirection}
+          onWidthChange={(n) => setState((s) => ({ ...s, width: n }))}
+          onSideAChange={(n) => setState((s) => ({ ...s, sideA: n }))}
+          onSideBChange={(n) => setState((s) => ({ ...s, sideB: n }))}
+          onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
+        />
       </div>
 
       <div className={styles.row}>

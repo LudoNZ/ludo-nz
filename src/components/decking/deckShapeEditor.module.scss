@@ -1,0 +1,131 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shapeWrap {
+  position: relative;
+  width: 100%;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.outline {
+  fill: rgba(27, 177, 47, 0.06);
+  stroke: var(--color-primary);
+}
+
+.previewLine {
+  stroke: #898781;
+  stroke-dasharray: 1.5% 1.2%;
+  opacity: 0.55;
+}
+
+// dimension chips/inputs are positioned in % over the SVG, so they track
+// the shape as it's resized without any pixel math on our part
+.dimChip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0.3rem 0.6rem;
+  border: 1.5px solid var(--color-primary);
+  border-radius: 999px;
+  background-color: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+  line-height: 1.1;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.08);
+  }
+
+  &.vertical {
+    flex-direction: row;
+    gap: 0.3rem;
+  }
+}
+
+.dimValue {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.dimUnit {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 0.2rem;
+}
+
+.dimName {
+  font-size: 0.68rem;
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.vertical .dimName {
+  margin-left: 0.1rem;
+}
+
+.dimInput {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1.5px solid var(--color-primary);
+  border-radius: 999px;
+  background-color: var(--background);
+  color: var(--foreground);
+  text-align: center;
+  font-weight: 700;
+  font-family: inherit;
+  // 16px is the iOS Safari threshold below which focusing an input
+  // auto-zooms the page; stay at/above it regardless of root font-size
+  font-size: max(1rem, 16px);
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.15);
+  }
+}
+
+.rotateBtn {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  border: 1.5px solid var(--color-secondary);
+  border-radius: var(--borderRadius);
+  background-color: var(--background);
+  color: var(--color-secondary);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.08);
+  }
+}
+
+.rotated {
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.rotateLabel {
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}

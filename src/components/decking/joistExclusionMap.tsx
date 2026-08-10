@@ -1,16 +1,29 @@
 "use client"
 
+import { inExclusionZone } from "./joinRules"
 import styles from "./joistExclusionMap.module.scss"
 
 type Role = "j" | "x" | "gap"
 
+/** Clicking a cell on an axis sets that axis's value to reach it: clicking
+ * just past the current x zone grows it to include that cell; clicking
+ * inside the current x zone shrinks it to just short of that cell — so the
+ * outermost x always toggles off on a second click, like the name says. */
+function targetValue(offset: number, current: number, min: number, max: number): number {
+  const dist = Math.abs(offset)
+  if (dist === 0) return current
+  const next = dist <= current ? dist - 1 : dist
+  return Math.min(max, Math.max(min, next))
+}
+
 /** Visual editor for both join-spacing rules at once, as a single matrix:
  * the row axis is the adjacent-row stagger (minStaggerJoists), the column
- * axis is the same-row join spacing (minSameRowJoinJoists). Renders as a
- * cross of x's centred on J, surrounded by a complete outer layer of
- * join-friendly "-" cells on every side — including the diagonals, which
- * aren't governed by either rule but should still read as safe rather than
- * leaving gaps in the grid. */
+ * axis is the same-row join spacing (minSameRowJoinJoists). Diagonal cells
+ * are forbidden too — rows beyond the immediate neighbour get a tapering
+ * exclusion (see joinRules.ts) so the danger zone narrows the further out
+ * it reaches rather than staying a full-width band. Surrounded by a
+ * complete outer layer of join-friendly "-" cells on every side. Cells
+ * along either axis are clickable to toggle that axis's value directly. */
 const JoistExclusionMap: React.FC<{
   rowValue: number
   colValue: number
@@ -26,9 +39,7 @@ const JoistExclusionMap: React.FC<{
 
   const roleOf = (r: number, c: number): Role => {
     if (r === 0 && c === 0) return "j"
-    if (r === 0 && Math.abs(c) <= colValue) return "x"
-    if (c === 0 && Math.abs(r) <= rowValue) return "x"
-    return "gap"
+    return inExclusionZone(r, c, rowValue, colValue) ? "x" : "gap"
   }
 
   return (
@@ -40,10 +51,29 @@ const JoistExclusionMap: React.FC<{
         {rows.map((r) =>
           cols.map((c) => {
             const role = roleOf(r, c)
+            const onAxis = r === 0 || c === 0
+            const label = role === "x" ? "×" : role === "j" ? "J" : ""
+            if (role === "j" || !onAxis) {
+              return (
+                <span key={`${r}-${c}`} className={`${styles.cell} ${styles[role]}`}>
+                  {label}
+                </span>
+              )
+            }
+            const onClick =
+              r === 0
+                ? () => onColChange(targetValue(c, colValue, min, max))
+                : () => onRowChange(targetValue(r, rowValue, min, max))
             return (
-              <span key={`${r}-${c}`} className={`${styles.cell} ${styles[role]}`}>
-                {role === "x" ? "×" : role === "j" ? "J" : ""}
-              </span>
+              <button
+                key={`${r}-${c}`}
+                type="button"
+                onClick={onClick}
+                className={`${styles.cell} ${styles[role]} ${styles.clickable}`}
+                aria-label={`${role === "x" ? "Allow" : "Forbid"} a join ${Math.abs(r === 0 ? c : r)} bay(s) ${r === 0 ? "along the row" : "from the adjacent row"} from here`}
+              >
+                {label}
+              </button>
             )
           })
         )}

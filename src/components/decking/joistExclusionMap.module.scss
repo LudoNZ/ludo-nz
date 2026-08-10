@@ -22,6 +22,20 @@
   border-radius: 4px;
   font-size: 0.85rem;
   font-weight: 700;
+  // reset so this works identically whether it's a <span> or a <button>
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+}
+
+.clickable {
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+
+  &:hover {
+    opacity: 0.75;
+    transform: scale(1.08);
+  }
 }
 
 .gap {
