@@ -160,10 +160,10 @@ const DeckPlanView: React.FC<{
 
           {/* dimension labels */}
           <text x={sideA / 2} y={-padTop / 2.2} fontSize={fontSize} className={styles.dimText}>
-            {formatLength(sideA)} ({config.edgeLabels?.sideA || "square end"})
+            {formatLength(sideA)} ({config.edgeLabels?.sideA || "top edge"})
           </text>
           <text x={sideB / 2} y={width + padTop / 2 + fontSize} fontSize={fontSize} className={styles.dimText}>
-            {formatLength(sideB)} ({config.edgeLabels?.sideB || "raked end"})
+            {formatLength(sideB)} ({config.edgeLabels?.sideB || "bottom edge"})
           </text>
           <text
             x={-padLeft / 1.6}
@@ -175,7 +175,7 @@ const DeckPlanView: React.FC<{
             {formatLength(width)} ({config.edgeLabels?.width || "width"})
           </text>
           <text x={maxLen} y={width + padTop / 2 + fontSize * 2.4} fontSize={fontSize} textAnchor="end" className={styles.dimText}>
-            {config.edgeLabels?.rake || "Rake"}: {rakeAngleDeg(config).toFixed(1)}°
+            {config.edgeLabels?.rake || "Angled edge"}: {rakeAngleDeg(config).toFixed(1)}°
           </text>
         </svg>
       </div>

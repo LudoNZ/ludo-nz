@@ -45,11 +45,14 @@ export interface EdgeLabels {
   rake: string
 }
 
+// plain, jargon-free placeholders — position-based (matching what's drawn)
+// rather than a guess at real-world orientation, since every deck renames
+// these to whatever's actually meaningful (e.g. "Front door", "Fence line")
 export const DEFAULT_EDGE_LABELS: EdgeLabels = {
-  sideA: "Square end",
-  sideB: "Raked end",
+  sideA: "Top edge",
+  sideB: "Bottom edge",
   width: "Width",
-  rake: "Rake",
+  rake: "Angled edge",
 }
 
 export interface DeckConfig {
