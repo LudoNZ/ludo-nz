@@ -342,10 +342,14 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   for (let x = 0; x <= joistAxisMax + 1e-6; x += joistSpacing) joistPositions.push(Math.round(x))
 
   const inv = new Inventory(stock)
-  const rand = mulberry32(config.layoutSeed || 1)
+  const seed = config.layoutSeed || 1
   // which rows within each group of `skeletonInterval` are skeleton rows also
   // shuffles with the seed, so "shuffle" changes more than just the fill-in mix
-  const skeletonOffset = Math.floor(rand() * skeletonInterval)
+  const skeletonOffset = Math.floor(mulberry32(seed)() * skeletonInterval)
+  // each fill-in row gets its own independent PRNG stream (seed XORed with a
+  // per-row constant) rather than sharing one sequential generator — locking
+  // a row means it no longer draws from that stream, and with a shared
+  // generator that would shift every later row's random picks too
 
   type Slot = {
     index: number
@@ -422,7 +426,15 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     const prevJoins = rowJoins.get(slot.index - 1) ?? []
     const result = slot.locked
       ? applyLockedRow(slot)
-      : planRowRandomFirst(slot.targetLength, joistPositions, inv, prevJoins, minStagger, edgeBuffer, rand)
+      : planRowRandomFirst(
+          slot.targetLength,
+          joistPositions,
+          inv,
+          prevJoins,
+          minStagger,
+          edgeBuffer,
+          mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
+        )
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
   }
