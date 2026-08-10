@@ -135,7 +135,13 @@ function positionOk(
 /** Joist positions reachable within a stock length ahead of `p` (or behind
  * it, if `direction` is -1), filtered against the same-row exclusion cells
  * (distance 0) — the toggle grid may forbid a non-contiguous set of bay
- * offsets, so this can't just be a single mm threshold any more. */
+ * offsets, so this can't just be a single mm threshold any more.
+ *
+ * `p` is usually a real joist a previous join landed on, but for the very
+ * first cut walked from either end of a row it's the row's raw boundary
+ * (0, or targetLength — which essentially never falls exactly on the
+ * joist grid). There's no actual join at a boundary to space away from,
+ * so the same-row exclusion only applies once `p` is a real joist. */
 function reachableJoists(
   p: number,
   maxReach: number,
@@ -145,10 +151,10 @@ function reachableJoists(
   exclusions: Set<string>
 ): number[] {
   const pIdx = joistIndex.get(p)
-  if (pIdx === undefined) return []
   return joistPositions.filter((j) => {
     const withinReach = direction === 1 ? j > p + 1e-6 && j <= p + maxReach + 1e-6 : j < p - 1e-6 && j >= p - maxReach - 1e-6
     if (!withinReach) return false
+    if (pIdx === undefined) return true
     const jIdx = joistIndex.get(j)
     return jIdx !== undefined && !isExcluded(0, jIdx - pIdx, exclusions)
   })

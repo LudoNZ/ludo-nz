@@ -114,20 +114,22 @@ export interface DeckConfig {
   updatedAt: Date
 }
 
+// nothing over 6m — that's the practical max length you can actually get
+// in a single piece of decking timber
 export const DEFAULT_STOCK: StockItem[] = [
-  { length: 3600, quantity: 6 },
-  { length: 4200, quantity: 6 },
-  { length: 4800, quantity: 6 },
-  { length: 5400, quantity: 4 },
-  { length: 6000, quantity: 4 },
+  { length: 3600, quantity: 20 },
+  { length: 4200, quantity: 16 },
+  { length: 4800, quantity: 16 },
+  { length: 5400, quantity: 14 },
+  { length: 6000, quantity: 14 },
 ]
 
 export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "updatedAt"> {
   return {
     name,
-    width: 3000,
-    sideA: 4200,
-    sideB: 4200,
+    width: 4000,
+    sideA: 7000,
+    sideB: 7000,
     edgeLabels: { ...DEFAULT_EDGE_LABELS },
     joistSpacing: 400,
     firstBaySpacing: 400,
