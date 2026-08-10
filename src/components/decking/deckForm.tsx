@@ -180,25 +180,17 @@ const DeckForm: React.FC<{
       </div>
 
       <div className={styles.field}>
-        <label>Join spacing — adjacent row (stagger)</label>
+        <label>Join spacing</label>
         <span className={styles.hint}>
-          No join in the row above or below may land within this many joist bays of this one
+          ↕ no join in the row above/below may land within that many joist bays of this one ·
+          ↔ where a row needs more than one board, its own joins can&apos;t land within that many
+          joist bays of each other
         </span>
         <JoistExclusionMap
-          value={state.minStaggerJoists}
-          onChange={(n) => setState((s) => ({ ...s, minStaggerJoists: n }))}
-        />
-      </div>
-
-      <div className={styles.field}>
-        <label>Join spacing — same row</label>
-        <span className={styles.hint}>
-          Where a row needs more than one board, its joins can&apos;t land within this many joist
-          bays of each other
-        </span>
-        <JoistExclusionMap
-          value={state.minSameRowJoinJoists}
-          onChange={(n) => setState((s) => ({ ...s, minSameRowJoinJoists: n }))}
+          rowValue={state.minStaggerJoists}
+          colValue={state.minSameRowJoinJoists}
+          onRowChange={(n) => setState((s) => ({ ...s, minStaggerJoists: n }))}
+          onColChange={(n) => setState((s) => ({ ...s, minSameRowJoinJoists: n }))}
         />
       </div>
 
