@@ -21,9 +21,11 @@ const CutList: React.FC<{
     0
   )
   const nearEdgeCount = layout.rows.reduce((sum, r) => sum + r.joins.filter((j) => j.nearEdge).length, 0)
-  const currentItems = layout.shoppingList.filter((s) => s.inCurrentStock)
-  const legacyItems = layout.shoppingList.filter((s) => !s.inCurrentStock)
-  const maxStockLength = Math.max(1, ...(currentItems.length ? currentItems : layout.shoppingList).map((s) => s.stockLength))
+  // scale bars off current-stock lengths only, so a length that's only around
+  // because a locked row is still frozen on it (e.g. after a typo fix) can't
+  // become the longest entry and squash every real bar down to a sliver
+  const currentLengths = layout.shoppingList.filter((s) => s.inCurrentStock).map((s) => s.stockLength)
+  const maxStockLength = Math.max(1, ...(currentLengths.length ? currentLengths : layout.shoppingList.map((s) => s.stockLength)))
   const totalUsed = layout.shoppingList.reduce((sum, s) => sum + s.used, 0)
   const totalOnHand = layout.shoppingList.reduce((sum, s) => sum + s.onHand, 0)
 
@@ -97,16 +99,20 @@ const CutList: React.FC<{
           </span>
         </div>
         <div className={styles.stockTable}>
-          {currentItems.map((item) => {
+          {layout.shoppingList.map((item) => {
             const placed = placedByLength.get(item.stockLength) ?? 0
+            const lengthPct = Math.min(100, (item.stockLength / maxStockLength) * 100)
+            const placedPct = item.used > 0 ? Math.min(100, (placed / item.used) * 100) : 0
             return (
-              <div key={item.stockLength} className={styles.stockRow}>
+              <div
+                key={item.stockLength}
+                className={`${styles.stockRow} ${!item.inCurrentStock ? styles.legacy : ""}`}
+              >
                 <span className={styles.stockLength}>{formatLength(item.stockLength)}</span>
                 <div className={styles.stockTrack}>
-                  <div
-                    className={styles.stockFill}
-                    style={{ width: `${(item.stockLength / maxStockLength) * 100}%` }}
-                  />
+                  <div className={styles.stockFill} style={{ width: `${lengthPct}%` }}>
+                    {placedPct > 0 && <div className={styles.stockPlaced} style={{ width: `${placedPct}%` }} />}
+                  </div>
                 </div>
                 <span className={styles.stockCount}>
                   {placed > 0 && <span className={styles.placedBadge}>✓{placed}</span>}
@@ -116,21 +122,6 @@ const CutList: React.FC<{
             )
           })}
         </div>
-
-        {legacyItems.length > 0 && (
-          <div className={styles.legacyStock}>
-            <p className={styles.hint}>
-              Already cut before you last edited your stock list — no longer counted against
-              current quantities:
-            </p>
-            {legacyItems.map((item) => (
-              <div key={item.stockLength} className={styles.legacyRow}>
-                <span className={styles.placedBadge}>✓{placedByLength.get(item.stockLength) ?? item.used}</span>
-                <span>{formatLength(item.stockLength)}</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className={styles.table}>

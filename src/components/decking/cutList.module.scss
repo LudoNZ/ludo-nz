@@ -52,6 +52,10 @@
   align-items: center;
   gap: 0.6rem;
   font-size: 0.9rem;
+
+  &.legacy {
+    opacity: 0.6;
+  }
 }
 
 .stockLength {
@@ -67,8 +71,18 @@
 }
 
 .stockFill {
+  position: relative;
   height: 100%;
   border-radius: 999px;
+  // the "planned, not yet placed" shade — the darker .stockPlaced overlay
+  // covers the fraction of this that's actually been cut
+  background-color: rgba(27, 177, 47, 0.4);
+}
+
+.stockPlaced {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background-color: var(--color-primary);
 }
 
@@ -80,25 +94,6 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
-}
-
-.legacyStock {
-  margin-top: 0.75rem;
-  padding-top: 0.65rem;
-  border-top: 1px dashed var(--color-primary);
-
-  .hint {
-    margin-bottom: 0.4rem;
-  }
-}
-
-.legacyRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  opacity: 0.75;
-  padding: 0.2rem 0;
 }
 
 .placedBadge {
