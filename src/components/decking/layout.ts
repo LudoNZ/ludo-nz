@@ -398,13 +398,19 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const rowJoins = new Map<number, number[]>() // index -> join positions, filled as each row is planned
   const results = new Map<number, { boards: BoardSegment[]; joins: JoinMark[] }>()
 
-  const applyLockedRow = (slot: Slot): { boards: BoardSegment[]; joins: JoinMark[] } => {
-    const locked = slot.locked!
-    for (const b of locked.boards) {
+  // Reserve every locked (already-cut) row's stock BEFORE any fresh row gets
+  // to draw from inventory — not interleaved by row index. A locked row
+  // represents board(s) physically already cut; that consumption is real
+  // regardless of where the row sits in the sequence, and a freshly-planned
+  // row (e.g. one whose skeleton classification shifted after a reshuffle)
+  // must never be able to "steal" stock a locked row already accounts for.
+  for (const slot of slots) {
+    if (!slot.locked) continue
+    for (const b of slot.locked.boards) {
       if (b.stockLength !== null) inv.take(b.stockLength)
     }
-    return locked
   }
+  const applyLockedRow = (slot: Slot): { boards: BoardSegment[]; joins: JoinMark[] } => slot.locked!
 
   // Phase 1: skeleton rows, staggered against the previous skeleton row only.
   // Alternates which end the long piece starts from, so joins land at
