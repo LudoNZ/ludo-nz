@@ -492,7 +492,35 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     skeletonSeq++
   }
 
-  // Phase 2: fill-in rows, in physical order, checked against up to
+  // Phase 2a: before any join-planning walk, claim a single full-length
+  // board for whichever fill-in rows it fits — in RANDOM row order, not
+  // physical order. Doing this in physical order (as part of phase 2b
+  // below) meant the first stretch of rows that happened to fit a given
+  // stock length grabbed it greedily until that size ran out, then the
+  // next stretch grabbed the next size down, and so on — so both the
+  // join-free rows AND the rows that then needed a join clustered into
+  // contiguous bands instead of spreading across the whole deck.
+  const fillSlots = slots.filter((s) => !s.isSkeleton && !s.locked)
+  const shuffleRand = mulberry32((seed ^ 0x2545f491) | 0)
+  const shuffled = [...fillSlots]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(shuffleRand() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  const resolvedFull = new Set<number>()
+  for (const slot of shuffled) {
+    const finish = inv.smallestAtLeast(slot.targetLength)
+    if (finish === null) continue
+    inv.take(finish)
+    results.set(slot.index, {
+      boards: [{ id: "", start: 0, end: slot.targetLength, cutLength: slot.targetLength, stockLength: finish }],
+      joins: [],
+    })
+    rowJoins.set(slot.index, [])
+    resolvedFull.add(slot.index)
+  }
+
+  // Phase 2b: whatever's left, in physical order, checked against up to
   // rowsAwayLimit rows before them (skeleton or already-placed fill-in) —
   // and, looking the other way, any skeleton row within range that comes
   // AFTER it too. Skeleton rows are all fixed by the end of phase 1, so a
@@ -500,7 +528,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   // later fill-in row can't be checked the same way since it isn't planned
   // until its own turn comes up. Locked rows keep their frozen arrangement.
   for (const slot of slots) {
-    if (slot.isSkeleton) continue
+    if (slot.isSkeleton || resolvedFull.has(slot.index)) continue
     const history: RowHistoryEntry[] = []
     for (let d = 1; d <= rowsAwayLimit; d++) {
       const joins = rowJoins.get(slot.index - d)
