@@ -355,9 +355,22 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
 
   const inv = new Inventory(stock)
   const seed = config.layoutSeed || 1
-  // which rows within each group of `skeletonInterval` are skeleton rows also
-  // shuffles with the seed, so "shuffle" changes more than just the fill-in mix
-  const skeletonOffset = Math.floor(mulberry32(seed)() * skeletonInterval)
+  // Which rows are skeleton rows at all must NOT change once you've started
+  // cutting against a pattern — "Shuffle" only re-rolls the fill-in mix.
+  // Infer the offset from any already-locked skeleton row (they were all
+  // classified under the same offset when locked); only fall back to a
+  // fresh random draw when nothing skeleton is locked in yet, so an
+  // unstarted deck can still explore different skeleton patterns.
+  let skeletonOffset: number | null = null
+  for (const key of Object.keys(lockedRows)) {
+    if (lockedRows[key].isSkeleton) {
+      skeletonOffset = Number(key) % skeletonInterval
+      break
+    }
+  }
+  if (skeletonOffset === null) {
+    skeletonOffset = Math.floor(mulberry32(seed)() * skeletonInterval)
+  }
   // each fill-in row gets its own independent PRNG stream (seed XORed with a
   // per-row constant) rather than sharing one sequential generator — locking
   // a row means it no longer draws from that stream, and with a shared
