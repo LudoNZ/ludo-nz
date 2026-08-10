@@ -2,14 +2,15 @@
 
 import styles from "./joistExclusionMap.module.scss"
 
-type Role = "j" | "x" | "gap" | "blank"
+type Role = "j" | "x" | "gap"
 
 /** Visual editor for both join-spacing rules at once, as a single matrix:
  * the row axis is the adjacent-row stagger (minStaggerJoists), the column
  * axis is the same-row join spacing (minSameRowJoinJoists). Renders as a
- * cross centred on J — x's extend rowValue bays up/down and colValue bays
- * left/right, with one growable "-" context cell past the x's on every arm;
- * the off-axis corners are blank since the two rules don't interact. */
+ * cross of x's centred on J, surrounded by a complete outer layer of
+ * join-friendly "-" cells on every side — including the diagonals, which
+ * aren't governed by either rule but should still read as safe rather than
+ * leaving gaps in the grid. */
 const JoistExclusionMap: React.FC<{
   rowValue: number
   colValue: number
@@ -18,24 +19,16 @@ const JoistExclusionMap: React.FC<{
   min?: number
   max?: number
 }> = ({ rowValue, colValue, onRowChange, onColChange, min = 0, max = 6 }) => {
-  const rowSpan = rowValue + 1 // + 1 growable context cell
+  const rowSpan = rowValue + 1 // + 1 growable outer layer
   const colSpan = colValue + 1
   const rows = Array.from({ length: 2 * rowSpan + 1 }, (_, i) => i - rowSpan)
   const cols = Array.from({ length: 2 * colSpan + 1 }, (_, i) => i - colSpan)
 
   const roleOf = (r: number, c: number): Role => {
     if (r === 0 && c === 0) return "j"
-    if (r === 0) {
-      if (Math.abs(c) <= colValue) return "x"
-      if (Math.abs(c) === colSpan) return "gap"
-      return "blank"
-    }
-    if (c === 0) {
-      if (Math.abs(r) <= rowValue) return "x"
-      if (Math.abs(r) === rowSpan) return "gap"
-      return "blank"
-    }
-    return "blank"
+    if (r === 0 && Math.abs(c) <= colValue) return "x"
+    if (c === 0 && Math.abs(r) <= rowValue) return "x"
+    return "gap"
   }
 
   return (
