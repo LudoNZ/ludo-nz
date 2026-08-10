@@ -82,6 +82,25 @@
   opacity: 0.85;
 }
 
+.legacyStock {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--color-primary);
+
+  .hint {
+    margin-bottom: 0.4rem;
+  }
+}
+
+.legacyRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  opacity: 0.75;
+  padding: 0.2rem 0;
+}
+
 .placedBadge {
   color: var(--color-primary);
   font-weight: 700;

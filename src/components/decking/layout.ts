@@ -37,7 +37,10 @@ export interface RowPlan {
 export interface DeckLayout {
   rows: RowPlan[]
   joistPositions: number[]
-  shoppingList: { stockLength: number; used: number; onHand: number }[]
+  /** inCurrentStock is false for a length that only appears because a locked
+   * (already-cut) row is still frozen on it — the length itself has since
+   * been edited/removed from the deck's stock list */
+  shoppingList: { stockLength: number; used: number; onHand: number; inCurrentStock: boolean }[]
   totalBoards: number
   totalJoins: number
   totalWasteMm: number
@@ -480,12 +483,14 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     }
   }
 
+  const currentStockLengths = new Set(stock.map((s) => s.length))
   const allLengths = new Set<number>([...inv.originalLengths(), ...usedMap.keys()])
   const shoppingList = Array.from(allLengths)
     .map((stockLength) => ({
       stockLength,
       used: usedMap.get(stockLength) ?? 0,
       onHand: inv.onHandOf(stockLength),
+      inCurrentStock: currentStockLengths.has(stockLength),
     }))
     .sort((a, b) => a.stockLength - b.stockLength)
 

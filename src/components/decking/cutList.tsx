@@ -21,7 +21,9 @@ const CutList: React.FC<{
     0
   )
   const nearEdgeCount = layout.rows.reduce((sum, r) => sum + r.joins.filter((j) => j.nearEdge).length, 0)
-  const maxStockLength = Math.max(1, ...layout.shoppingList.map((s) => s.stockLength))
+  const currentItems = layout.shoppingList.filter((s) => s.inCurrentStock)
+  const legacyItems = layout.shoppingList.filter((s) => !s.inCurrentStock)
+  const maxStockLength = Math.max(1, ...(currentItems.length ? currentItems : layout.shoppingList).map((s) => s.stockLength))
   const totalUsed = layout.shoppingList.reduce((sum, s) => sum + s.used, 0)
   const totalOnHand = layout.shoppingList.reduce((sum, s) => sum + s.onHand, 0)
 
@@ -95,7 +97,7 @@ const CutList: React.FC<{
           </span>
         </div>
         <div className={styles.stockTable}>
-          {layout.shoppingList.map((item) => {
+          {currentItems.map((item) => {
             const placed = placedByLength.get(item.stockLength) ?? 0
             return (
               <div key={item.stockLength} className={styles.stockRow}>
@@ -114,6 +116,21 @@ const CutList: React.FC<{
             )
           })}
         </div>
+
+        {legacyItems.length > 0 && (
+          <div className={styles.legacyStock}>
+            <p className={styles.hint}>
+              Already cut before you last edited your stock list — no longer counted against
+              current quantities:
+            </p>
+            {legacyItems.map((item) => (
+              <div key={item.stockLength} className={styles.legacyRow}>
+                <span className={styles.placedBadge}>✓{placedByLength.get(item.stockLength) ?? item.used}</span>
+                <span>{formatLength(item.stockLength)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={styles.table}>
