@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Button from "@/components/button/button"
 import { BoardDirection, DeckConfig, StockItem } from "./types"
+import JoistExclusionMap from "./joistExclusionMap"
 import styles from "./deckForm.module.scss"
 
 type StockRow = { key: number; lengthText: string; quantity: number }
@@ -72,7 +73,8 @@ const DeckForm: React.FC<{
       firstBaySpacing: state.firstBaySpacing,
       boardWidth: state.boardWidth,
       boardGap: state.boardGap,
-      minStagger: state.minStagger,
+      minStaggerJoists: state.minStaggerJoists,
+      minSameRowJoinJoists: state.minSameRowJoinJoists,
       minEdgeJoists: state.minEdgeJoists,
       boardDirection: state.boardDirection,
       skeletonInterval: state.skeletonInterval,
@@ -177,30 +179,40 @@ const DeckForm: React.FC<{
         </div>
       </div>
 
-      <div className={styles.row}>
-        <div className={styles.field}>
-          <label htmlFor="minStagger">Min. join stagger (mm)</label>
-          <input
-            id="minStagger"
-            type="number"
-            min={0}
-            value={state.minStagger}
-            onChange={num("minStagger")}
-            required
-          />
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="minEdgeJoists">Min. joist bays from edge</label>
-          <span className={styles.hint}>No join within this many bays of either end of a row</span>
-          <input
-            id="minEdgeJoists"
-            type="number"
-            min={0}
-            value={state.minEdgeJoists}
-            onChange={num("minEdgeJoists")}
-            required
-          />
-        </div>
+      <div className={styles.field}>
+        <label>Join spacing — adjacent row (stagger)</label>
+        <span className={styles.hint}>
+          No join in the row above or below may land within this many joist bays of this one
+        </span>
+        <JoistExclusionMap
+          value={state.minStaggerJoists}
+          onChange={(n) => setState((s) => ({ ...s, minStaggerJoists: n }))}
+        />
+      </div>
+
+      <div className={styles.field}>
+        <label>Join spacing — same row</label>
+        <span className={styles.hint}>
+          Where a row needs more than one board, its joins can&apos;t land within this many joist
+          bays of each other
+        </span>
+        <JoistExclusionMap
+          value={state.minSameRowJoinJoists}
+          onChange={(n) => setState((s) => ({ ...s, minSameRowJoinJoists: n }))}
+        />
+      </div>
+
+      <div className={styles.field}>
+        <label htmlFor="minEdgeJoists">Min. joist bays from row edge</label>
+        <span className={styles.hint}>No join within this many bays of either end of a row</span>
+        <input
+          id="minEdgeJoists"
+          type="number"
+          min={0}
+          value={state.minEdgeJoists}
+          onChange={num("minEdgeJoists")}
+          required
+        />
       </div>
 
       <div className={styles.field}>

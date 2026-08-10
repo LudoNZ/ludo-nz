@@ -43,7 +43,12 @@ export const subscribeToDecks = (
           boardWidth: data.boardWidth,
           boardGap: data.boardGap,
           stock,
-          minStagger: data.minStagger,
+          // migrate pre-joist-count decks: derive a rough bay count from the
+          // old mm-based minStagger so they don't silently lose the setting
+          minStaggerJoists:
+            data.minStaggerJoists ??
+            Math.max(1, Math.round((data.minStagger || 800) / (data.joistSpacing || 400))),
+          minSameRowJoinJoists: data.minSameRowJoinJoists ?? 2,
           minEdgeJoists: data.minEdgeJoists ?? 3,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,

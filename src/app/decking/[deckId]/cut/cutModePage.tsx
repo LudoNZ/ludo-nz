@@ -207,7 +207,7 @@ const CutModePage = () => {
             <div className={`${styles.joinNote} ${nextJoin.staggered && !nextJoin.nearEdge ? "" : styles.warn}`}>
               {nextJoin.staggered
                 ? "Join lands on a joist, stagger OK"
-                : `⚠ Join couldn't meet the ${formatLength(deck.minStagger)} stagger`}
+                : `⚠ Join couldn't meet the ${deck.minStaggerJoists}-joist-bay stagger`}
               {nextJoin.nearEdge && (
                 <>
                   <br />⚠ Closer than {deck.minEdgeJoists} joist(s) to the row&apos;s edge

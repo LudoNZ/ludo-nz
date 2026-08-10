@@ -118,7 +118,7 @@ service cloud.firestore {
     match /users/{userId}/decks/{deckId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasAll(['name', 'width', 'sideA', 'sideB', 'joistSpacing', 'boardWidth', 'boardGap', 'stock', 'minStagger', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['name', 'width', 'sideA', 'sideB', 'joistSpacing', 'boardWidth', 'boardGap', 'stock', 'minStaggerJoists', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.width is number
         && request.resource.data.sideA is number

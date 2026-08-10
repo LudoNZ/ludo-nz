@@ -53,8 +53,12 @@ export interface DeckConfig {
   boardGap: number
   /** board lengths on hand, with quantity of each */
   stock: StockItem[]
-  /** mm, minimum distance between a join and the nearest join in the adjacent row */
-  minStagger: number
+  /** no join may fall within this many joist bays of a join at the same
+   * position in the row directly above or below it */
+  minStaggerJoists: number
+  /** within a single row, no two joins (i.e. no board shorter than this) may
+   * fall within this many joist bays of each other */
+  minSameRowJoinJoists: number
   /** no join may fall within this many joist bays of either end of a row */
   minEdgeJoists: number
   boardDirection: BoardDirection
@@ -100,7 +104,8 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     boardWidth: 140,
     boardGap: 5,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),
-    minStagger: 300,
+    minStaggerJoists: 2,
+    minSameRowJoinJoists: 2,
     minEdgeJoists: 3,
     boardDirection: "intoRake",
     skeletonInterval: 4,

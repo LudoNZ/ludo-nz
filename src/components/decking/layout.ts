@@ -143,7 +143,8 @@ function planSkeletonRow(
   joistPositions: number[],
   inv: Inventory,
   prevJoins: number[],
-  minStagger: number,
+  minStaggerGap: number,
+  minSameRowGap: number,
   edgeBuffer: number,
   reversed: boolean
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
@@ -167,7 +168,7 @@ function planSkeletonRow(
         boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
         break
       }
-      const reach = joistPositions.filter((j) => j > p + 1e-6 && j <= p + maxReach + 1e-6)
+      const reach = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + maxReach + 1e-6)
       const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
       candidates.sort((a, b) => b - a)
       if (!candidates.length) {
@@ -175,7 +176,7 @@ function planSkeletonRow(
         break
       }
 
-      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
+      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStaggerGap))
       let staggered = true
       if (chosen === undefined) {
         chosen = candidates[0]
@@ -207,7 +208,7 @@ function planSkeletonRow(
         boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
         break
       }
-      const reach = joistPositions.filter((j) => j < p - 1e-6 && j >= p - maxReach - 1e-6)
+      const reach = joistPositions.filter((j) => j <= p - minSameRowGap + 1e-6 && j >= p - maxReach - 1e-6)
       const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
       candidates.sort((a, b) => a - b)
       if (!candidates.length) {
@@ -215,7 +216,7 @@ function planSkeletonRow(
         break
       }
 
-      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
+      let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStaggerGap))
       let staggered = true
       if (chosen === undefined) {
         chosen = candidates[0]
@@ -243,7 +244,8 @@ function planRowRandomFirst(
   joistPositions: number[],
   inv: Inventory,
   prevJoins: number[],
-  minStagger: number,
+  minStaggerGap: number,
+  minSameRowGap: number,
   edgeBuffer: number,
   rand: () => number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
@@ -278,7 +280,7 @@ function planRowRandomFirst(
       const pick = avail[Math.floor(rand() * avail.length)]
       if (tried.has(pick)) continue
       tried.add(pick)
-      const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + pick + 1e-6)
+      const js = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + pick + 1e-6)
       if (!js.length) continue
       const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
       if (!fellBack) {
@@ -297,7 +299,7 @@ function planRowRandomFirst(
     if (chosenLength === null) {
       const longest = inv.longest()
       if (longest !== null) {
-        const js = joistPositions.filter((j) => j > p + 1e-6 && j <= p + longest + 1e-6)
+        const js = joistPositions.filter((j) => j >= p + minSameRowGap - 1e-6 && j <= p + longest + 1e-6)
         if (js.length) {
           const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
           chosenLength = longest
@@ -317,7 +319,7 @@ function planRowRandomFirst(
     // there are only a handful of "farthest" positions to land on. Preferring
     // the stagger-safe subset (still landing on a real joist either way) keeps
     // the safety net while letting the actual position vary properly.
-    const staggerSafe = candidates.filter((j) => staggerOk(j, prevJoins, minStagger))
+    const staggerSafe = candidates.filter((j) => staggerOk(j, prevJoins, minStaggerGap))
     const pool = staggerSafe.length ? staggerSafe : candidates
     const chosen = pool[Math.floor(rand() * pool.length)]
     const staggered = staggerSafe.length > 0
@@ -332,13 +334,15 @@ function planRowRandomFirst(
 }
 
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
-  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock, minStagger } = config
+  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock } = config
   const firstBaySpacing = config.firstBaySpacing || joistSpacing
   const pitch = boardWidth + boardGap
   const intoRake = config.boardDirection !== "alongRake"
   const maxLen = Math.max(sideA, sideB)
   const skeletonInterval = Math.max(1, Math.round(config.skeletonInterval || 4))
   const edgeBuffer = joistSpacing * Math.max(0, config.minEdgeJoists ?? 2)
+  const minStaggerGap = joistSpacing * Math.max(0, config.minStaggerJoists ?? 2)
+  const minSameRowGap = joistSpacing * Math.max(0, config.minSameRowJoinJoists ?? 2)
   const lockedRows = config.lockedRows ?? {}
 
   const rowAxisExtent = intoRake ? width : maxLen
@@ -439,7 +443,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
           joistPositions,
           inv,
           prevSkeletonJoins,
-          minStagger,
+          minStaggerGap,
+          minSameRowGap,
           edgeBuffer,
           skeletonSeq % 2 === 1
         )
@@ -462,7 +467,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
           joistPositions,
           inv,
           prevJoins,
-          minStagger,
+          minStaggerGap,
+          minSameRowGap,
           edgeBuffer,
           mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
         )

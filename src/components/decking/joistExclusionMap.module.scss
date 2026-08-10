@@ -1,0 +1,70 @@
+.exclusionMap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.strip {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.cell {
+  width: 1.7rem;
+  height: 1.7rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.gap {
+  border: 1px dashed var(--color-primary);
+  opacity: 0.4;
+}
+
+.x {
+  background-color: rgba(177, 27, 27, 0.15);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+.j {
+  background-color: var(--color-primary);
+  color: var(--background);
+  border: 1px solid var(--color-primary);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  button {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 2px solid var(--color-primary);
+    background: none;
+    color: var(--foreground);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.stepperValue {
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 6rem;
+}
