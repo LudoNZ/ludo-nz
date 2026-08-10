@@ -308,13 +308,16 @@ function planRowRandomFirst(
       break
     }
 
-    candidates.sort((a, b) => b - a)
-    let chosen = candidates.find((j) => staggerOk(j, prevJoins, minStagger))
-    let staggered = true
-    if (chosen === undefined) {
-      chosen = candidates[0]
-      staggered = false
-    }
+    // pick a position at random among the valid candidates for this length —
+    // always taking the farthest reachable joist made the pattern far more
+    // repetitive than it looked, since with only a handful of stock lengths
+    // there are only a handful of "farthest" positions to land on. Preferring
+    // the stagger-safe subset (still landing on a real joist either way) keeps
+    // the safety net while letting the actual position vary properly.
+    const staggerSafe = candidates.filter((j) => staggerOk(j, prevJoins, minStagger))
+    const pool = staggerSafe.length ? staggerSafe : candidates
+    const chosen = pool[Math.floor(rand() * pool.length)]
+    const staggered = staggerSafe.length > 0
 
     inv.take(chosenLength)
     boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
