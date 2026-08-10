@@ -25,6 +25,16 @@ const CutList: React.FC<{
   const totalUsed = layout.shoppingList.reduce((sum, s) => sum + s.used, 0)
   const totalOnHand = layout.shoppingList.reduce((sum, s) => sum + s.onHand, 0)
 
+  const placedByLength = new Map<number, number>()
+  for (const row of layout.rows) {
+    for (const b of row.boards) {
+      if (b.stockLength !== null && completedSet.has(b.id)) {
+        placedByLength.set(b.stockLength, (placedByLength.get(b.stockLength) ?? 0) + 1)
+      }
+    }
+  }
+  const totalPlaced = Array.from(placedByLength.values()).reduce((sum, n) => sum + n, 0)
+
   return (
     <div className={styles.cutList}>
       <div className={styles.summary}>
@@ -80,24 +90,29 @@ const CutList: React.FC<{
         <div className={styles.stockHeader}>
           <h3>Stock usage</h3>
           <span className={styles.stockTotal}>
-            {totalUsed}/{totalOnHand} used
+            {totalPlaced > 0 && <span className={styles.placedBadge}>✓{totalPlaced} placed ·</span>}{" "}
+            {totalUsed}/{totalOnHand} planned
           </span>
         </div>
         <div className={styles.stockTable}>
-          {layout.shoppingList.map((item) => (
-            <div key={item.stockLength} className={styles.stockRow}>
-              <span className={styles.stockLength}>{formatLength(item.stockLength)}</span>
-              <div className={styles.stockTrack}>
-                <div
-                  className={styles.stockFill}
-                  style={{ width: `${(item.stockLength / maxStockLength) * 100}%` }}
-                />
+          {layout.shoppingList.map((item) => {
+            const placed = placedByLength.get(item.stockLength) ?? 0
+            return (
+              <div key={item.stockLength} className={styles.stockRow}>
+                <span className={styles.stockLength}>{formatLength(item.stockLength)}</span>
+                <div className={styles.stockTrack}>
+                  <div
+                    className={styles.stockFill}
+                    style={{ width: `${(item.stockLength / maxStockLength) * 100}%` }}
+                  />
+                </div>
+                <span className={styles.stockCount}>
+                  {placed > 0 && <span className={styles.placedBadge}>✓{placed}</span>}
+                  {item.used}/{item.onHand}
+                </span>
               </div>
-              <span className={styles.stockCount}>
-                {item.used}/{item.onHand}
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
