@@ -327,6 +327,7 @@ function planRowRandomFirst(
 
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock, minStagger } = config
+  const firstBaySpacing = config.firstBaySpacing || joistSpacing
   const pitch = boardWidth + boardGap
   const intoRake = config.boardDirection !== "alongRake"
   const maxLen = Math.max(sideA, sideB)
@@ -338,8 +339,13 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const joistAxisMax = intoRake ? maxLen : width
   const rowCount = Math.max(1, Math.ceil(rowAxisExtent / pitch))
 
-  const joistPositions: number[] = []
-  for (let x = 0; x <= joistAxisMax + 1e-6; x += joistSpacing) joistPositions.push(Math.round(x))
+  // the first bay (off the ledger/bearer) can differ from the rest of the run
+  const joistPositions: number[] = [0]
+  if (firstBaySpacing > 0) {
+    for (let x = firstBaySpacing; x <= joistAxisMax + 1e-6; x += joistSpacing) {
+      joistPositions.push(Math.round(x))
+    }
+  }
 
   const inv = new Inventory(stock)
   const seed = config.layoutSeed || 1

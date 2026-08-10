@@ -69,6 +69,7 @@ const DeckForm: React.FC<{
       sideA: state.sideA,
       sideB: state.sideB,
       joistSpacing: state.joistSpacing,
+      firstBaySpacing: state.firstBaySpacing,
       boardWidth: state.boardWidth,
       boardGap: state.boardGap,
       minStagger: state.minStagger,
@@ -152,6 +153,7 @@ const DeckForm: React.FC<{
       <div className={styles.row}>
         <div className={styles.field}>
           <label htmlFor="joistSpacing">Joist centres (mm)</label>
+          <span className={styles.hint}>For every bay after the first</span>
           <input
             id="joistSpacing"
             type="number"
@@ -161,6 +163,21 @@ const DeckForm: React.FC<{
             required
           />
         </div>
+        <div className={styles.field}>
+          <label htmlFor="firstBaySpacing">First bay (mm)</label>
+          <span className={styles.hint}>Off the ledger/bearer — same as above if uniform</span>
+          <input
+            id="firstBaySpacing"
+            type="number"
+            min={50}
+            value={state.firstBaySpacing}
+            onChange={num("firstBaySpacing")}
+            required
+          />
+        </div>
+      </div>
+
+      <div className={styles.row}>
         <div className={styles.field}>
           <label htmlFor="minStagger">Min. join stagger (mm)</label>
           <input
@@ -172,19 +189,18 @@ const DeckForm: React.FC<{
             required
           />
         </div>
-      </div>
-
-      <div className={styles.field}>
-        <label htmlFor="minEdgeJoists">Min. joist bays from row edge</label>
-        <span className={styles.hint}>No join is allowed within this many joist bays of either end of a row</span>
-        <input
-          id="minEdgeJoists"
-          type="number"
-          min={0}
-          value={state.minEdgeJoists}
-          onChange={num("minEdgeJoists")}
-          required
-        />
+        <div className={styles.field}>
+          <label htmlFor="minEdgeJoists">Min. joist bays from edge</label>
+          <span className={styles.hint}>No join within this many bays of either end of a row</span>
+          <input
+            id="minEdgeJoists"
+            type="number"
+            min={0}
+            value={state.minEdgeJoists}
+            onChange={num("minEdgeJoists")}
+            required
+          />
+        </div>
       </div>
 
       <div className={styles.field}>

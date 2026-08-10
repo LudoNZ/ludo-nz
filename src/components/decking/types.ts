@@ -42,8 +42,11 @@ export interface DeckConfig {
   sideA: number
   /** mm, length along the raked end (y = width) */
   sideB: number
-  /** mm, joist centres */
+  /** mm, joist centres for every bay after the first */
   joistSpacing: number
+  /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults
+   * to joistSpacing for a uniform grid */
+  firstBaySpacing: number
   /** mm, board face width */
   boardWidth: number
   /** mm, gap between boards */
@@ -93,6 +96,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     sideA: 4200,
     sideB: 4200,
     joistSpacing: 400,
+    firstBaySpacing: 400,
     boardWidth: 140,
     boardGap: 5,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),

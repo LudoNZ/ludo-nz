@@ -84,6 +84,7 @@ const DeckDetailPage = () => {
       sideA: deck.sideA,
       sideB: deck.sideB,
       joistSpacing: deck.joistSpacing,
+      firstBaySpacing: deck.firstBaySpacing,
       boardWidth: deck.boardWidth,
       boardGap: deck.boardGap,
       stock: deck.stock,

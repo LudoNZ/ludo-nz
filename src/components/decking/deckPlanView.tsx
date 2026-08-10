@@ -184,6 +184,9 @@ const DeckPlanView: React.FC<{
         <span>{intoRake ? "↦" : "↧"} Boards run {intoRake ? "into" : "along"} the rake</span>
         <span>
           <span className={styles.dash} /> Joist @ {formatLength(config.joistSpacing)} centres
+          {config.firstBaySpacing && config.firstBaySpacing !== config.joistSpacing
+            ? ` (first bay ${formatLength(config.firstBaySpacing)})`
+            : ""}
         </span>
         <span>
           <span className={`${styles.tick} ${styles.skeleton}`} /> Skeleton row join

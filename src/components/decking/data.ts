@@ -39,6 +39,7 @@ export const subscribeToDecks = (
           sideA: data.sideA,
           sideB: data.sideB,
           joistSpacing: data.joistSpacing,
+          firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,
           boardGap: data.boardGap,
           stock,
