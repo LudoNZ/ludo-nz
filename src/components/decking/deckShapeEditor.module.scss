@@ -20,8 +20,8 @@
   stroke: var(--color-primary);
 }
 
-// the raked edge is calculated, not independently editable — trace it in
-// the same blue as its readout chip so the connection is obvious
+// the raked edge is set by angle rather than length — trace it in the same
+// blue as its chip so the connection is obvious
 .rakeEdge {
   stroke: #2a78d6;
   stroke-dasharray: 1% 0.8%;
@@ -107,6 +107,28 @@
   &:hover {
     opacity: 1;
   }
+}
+
+// small read-only line under a chip's value — "= left side" (sideB
+// mirroring sideA), or the rake's calculated length alongside its
+// editable angle
+.dimCaption {
+  font-size: 0.62rem;
+  opacity: 0.6;
+}
+
+// matches joinScroller's "Reset to auto" styling — same wording, same
+// affordance, for the same reason: revert an override back to following
+// the automatic value
+.resetBtn {
+  background: none;
+  border: none;
+  color: #2a78d6;
+  text-decoration: underline;
+  font-size: 0.62rem;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
 }
 
 .dimInput,

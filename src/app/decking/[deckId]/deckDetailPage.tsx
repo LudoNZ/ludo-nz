@@ -90,6 +90,7 @@ const DeckDetailPage = () => {
       width: deck.width,
       sideA: deck.sideA,
       sideB: deck.sideB,
+      sideBLinked: deck.sideBLinked,
       edgeLabels: deck.edgeLabels,
       joistSpacing: deck.joistSpacing,
       firstBaySpacing: deck.firstBaySpacing,

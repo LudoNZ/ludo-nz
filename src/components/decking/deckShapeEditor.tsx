@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { BoardDirection, EdgeLabels, rakeLength } from "./types"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { BoardDirection, EdgeLabels, formatLength, rakeAngleDeg, rakeLength } from "./types"
 import styles from "./deckShapeEditor.module.scss"
 
 /** A bent double-headed arrow: one head pointing along the width, the other
@@ -27,7 +27,8 @@ const RotateIcon: React.FC<{ className?: string }> = ({ className }) => (
 )
 
 type EdgeKey = "width" | "sideA" | "sideB" | "rake"
-type EditTarget = { key: EdgeKey; field: "value" | "label" } | null
+type EditField = "value" | "label" | "angle"
+type EditTarget = { key: EdgeKey; field: EditField } | null
 
 const Edge: React.FC<{
   keyName: EdgeKey
@@ -36,24 +37,62 @@ const Edge: React.FC<{
   leftPct: number
   topPct: number
   vertical?: boolean
+  /** true for a value that's read-only text, not a tappable chip (a plain
+   * calculated readout with nothing to invert it back from) */
   calculated?: boolean
+  /** overrides the default mm/integer value editing with degrees (signed,
+   * one decimal) — used only by the rake edge's angle */
+  angle?: boolean
+  /** small read-only line under the value, e.g. "= left side" or a
+   * calculated length alongside an editable angle */
+  caption?: string
+  /** "Reset to auto" affordance — shown only when there's something to
+   * reset (sideB has been unlinked from mirroring sideA) */
+  onReset?: () => void
   editTarget: EditTarget
   draft: string
   setDraft: (s: string) => void
   onStart: (t: EditTarget, current: string) => void
   onCommit: () => void
   onCancel: () => void
-}> = ({ keyName, value, label, leftPct, topPct, vertical, calculated, editTarget, draft, setDraft, onStart, onCommit, onCancel }) => {
+}> = ({
+  keyName,
+  value,
+  label,
+  leftPct,
+  topPct,
+  vertical,
+  calculated,
+  angle,
+  caption,
+  onReset,
+  editTarget,
+  draft,
+  setDraft,
+  onStart,
+  onCommit,
+  onCancel,
+}) => {
   const style = { left: `${leftPct}%`, top: `${topPct}%` }
-  const editingValue = editTarget?.key === keyName && editTarget.field === "value"
+  const valueField: EditField = angle ? "angle" : "value"
+  const editingValue = editTarget?.key === keyName && editTarget.field === valueField
   const editingLabel = editTarget?.key === keyName && editTarget.field === "label"
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // focus + select once, when this chip starts being edited — not on every
+  // keystroke. A ref callback (the previous approach) is a new function
+  // identity every render, so React was detaching/reattaching it — and
+  // therefore re-selecting the whole value — on every character typed,
+  // which made each new key overwrite the entire input instead of editing it.
+  useEffect(() => {
+    if (editingValue || editingLabel) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editingValue, editingLabel])
+
   const inputProps = {
-    ref: (el: HTMLInputElement | null) => {
-      if (el) {
-        el.focus()
-        el.select()
-      }
-    },
+    ref: inputRef,
     value: draft,
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft(e.target.value),
     onBlur: onCommit,
@@ -67,47 +106,88 @@ const Edge: React.FC<{
   }
 
   if (editingValue) {
-    return <input className={styles.dimInput} style={style} type="number" inputMode="numeric" min={1} aria-label={`${label} in millimetres`} {...inputProps} />
+    return angle ? (
+      <input
+        className={styles.dimInput}
+        style={style}
+        type="number"
+        inputMode="decimal"
+        step={0.1}
+        min={-89}
+        max={89}
+        aria-label={`${label} angle in degrees`}
+        {...inputProps}
+      />
+    ) : (
+      <input className={styles.dimInput} style={style} type="number" inputMode="numeric" min={1} aria-label={`${label} in millimetres`} {...inputProps} />
+    )
   }
   if (editingLabel) {
     return <input className={styles.labelInput} style={style} type="text" maxLength={40} aria-label={`Name for this edge`} {...inputProps} />
   }
+  const unit = angle ? "°" : "mm"
+  const displayValue = angle ? value.toFixed(1) : value.toLocaleString()
   return (
     <div className={`${styles.dimChip} ${vertical ? styles.vertical : ""} ${calculated ? styles.calculated : ""}`} style={style}>
       {calculated ? (
         <span className={styles.dimValue}>
-          {value.toLocaleString()} <span className={styles.dimUnit}>mm</span>
+          {displayValue} <span className={styles.dimUnit}>{unit}</span>
         </span>
       ) : (
-        <button type="button" className={styles.dimValueBtn} onClick={() => onStart({ key: keyName, field: "value" }, String(value))}>
-          {value.toLocaleString()} <span className={styles.dimUnit}>mm</span>
+        <button type="button" className={styles.dimValueBtn} onClick={() => onStart({ key: keyName, field: valueField }, angle ? value.toFixed(1) : String(value))}>
+          {displayValue} <span className={styles.dimUnit}>{unit}</span>
         </button>
       )}
+      {caption && <span className={styles.dimCaption}>{caption}</span>}
       <button type="button" className={styles.dimLabelBtn} onClick={() => onStart({ key: keyName, field: "label" }, label)}>
         {label || "+ label"}
       </button>
+      {onReset && (
+        <button type="button" className={styles.resetBtn} onClick={onReset}>
+          Reset to auto
+        </button>
+      )}
     </div>
   )
 }
 
 /** Visual editor for the deck's trapezoid shape: a to-scale outline with
  * each measurement shown as a tap-to-edit chip right on the edge it
- * describes (each with its own editable name, e.g. "House wall"), a
- * calculated readout for the raked diagonal — not independently settable,
- * since it's fully determined by the other three — and a rotate control
- * that flips which way the boards run. */
+ * describes (each with its own editable name, e.g. "House wall"). The
+ * angled edge is set by degrees rather than length — its length is a
+ * calculated readout instead, alongside it. sideB mirrors sideA until
+ * deliberately overridden (by editing it directly, or by editing the
+ * angle — an equivalent way of setting it). A rotate control flips which
+ * way the boards run. */
 const DeckShapeEditor: React.FC<{
   width: number
   sideA: number
   sideB: number
+  sideBLinked: boolean
   boardDirection: BoardDirection
   edgeLabels: EdgeLabels
   onWidthChange: (n: number) => void
   onSideAChange: (n: number) => void
   onSideBChange: (n: number) => void
+  onSideBReset: () => void
+  onRakeAngleChange: (deg: number) => void
   onDirectionChange: (d: BoardDirection) => void
   onLabelChange: (key: keyof EdgeLabels, label: string) => void
-}> = ({ width, sideA, sideB, boardDirection, edgeLabels, onWidthChange, onSideAChange, onSideBChange, onDirectionChange, onLabelChange }) => {
+}> = ({
+  width,
+  sideA,
+  sideB,
+  sideBLinked,
+  boardDirection,
+  edgeLabels,
+  onWidthChange,
+  onSideAChange,
+  onSideBChange,
+  onSideBReset,
+  onRakeAngleChange,
+  onDirectionChange,
+  onLabelChange,
+}) => {
   const intoRake = boardDirection !== "alongRake"
   const [editTarget, setEditTarget] = useState<EditTarget>(null)
   const [draft, setDraft] = useState("")
@@ -147,6 +227,12 @@ const DeckShapeEditor: React.FC<{
     if (!editTarget) return
     if (editTarget.field === "label") {
       onLabelChange(editTarget.key, draft.trim())
+      setEditTarget(null)
+      return
+    }
+    if (editTarget.field === "angle") {
+      const deg = parseFloat(draft)
+      if (!isNaN(deg)) onRakeAngleChange(deg)
       setEditTarget(null)
       return
     }
@@ -192,20 +278,33 @@ const DeckShapeEditor: React.FC<{
         </button>
 
         <Edge keyName="sideA" value={sideA} label={edgeLabels.sideA} leftPct={sideAPos.leftPct} topPct={sideAPos.topPct} {...edgeProps} />
-        <Edge keyName="sideB" value={sideB} label={edgeLabels.sideB} leftPct={sideBPos.leftPct} topPct={sideBPos.topPct} {...edgeProps} />
+        <Edge
+          keyName="sideB"
+          value={sideB}
+          label={edgeLabels.sideB}
+          leftPct={sideBPos.leftPct}
+          topPct={sideBPos.topPct}
+          caption={sideBLinked ? "= left side" : undefined}
+          onReset={sideBLinked ? undefined : onSideBReset}
+          {...edgeProps}
+        />
         <Edge keyName="width" value={width} label={edgeLabels.width} leftPct={widthPos.leftPct} topPct={widthPos.topPct} vertical {...edgeProps} />
         <Edge
           keyName="rake"
-          value={Math.round(rakeLength({ sideA, sideB, width }))}
+          value={rakeAngleDeg({ sideA, sideB, width })}
           label={edgeLabels.rake}
           leftPct={rakePos.leftPct}
           topPct={rakePos.topPct}
           vertical
-          calculated
+          angle
+          caption={`≈ ${formatLength(rakeLength({ sideA, sideB, width }))} run`}
           {...edgeProps}
         />
       </div>
-      <p className={styles.hint}>The raked edge is calculated from the other three, shown in blue — tap its name to relabel it</p>
+      <p className={styles.hint}>
+        Tap the angled edge to set its angle directly — the right side recalculates from it. Tap
+        a name to relabel any edge.
+      </p>
     </div>
   )
 }

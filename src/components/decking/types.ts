@@ -64,6 +64,12 @@ export interface DeckConfig {
   sideA: number
   /** mm, length along the raked end (y = width) */
   sideB: number
+  /** when true, sideB mirrors sideA on every edit instead of standing on
+   * its own — the shape editor's default for a new deck, so a plain
+   * rectangle stays a rectangle as you adjust it until you deliberately
+   * type a different value into the right side (which unlinks it) or the
+   * angle (an equivalent way of setting sideB directly) */
+  sideBLinked: boolean
   /** names for the sideA/sideB/width/diagonal edges, shown wherever the
    * shape is drawn — defaults to generic terms, editable per deck */
   edgeLabels: EdgeLabels
@@ -133,9 +139,10 @@ export const DEFAULT_STOCK: StockItem[] = [
 export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "updatedAt"> {
   return {
     name,
-    width: 4000,
-    sideA: 7000,
-    sideB: 7000,
+    width: 3000,
+    sideA: 6000,
+    sideB: 6000,
+    sideBLinked: true,
     edgeLabels: { ...DEFAULT_EDGE_LABELS },
     joistSpacing: 400,
     firstBaySpacing: 400,
@@ -178,10 +185,22 @@ export function widthAt(config: Pick<DeckConfig, "sideA" | "sideB" | "width">, x
   return (width * (maxLen - x)) / (maxLen - minLen)
 }
 
+/** Signed: positive when sideB is longer than sideA (the deck splays
+ * outward), negative when shorter (it tapers in). Signed rather than a
+ * magnitude specifically so it's invertible — see sideBFromRakeAngle. */
 export function rakeAngleDeg(config: Pick<DeckConfig, "sideA" | "sideB" | "width">): number {
   const { sideA, sideB, width } = config
   if (width <= 0) return 0
-  return (Math.atan2(Math.abs(sideB - sideA), width) * 180) / Math.PI
+  return (Math.atan2(sideB - sideA, width) * 180) / Math.PI
+}
+
+/** Inverse of rakeAngleDeg: the sideB that produces a given angle off of a
+ * fixed sideA/width. Clamped well short of ±90° since the tangent blows up
+ * near there and would otherwise produce an unusable sideB from a small
+ * input change. */
+export function sideBFromRakeAngle(sideA: number, width: number, angleDeg: number): number {
+  const clamped = Math.max(-89, Math.min(89, angleDeg))
+  return Math.max(1, Math.round(sideA + width * Math.tan((clamped * Math.PI) / 180)))
 }
 
 /** mm, the diagonal (raked) edge's actual length — not an independent

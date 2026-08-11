@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Button from "@/components/button/button"
-import { DeckConfig, StockItem } from "./types"
+import { DeckConfig, sideBFromRakeAngle, StockItem } from "./types"
 import DeckShapeEditor from "./deckShapeEditor"
 import JoistExclusionMap from "./joistExclusionMap"
 import styles from "./deckForm.module.scss"
@@ -70,6 +70,7 @@ const DeckForm: React.FC<{
       width: state.width,
       sideA: state.sideA,
       sideB: state.sideB,
+      sideBLinked: state.sideBLinked,
       edgeLabels: state.edgeLabels,
       joistSpacing: state.joistSpacing,
       firstBaySpacing: state.firstBaySpacing,
@@ -112,11 +113,16 @@ const DeckForm: React.FC<{
           width={state.width}
           sideA={state.sideA}
           sideB={state.sideB}
+          sideBLinked={state.sideBLinked}
           boardDirection={state.boardDirection}
           edgeLabels={state.edgeLabels}
           onWidthChange={(n) => setState((s) => ({ ...s, width: n }))}
-          onSideAChange={(n) => setState((s) => ({ ...s, sideA: n }))}
-          onSideBChange={(n) => setState((s) => ({ ...s, sideB: n }))}
+          onSideAChange={(n) => setState((s) => ({ ...s, sideA: n, sideB: s.sideBLinked ? n : s.sideB }))}
+          onSideBChange={(n) => setState((s) => ({ ...s, sideB: n, sideBLinked: false }))}
+          onSideBReset={() => setState((s) => ({ ...s, sideBLinked: true, sideB: s.sideA }))}
+          onRakeAngleChange={(deg) =>
+            setState((s) => ({ ...s, sideB: sideBFromRakeAngle(s.sideA, s.width, deg), sideBLinked: false }))
+          }
           onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
           onLabelChange={(key, label) => setState((s) => ({ ...s, edgeLabels: { ...s.edgeLabels, [key]: label } }))}
         />

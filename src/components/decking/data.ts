@@ -40,6 +40,10 @@ export const subscribeToDecks = (
           width: data.width,
           sideA: data.sideA,
           sideB: data.sideB,
+          // legacy decks (saved before this existed) default to unlinked, so
+          // loading one never silently starts auto-syncing a shape someone
+          // already deliberately set — only new decks start linked
+          sideBLinked: data.sideBLinked ?? false,
           edgeLabels: { ...DEFAULT_EDGE_LABELS, ...(data.edgeLabels ?? {}) },
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
