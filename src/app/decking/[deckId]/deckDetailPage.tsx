@@ -45,7 +45,7 @@ const DeckDetailPage = () => {
   }, [auth?.currentUser])
 
   const deck = decks.find((d) => d.id === params.deckId)
-  const { layout, toggleJoin, resetRow } = useManualJoins(deck, auth?.currentUser?.uid)
+  const { layout, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, auth?.currentUser?.uid)
   const maxLen = deck ? Math.max(deck.sideA, deck.sideB) : 1
 
   if (!auth?.currentUser) {
@@ -206,7 +206,12 @@ const DeckDetailPage = () => {
                     layout={layout}
                     completedSegmentIds={deck.completedSegmentIds}
                     groupBySpans={deck.joistSpacing}
-                    note={`By joist spans (${formatLength(deck.joistSpacing)} each)`}
+                    note={
+                      activeJoinRow != null
+                        ? `Tap a length to place it on row #${activeJoinRow + 1}, joined at its reach`
+                        : `By joist spans (${formatLength(deck.joistSpacing)} each)`
+                    }
+                    onSelectLength={activeJoinRow != null ? (len) => placeBoard(activeJoinRow, len) : undefined}
                   />
                 </div>
               </div>

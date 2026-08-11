@@ -48,21 +48,28 @@ export function useManualJoins(deck: DeckConfig | undefined, uid: string | undef
 
   const layout = useMemo(() => (effectiveDeck ? computeDeckLayout(effectiveDeck) : null), [effectiveDeck])
 
-  const toggleJoin = (row: RowPlan, position: number) => {
+  // applies a new join list to a row: local echo first (see the reconcile
+  // effect above for how it's dropped once confirmed), Firestore write in
+  // the background, reverted if that write fails
+  const commitJoins = (rowIndex: number, positions: number[]) => {
     if (!deck || !uid) return
+    setPendingJoins((prev) => ({ ...prev, [rowIndex]: positions }))
+    setManualJoins(uid, deck.id, rowIndex, positions).catch(() => {
+      setPendingJoins((prev) => {
+        const copy = { ...prev }
+        delete copy[rowIndex]
+        return copy
+      })
+    })
+  }
+
+  const toggleJoin = (row: RowPlan, position: number) => {
     // row.joins already reflects any earlier pending edit on this row, so
     // it's always the current on-screen state, not last-committed state
     const current = row.joins.map((j) => j.position)
     const exists = current.some((p) => Math.abs(p - position) < 1e-6)
     const next = exists ? current.filter((p) => Math.abs(p - position) >= 1e-6) : [...current, position].sort((a, b) => a - b)
-    setPendingJoins((prev) => ({ ...prev, [row.index]: next }))
-    setManualJoins(uid, deck.id, row.index, next).catch(() => {
-      setPendingJoins((prev) => {
-        const copy = { ...prev }
-        delete copy[row.index]
-        return copy
-      })
-    })
+    commitJoins(row.index, next)
   }
 
   const resetRow = (row: RowPlan) => {
@@ -77,5 +84,28 @@ export function useManualJoins(deck: DeckConfig | undefined, uid: string | undef
     })
   }
 
-  return { layout, toggleJoin, resetRow }
+  /** Places a board of about `stockLength` mm as the next segment on
+   * `rowIndex`, starting right after whatever's already there (or from the
+   * square end if it's still empty), and adds a join at the furthest joist
+   * that board can actually reach — "use it as long as possible from
+   * here". No-op if the board can't reach the next joist, or if it reaches
+   * (or overruns) the end of the row outright, since neither case needs a
+   * new join. */
+  const placeBoard = (rowIndex: number, stockLength: number) => {
+    if (!layout) return
+    const row = layout.rows.find((r) => r.index === rowIndex)
+    if (!row) return
+    const current = row.joins.map((j) => j.position)
+    const start = current.length ? Math.max(...current) : 0
+    const reach = start + stockLength
+    const candidates = layout.joistPositions.filter(
+      (p) => p > start + 1e-6 && p <= reach + 1e-6 && p < row.targetLength - 1e-6
+    )
+    if (candidates.length === 0) return
+    const joinPos = Math.max(...candidates)
+    if (current.some((p) => Math.abs(p - joinPos) < 1e-6)) return
+    commitJoins(rowIndex, [...current, joinPos].sort((a, b) => a - b))
+  }
+
+  return { layout, toggleJoin, resetRow, placeBoard }
 }

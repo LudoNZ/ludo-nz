@@ -13,6 +13,11 @@ interface SummaryRow {
   placed: number
   inCurrentStock: boolean
   sortLen: number
+  /** the exact mm length to act on if this row is clicked — the stock
+   * length itself when ungrouped, or the shortest length in the group when
+   * grouped by spans (every member of a span-group reaches the same number
+   * of joist bays, so the shortest is the safe, always-achievable choice) */
+  repLength: number
 }
 
 /** Stock-usage bars: for each length (or, in span mode, each group of
@@ -28,7 +33,10 @@ const StockSummary: React.FC<{
    * of exact stock length */
   groupBySpans?: number
   note?: string
-}> = ({ layout, completedSegmentIds, groupBySpans, note }) => {
+  /** when provided, each row becomes tappable — reports the length to place
+   * on whatever row is currently focused elsewhere on the page */
+  onSelectLength?: (lengthMm: number) => void
+}> = ({ layout, completedSegmentIds, groupBySpans, note, onSelectLength }) => {
   const completedSet = new Set(completedSegmentIds)
   // scale bars off current-stock lengths only, so a length that's only
   // around because a locked row is still frozen on it can't become the
@@ -76,6 +84,7 @@ const StockSummary: React.FC<{
           placed: g.placed,
           inCurrentStock: g.inCurrentStock,
           sortLen: hi,
+          repLength: lo,
         }
       })
   } else {
@@ -87,6 +96,7 @@ const StockSummary: React.FC<{
       placed: placedByLength.get(item.stockLength) ?? 0,
       inCurrentStock: item.inCurrentStock,
       sortLen: item.stockLength,
+      repLength: item.stockLength,
     }))
   }
 
@@ -112,8 +122,8 @@ const StockSummary: React.FC<{
           const placedPct = denom > 0 ? Math.min(100, (row.placed / denom) * 100) : 0
           const allocatedPct = denom > 0 ? Math.max(0, Math.min(100 - placedPct, ((row.used - row.placed) / denom) * 100)) : 0
           const sparePct = Math.max(0, 100 - placedPct - allocatedPct)
-          return (
-            <div key={row.key} className={`${styles.stockRow} ${!row.inCurrentStock ? styles.legacy : ""}`}>
+          const rowContent = (
+            <>
               <span className={styles.stockLength}>
                 {row.label}
                 {row.range && <span className={styles.stockRange}>{row.range}</span>}
@@ -130,6 +140,22 @@ const StockSummary: React.FC<{
                 {row.used}/{row.onHand}
                 {spare > 0 && <span className={styles.spareBadge}>+{spare} spare</span>}
               </span>
+            </>
+          )
+          const rowClass = `${styles.stockRow} ${!row.inCurrentStock ? styles.legacy : ""} ${onSelectLength ? styles.clickable : ""}`
+          return onSelectLength ? (
+            <button
+              key={row.key}
+              type="button"
+              className={rowClass}
+              onClick={() => onSelectLength(row.repLength)}
+              aria-label={`Place a ${row.range ? `~${formatLength(row.repLength)}` : row.label} board on the focused row, joined at its reach`}
+            >
+              {rowContent}
+            </button>
+          ) : (
+            <div key={row.key} className={rowClass}>
+              {rowContent}
             </div>
           )
         })}
