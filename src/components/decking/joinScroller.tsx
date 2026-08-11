@@ -1,10 +1,16 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { DeckLayout, RowPlan } from "./layout"
 import { LockedRow, formatLength } from "./types"
 import planStyles from "./deckPlanView.module.scss"
 import styles from "./joinScroller.module.scss"
+
+/** Imperative handle so a click elsewhere on the page (the full plan view)
+ * can jump the scroller to a row, the reverse of onActiveRowChange. */
+export interface JoinScrollerHandle {
+  focusRow: (index: number) => void
+}
 
 /** Scroll a row to the centre line to activate it, then tap a joist line
  * to add or remove a join there. Each row's mini-track reuses the plan
@@ -12,17 +18,26 @@ import styles from "./joinScroller.module.scss"
  * reads as a zoomed-in strip of the same drawing rather than a different
  * widget. Reports which row is active so a caller can mirror the
  * highlight into a full plan view elsewhere on the page. */
-const JoinScroller: React.FC<{
-  layout: DeckLayout
-  maxLen: number
-  lockedRows: Record<string, LockedRow>
-  onToggleJoin: (row: RowPlan, position: number) => void
-  onResetRow: (row: RowPlan) => void
-  onActiveRowChange?: (index: number | null) => void
-}> = ({ layout, maxLen, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }) => {
+const JoinScroller = forwardRef<
+  JoinScrollerHandle,
+  {
+    layout: DeckLayout
+    maxLen: number
+    lockedRows: Record<string, LockedRow>
+    onToggleJoin: (row: RowPlan, position: number) => void
+    onResetRow: (row: RowPlan) => void
+    onActiveRowChange?: (index: number | null) => void
+  }
+>(({ layout, maxLen, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }, ref) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+  useImperativeHandle(ref, () => ({
+    focusRow: (index) => {
+      rowRefs.current.get(index)?.scrollIntoView({ behavior: "smooth", block: "center" })
+    },
+  }))
 
   // whichever row strip sits nearest the vertical centre of the scroll
   // area becomes "active" — only its joist marks are tappable, so
@@ -157,6 +172,8 @@ const JoinScroller: React.FC<{
       })}
     </div>
   )
-}
+})
+
+JoinScroller.displayName = "JoinScroller"
 
 export default JoinScroller

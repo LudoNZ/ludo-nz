@@ -1,9 +1,19 @@
+// one row-strip's centre-to-centre spacing: padding-top (0.2) + rowMeta
+// line (0.68, line-height forced to 1 below so this stays exact) +
+// rowMeta's own margin-bottom (0.12) + track (1.45) + padding-bottom (0.2)
+// + the strip's own margin-bottom (0.1) = 2.75rem. Every size below that
+// feeds into a row-strip is chosen to add up to this, so 3x/1x it cleanly
+// for "show exactly 3 rows, one above and one below the focused one".
+$row-slot: 2.75rem;
+
 .scrollArea {
   position: relative;
-  height: min(48vh, 26rem);
+  height: $row-slot * 3;
   overflow-y: auto;
   scroll-snap-type: y proximity;
-  padding-block: min(19vh, 10rem);
+  // top/bottom padding of one row-slot each, so the very first/last row
+  // can still scroll all the way to the centre line
+  padding-block: $row-slot;
   border: 1px solid rgba(27, 177, 47, 0.25);
   border-radius: var(--borderRadius);
 }
@@ -20,19 +30,22 @@
 
 .rowStrip {
   scroll-snap-align: center;
-  padding: 0.3rem 0.6rem;
-  margin: 0 0.4rem 0.15rem;
+  padding: 0.2rem 0.6rem;
+  margin: 0 0.4rem 0.1rem;
   border-radius: var(--borderRadius);
   opacity: 0.5;
   transform: scale(0.97);
   transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
 
+  // border adds 1.5px each side — padding is reduced to compensate so the
+  // strip's overall height (and therefore $row-slot) doesn't shift between
+  // active/inactive, which would throw off the "exactly 3 rows" sizing
   &.active {
     opacity: 1;
     transform: scale(1);
     background-color: rgba(27, 177, 47, 0.08);
     border: 1.5px solid var(--color-primary);
-    padding: calc(0.3rem - 1.5px) calc(0.6rem - 1.5px);
+    padding: calc(0.2rem - 1.5px) calc(0.6rem - 1.5px);
   }
 
   &.locked {
@@ -45,8 +58,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.15rem;
-  font-size: 0.72rem;
+  margin-bottom: 0.12rem;
+  font-size: 0.68rem;
+  line-height: 1;
 }
 
 .rowLabel {
@@ -98,7 +112,7 @@
 // zoomed-in strip of the same drawing, not a different widget
 .track {
   position: relative;
-  height: 1.5rem;
+  height: 1.45rem;
 }
 
 .trackSvg {

@@ -10,12 +10,17 @@ const DeckPlanView: React.FC<{
   layout: DeckLayout
   completedSegmentIds: string[]
   onToggleSegment?: (id: string) => void
+  /** when provided, tapping any board jumps the join scroller to that row
+   * instead of toggling it placed — takes priority over onToggleSegment
+   * (the two are mutually exclusive; the join editor doesn't also want
+   * stray placed-toggles while you're trying to focus a row) */
+  onRowClick?: (rowIndex: number) => void
   activeSegmentId?: string | null
   /** highlights a whole row (used by the join editor to show which row its
    * scroller is currently focused on) — separate from activeSegmentId,
    * which highlights one board within cutting mode's "next cut" flow */
   activeRowIndex?: number | null
-}> = ({ config, layout, completedSegmentIds, onToggleSegment, activeSegmentId = null, activeRowIndex = null }) => {
+}> = ({ config, layout, completedSegmentIds, onToggleSegment, onRowClick, activeSegmentId = null, activeRowIndex = null }) => {
   const clipId = useId()
   const completedSet = new Set(completedSegmentIds)
   const { sideA, sideB, width } = config
@@ -97,6 +102,14 @@ const DeckPlanView: React.FC<{
                     const cx = intoRake ? (b.start + b.end) / 2 : row.rowStart + rowThickness / 2
                     const cy = intoRake ? row.rowStart + rowThickness / 2 : (b.start + b.end) / 2
                     const checkSize = Math.min(rowThickness * 0.55, fontSize)
+                    const handleClick = onRowClick
+                      ? () => onRowClick(row.index)
+                      : onToggleSegment
+                        ? () => onToggleSegment(b.id)
+                        : undefined
+                    const ariaLabel = onRowClick
+                      ? `Row ${row.index + 1} — tap to focus this row in the join editor`
+                      : `Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""}${onToggleSegment ? " — tap to toggle" : ""}`
                     return (
                       <g key={b.id}>
                         <rect
@@ -104,18 +117,18 @@ const DeckPlanView: React.FC<{
                           y={intoRake ? row.rowStart : b.start}
                           width={intoRake ? b.end - b.start : rowThickness}
                           height={intoRake ? rowThickness : b.end - b.start}
-                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""} ${active ? styles.segmentActive : ""} ${!onToggleSegment ? styles.segmentStatic : ""}`}
-                          tabIndex={onToggleSegment ? 0 : -1}
-                          role={onToggleSegment ? "button" : undefined}
-                          aria-pressed={onToggleSegment ? placed : undefined}
-                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""}${onToggleSegment ? " — tap to toggle" : ""}`}
-                          onClick={onToggleSegment ? () => onToggleSegment(b.id) : undefined}
+                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""} ${active ? styles.segmentActive : ""} ${!handleClick ? styles.segmentStatic : ""}`}
+                          tabIndex={handleClick ? 0 : -1}
+                          role={handleClick ? "button" : undefined}
+                          aria-pressed={onToggleSegment && !onRowClick ? placed : undefined}
+                          aria-label={ariaLabel}
+                          onClick={handleClick}
                           onKeyDown={
-                            onToggleSegment
+                            handleClick
                               ? (e) => {
                                   if (e.key === "Enter" || e.key === " ") {
                                     e.preventDefault()
-                                    onToggleSegment(b.id)
+                                    handleClick()
                                   }
                                 }
                               : undefined

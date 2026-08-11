@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
@@ -10,7 +10,7 @@ import DeckPlanView from "@/components/decking/deckPlanView"
 import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
-import JoinScroller from "@/components/decking/joinScroller"
+import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
 import { computeLockedRows } from "@/components/decking/layout"
 import { useManualJoins } from "@/components/decking/useManualJoins"
@@ -27,6 +27,7 @@ const DeckDetailPage = () => {
   const [editing, setEditing] = useState(false)
   const [editingJoins, setEditingJoins] = useState(false)
   const [activeJoinRow, setActiveJoinRow] = useState<number | null>(null)
+  const joinScrollerRef = useRef<JoinScrollerHandle>(null)
 
   useEffect(() => {
     if (auth && !auth.authLoading && !auth.currentUser) {
@@ -210,6 +211,7 @@ const DeckDetailPage = () => {
                 </div>
               </div>
               <JoinScroller
+                ref={joinScrollerRef}
                 layout={layout}
                 maxLen={maxLen}
                 lockedRows={deck.lockedRows}
@@ -222,12 +224,14 @@ const DeckDetailPage = () => {
 
           <section>
             <h2>Plan</h2>
+            {editingJoins && <p className={styles.hint}>Tap a board to jump the scroller above to its row.</p>}
             <div className={styles.card}>
               <DeckPlanView
                 config={deck}
                 layout={layout}
                 completedSegmentIds={deck.completedSegmentIds}
-                onToggleSegment={handleToggleSegment}
+                onToggleSegment={editingJoins ? undefined : handleToggleSegment}
+                onRowClick={editingJoins ? (rowIndex) => joinScrollerRef.current?.focusRow(rowIndex) : undefined}
                 activeRowIndex={activeJoinRow}
               />
             </div>
