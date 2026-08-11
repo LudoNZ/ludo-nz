@@ -28,7 +28,8 @@ export const Buttons = () => {
     const nextHeightIndex: Record<Size, Size> = {
       small: "medium",
       medium: "large",
-      large: "small",
+      large: "icon",
+      icon: "small",
     }
     return (
       <div>

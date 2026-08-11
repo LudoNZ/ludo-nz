@@ -15,6 +15,7 @@ import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/
 import { computeLockedRows } from "@/components/decking/layout"
 import { useManualJoins } from "@/components/decking/useManualJoins"
 import { DeckConfig, formatLength } from "@/components/decking/types"
+import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon } from "@/components/icons/icons"
 import styles from "./deckDetailPage.module.scss"
 
 const DeckDetailPage = () => {
@@ -133,14 +134,14 @@ const DeckDetailPage = () => {
         <div className={styles.actions}>
           {!editing && (
             <Link href={`/decking/${deck.id}/cut`}>
-              <Button size="medium" onClick={() => {}}>
+              <Button size="small" onClick={() => {}}>
                 Start cutting
               </Button>
             </Link>
           )}
           {!editing && (
             <Button
-              size="medium"
+              size="small"
               variant="secondary"
               onClick={() =>
                 setEditingJoins((s) => {
@@ -153,15 +154,20 @@ const DeckDetailPage = () => {
             </Button>
           )}
           {!editing && (
-            <Button size="medium" variant="secondary" onClick={handleShuffle}>
-              Shuffle fill pattern
+            <Button size="icon" variant="secondary" onClick={handleShuffle} ariaLabel="Shuffle fill pattern">
+              <ShuffleIcon />
             </Button>
           )}
-          <Button size="medium" variant="secondary" onClick={() => setEditing((e) => !e)}>
-            {editing ? "Close" : "Edit"}
+          <Button
+            size="icon"
+            variant="secondary"
+            onClick={() => setEditing((e) => !e)}
+            ariaLabel={editing ? "Close editing" : "Edit deck"}
+          >
+            {editing ? <CloseIcon /> : <EditIcon />}
           </Button>
-          <Button size="medium" variant="danger" onClick={handleDelete}>
-            Delete
+          <Button size="icon" variant="danger" onClick={handleDelete} ariaLabel="Delete deck">
+            <TrashIcon />
           </Button>
         </div>
       </div>

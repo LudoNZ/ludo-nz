@@ -48,3 +48,13 @@
   padding: 1rem;
   font-size: 1.6rem;
 }
+
+.icon {
+  min-width: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

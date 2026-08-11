@@ -4,7 +4,7 @@ import styles from "./button.module.scss"
 
 export type Variant = "primary" | "secondary" | "danger"
 
-export type Size = "small" | "medium" | "large"
+export type Size = "small" | "medium" | "large" | "icon"
 
 type ButtonProps = {
   children: React.ReactNode
@@ -14,6 +14,9 @@ type ButtonProps = {
   variant?: Variant
   size?: Size
   className?: string
+  /** required in practice for size="icon" — there's no visible text for a
+   * screen reader to announce otherwise. Also shown as a native tooltip. */
+  ariaLabel?: string
 }
 
 const variantClassMap: Record<Variant, string> = {
@@ -26,6 +29,7 @@ const sizeClassMap: Record<Size, string> = {
   small: styles.small,
   medium: styles.medium,
   large: styles.large,
+  icon: styles.icon,
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -36,6 +40,7 @@ const Button: React.FC<ButtonProps> = ({
   variant = "primary",
   size = "medium",
   className = "",
+  ariaLabel,
 }) => {
   return (
     <button
@@ -43,6 +48,8 @@ const Button: React.FC<ButtonProps> = ({
       onClick={() => onClick()}
       type={type}
       disabled={disabled}
+      aria-label={ariaLabel}
+      title={ariaLabel}
     >
       {children}
     </button>
