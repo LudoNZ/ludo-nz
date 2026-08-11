@@ -1,0 +1,123 @@
+.stockSummary {
+  display: flex;
+  flex-direction: column;
+}
+
+.stockHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.stockTotal {
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  font-size: 0.8rem;
+  opacity: 0.6;
+  margin: -0.25rem 0 0.6rem;
+}
+
+.stockTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stockRow {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr 4rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+
+  &.legacy {
+    opacity: 0.6;
+  }
+}
+
+.stockLength {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  opacity: 0.85;
+}
+
+.stockRange {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.stockTrack {
+  position: relative;
+  height: 0.55rem;
+  border-radius: 999px;
+  background-color: rgba(27, 177, 47, 0.12);
+  overflow: hidden;
+}
+
+// three stacked segments splitting the bar's own width 100% across placed /
+// allocated-but-not-placed / spare (on hand but not needed for this deck)
+.stockFill {
+  position: relative;
+  height: 100%;
+  border-radius: 999px;
+  display: flex;
+  overflow: hidden;
+  background-color: rgba(27, 177, 47, 0.08);
+}
+
+.segPlaced {
+  height: 100%;
+  background-color: var(--color-primary);
+}
+
+.segAllocated {
+  height: 100%;
+  background-color: rgba(27, 177, 47, 0.4);
+}
+
+// hatched rather than a flat fill, so "extra stock you don't need for this
+// deck" reads as visually distinct from "planned but not yet cut"
+.segSpare {
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(137, 135, 129, 0.4),
+    rgba(137, 135, 129, 0.4) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+}
+
+.stockCount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.placedBadge {
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  opacity: 1;
+}
+
+.spareBadge {
+  opacity: 0.6;
+  font-size: 0.75rem;
+}
