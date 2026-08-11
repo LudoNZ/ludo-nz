@@ -45,7 +45,7 @@ const DeckDetailPage = () => {
   }, [auth?.currentUser])
 
   const deck = decks.find((d) => d.id === params.deckId)
-  const { layout, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, auth?.currentUser?.uid)
+  const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, auth?.currentUser?.uid)
   const maxLen = deck ? Math.max(deck.sideA, deck.sideB) : 1
 
   if (!auth?.currentUser) {
@@ -64,7 +64,7 @@ const DeckDetailPage = () => {
     )
   }
 
-  if (!deck || !layout) {
+  if (!deck || !layout || !effectiveConfig) {
     return (
       <div className={styles.detailPage}>
         <p className={styles.loading}>Loading…</p>
@@ -212,12 +212,15 @@ const DeckDetailPage = () => {
                         : `By joist spans (${formatLength(deck.joistSpacing)} each)`
                     }
                     onSelectLength={activeJoinRow != null ? (len) => placeBoard(activeJoinRow, len) : undefined}
+                    config={effectiveConfig}
+                    activeRowIndex={activeJoinRow}
                   />
                 </div>
               </div>
               <JoinScroller
                 ref={joinScrollerRef}
                 layout={layout}
+                config={effectiveConfig}
                 maxLen={maxLen}
                 lockedRows={deck.lockedRows}
                 onToggleJoin={toggleJoin}

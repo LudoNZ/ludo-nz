@@ -1,8 +1,8 @@
 "use client"
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
-import { DeckLayout, RowPlan } from "./layout"
-import { LockedRow, formatLength } from "./types"
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
+import { DeckLayout, previewJoinClash, RowPlan } from "./layout"
+import { DeckConfig, LockedRow, formatLength } from "./types"
 import planStyles from "./deckPlanView.module.scss"
 import styles from "./joinScroller.module.scss"
 
@@ -22,13 +22,16 @@ const JoinScroller = forwardRef<
   JoinScrollerHandle,
   {
     layout: DeckLayout
+    /** needed only to preview whether an as-yet-unplaced join would clash —
+     * see clashPositions below */
+    config: DeckConfig
     maxLen: number
     lockedRows: Record<string, LockedRow>
     onToggleJoin: (row: RowPlan, position: number) => void
     onResetRow: (row: RowPlan) => void
     onActiveRowChange?: (index: number | null) => void
   }
->(({ layout, maxLen, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }, ref) => {
+>(({ layout, config, maxLen, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }, ref) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
@@ -75,6 +78,26 @@ const JoinScroller = forwardRef<
   useEffect(() => {
     onActiveRowChange?.(activeIndex)
   }, [activeIndex, onActiveRowChange])
+
+  // joist positions on the active row that don't have a join yet, but
+  // would clash with the stagger/edge rules if one were added there — a
+  // proactive "this would clash" hint, computed only for the row you can
+  // actually tap right now (checking every row's every tick this way would
+  // mean a full deck recompute per candidate, which adds up fast)
+  const clashPositions = useMemo(() => {
+    const clashes = new Set<number>()
+    if (activeIndex == null) return clashes
+    const row = layout.rows.find((r) => r.index === activeIndex)
+    if (!row) return clashes
+    const current = row.joins.map((j) => j.position)
+    const ticks = layout.joistPositions.filter((p) => p > 1e-6 && p < row.targetLength - 1e-6)
+    for (const p of ticks) {
+      if (current.some((c) => Math.abs(c - p) < 1e-6)) continue
+      const preview = previewJoinClash(config, activeIndex, current, p)
+      if (preview && (!preview.staggered || preview.nearEdge)) clashes.add(p)
+    }
+    return clashes
+  }, [layout, config, activeIndex])
 
   // scale used across every row's mini-plan so the joist grid lines up
   // vertically down the page, same as the real plan view — a row's own
@@ -150,10 +173,20 @@ const JoinScroller = forwardRef<
                     />
                   )
                 })}
+                {active &&
+                  ticks
+                    .filter((p) => clashPositions.has(p))
+                    .map((p) => (
+                      <g key={p} className={styles.clashMark}>
+                        <line x1={p - joinThickness * 1.3} y1={38} x2={p + joinThickness * 1.3} y2={62} strokeWidth={strokeW * 1.4} />
+                        <line x1={p - joinThickness * 1.3} y1={62} x2={p + joinThickness * 1.3} y2={38} strokeWidth={strokeW * 1.4} />
+                      </g>
+                    ))}
               </svg>
               {active &&
                 ticks.map((p) => {
                   const join = row.joins.find((j) => Math.abs(j.position - p) < 1e-6)
+                  const clash = !join && clashPositions.has(p)
                   const left = `${(p / maxLen) * 100}%`
                   return (
                     <button
@@ -162,7 +195,7 @@ const JoinScroller = forwardRef<
                       className={styles.overlayBtn}
                       style={{ left }}
                       onClick={() => onToggleJoin(row, p)}
-                      aria-label={`${join ? "Remove" : "Add"} a join ${formatLength(p)} into row ${row.index + 1}`}
+                      aria-label={`${join ? "Remove" : "Add"} a join ${formatLength(p)} into row ${row.index + 1}${clash ? " — would clash with the stagger or edge-buffer rule" : ""}`}
                     />
                   )
                 })}

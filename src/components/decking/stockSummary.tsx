@@ -1,7 +1,7 @@
 "use client"
 
-import { DeckLayout } from "./layout"
-import { formatLength } from "./types"
+import { DeckLayout, previewBoardReach, previewJoinClash } from "./layout"
+import { DeckConfig, formatLength } from "./types"
 import styles from "./stockSummary.module.scss"
 
 interface SummaryRow {
@@ -36,7 +36,12 @@ const StockSummary: React.FC<{
   /** when provided, each row becomes tappable — reports the length to place
    * on whatever row is currently focused elsewhere on the page */
   onSelectLength?: (lengthMm: number) => void
-}> = ({ layout, completedSegmentIds, groupBySpans, note, onSelectLength }) => {
+  /** config + the row currently focused elsewhere on the page — together,
+   * lets each entry preview whether placing it would clash with the
+   * stagger/edge rules, same proactive hint as the join scroller's */
+  config?: DeckConfig
+  activeRowIndex?: number | null
+}> = ({ layout, completedSegmentIds, groupBySpans, note, onSelectLength, config, activeRowIndex }) => {
   const completedSet = new Set(completedSegmentIds)
   // scale bars off current-stock lengths only, so a length that's only
   // around because a locked row is still frozen on it can't become the
@@ -100,6 +105,18 @@ const StockSummary: React.FC<{
     }))
   }
 
+  // proactive "this would clash" hint per length, mirroring the join
+  // scroller's — only meaningful once something's tappable and focused
+  const activeRow = config && activeRowIndex != null ? layout.rows.find((r) => r.index === activeRowIndex) : undefined
+  const wouldClash = (repLength: number): boolean => {
+    if (!config || !activeRow) return false
+    const reach = previewBoardReach(layout, activeRow.index, repLength)
+    if (reach === null) return false
+    const current = activeRow.joins.map((j) => j.position)
+    const preview = previewJoinClash(config, activeRow.index, current, reach)
+    return preview ? !preview.staggered || preview.nearEdge : false
+  }
+
   return (
     <div className={styles.stockSummary}>
       <div className={styles.stockHeader}>
@@ -122,10 +139,18 @@ const StockSummary: React.FC<{
           const placedPct = denom > 0 ? Math.min(100, (row.placed / denom) * 100) : 0
           const allocatedPct = denom > 0 ? Math.max(0, Math.min(100 - placedPct, ((row.used - row.placed) / denom) * 100)) : 0
           const sparePct = Math.max(0, 100 - placedPct - allocatedPct)
+          const clash = wouldClash(row.repLength)
           const rowContent = (
             <>
               <span className={styles.stockLength}>
-                {row.label}
+                <span>
+                  {row.label}
+                  {clash && (
+                    <span className={styles.clashMark} title="Would clash with the stagger or edge-buffer rule">
+                      ×
+                    </span>
+                  )}
+                </span>
                 {row.range && <span className={styles.stockRange}>{row.range}</span>}
               </span>
               <div className={styles.stockTrack}>
@@ -149,7 +174,7 @@ const StockSummary: React.FC<{
               type="button"
               className={rowClass}
               onClick={() => onSelectLength(row.repLength)}
-              aria-label={`Place a ${row.range ? `~${formatLength(row.repLength)}` : row.label} board on the focused row, joined at its reach`}
+              aria-label={`Place a ${row.range ? `~${formatLength(row.repLength)}` : row.label} board on the focused row, joined at its reach${clash ? " — would clash with the stagger or edge-buffer rule" : ""}`}
             >
               {rowContent}
             </button>

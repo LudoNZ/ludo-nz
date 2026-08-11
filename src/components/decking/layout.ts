@@ -675,6 +675,54 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   }
 }
 
+/** Would adding a join at `candidate` to `rowIndex` (which currently has
+ * `currentPositions`) clash with the stagger/edge-buffer rules? Reuses the
+ * real manual-row code path — temporarily adding the candidate to that
+ * row's manualJoins and recomputing the whole deck — rather than
+ * duplicating the history/exclusion logic, so the answer always matches
+ * what you'd actually get if you placed it for real. Used for proactive
+ * "this would clash" hints before a join is placed, in both the join
+ * scroller (candidate = a joist tick) and the stock-usage panel (candidate
+ * = wherever a given stock length would reach — see previewBoardReach). */
+export function previewJoinClash(
+  config: DeckConfig,
+  rowIndex: number,
+  currentPositions: number[],
+  candidate: number
+): { staggered: boolean; nearEdge: boolean } | null {
+  const trial: DeckConfig = {
+    ...config,
+    manualJoins: { ...config.manualJoins, [String(rowIndex)]: [...currentPositions, candidate] },
+  }
+  const trialLayout = computeDeckLayout(trial)
+  const row = trialLayout.rows.find((r) => r.index === rowIndex)
+  const join = row?.joins.find((j) => Math.abs(j.position - candidate) < 1e-6)
+  return join ? { staggered: join.staggered, nearEdge: join.nearEdge } : null
+}
+
+/** Where a board of `stockLength` would land if placed as the next segment
+ * on `rowIndex` right now — the furthest joist it can reach from whatever's
+ * already there (or from the square end, if nothing is). Mirrors
+ * useManualJoins.placeBoard's own logic; factored out here so a preview
+ * (stock-usage clash hints) and the real placement share one
+ * implementation. Returns null if there's nothing to place: the board's
+ * too short to reach the next joist, or it reaches/overruns the row's end
+ * outright — neither case needs a join. */
+export function previewBoardReach(layout: DeckLayout, rowIndex: number, stockLength: number): number | null {
+  const row = layout.rows.find((r) => r.index === rowIndex)
+  if (!row) return null
+  const current = row.joins.map((j) => j.position)
+  const start = current.length ? Math.max(...current) : 0
+  const reach = start + stockLength
+  const candidates = layout.joistPositions.filter(
+    (p) => p > start + 1e-6 && p <= reach + 1e-6 && p < row.targetLength - 1e-6
+  )
+  if (candidates.length === 0) return null
+  const position = Math.max(...candidates)
+  if (current.some((p) => Math.abs(p - position) < 1e-6)) return null
+  return position
+}
+
 /** Recomputes which rows should be locked given a new set of completed
  * segment ids: any row with at least one completed board gets its current
  * arrangement frozen (or keeps its existing freeze); any row with none gets

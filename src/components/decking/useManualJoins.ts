@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { clearManualJoins, setManualJoins } from "./data"
-import { computeDeckLayout, RowPlan } from "./layout"
+import { computeDeckLayout, previewBoardReach, RowPlan } from "./layout"
 import { DeckConfig } from "./types"
 
 const arraysEqual = (a: number[] | undefined, b: number[] | undefined) => {
@@ -93,19 +93,15 @@ export function useManualJoins(deck: DeckConfig | undefined, uid: string | undef
    * new join. */
   const placeBoard = (rowIndex: number, stockLength: number) => {
     if (!layout) return
-    const row = layout.rows.find((r) => r.index === rowIndex)
-    if (!row) return
+    const position = previewBoardReach(layout, rowIndex, stockLength)
+    if (position === null) return
+    const row = layout.rows.find((r) => r.index === rowIndex)!
     const current = row.joins.map((j) => j.position)
-    const start = current.length ? Math.max(...current) : 0
-    const reach = start + stockLength
-    const candidates = layout.joistPositions.filter(
-      (p) => p > start + 1e-6 && p <= reach + 1e-6 && p < row.targetLength - 1e-6
-    )
-    if (candidates.length === 0) return
-    const joinPos = Math.max(...candidates)
-    if (current.some((p) => Math.abs(p - joinPos) < 1e-6)) return
-    commitJoins(rowIndex, [...current, joinPos].sort((a, b) => a - b))
+    commitJoins(rowIndex, [...current, position].sort((a, b) => a - b))
   }
 
-  return { layout, toggleJoin, resetRow, placeBoard }
+  // exposed so callers can run their own clash previews (previewJoinClash /
+  // previewBoardReach) against exactly the same config this hook is
+  // working from, pending edits included
+  return { layout, effectiveConfig: effectiveDeck, toggleJoin, resetRow, placeBoard }
 }

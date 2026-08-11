@@ -134,6 +134,20 @@ $row-slot: 2.75rem;
   stroke-dasharray: 6 5;
 }
 
+// proactive hint on a not-yet-placed join: subtly marks a joist tick that
+// would clash if tapped, well short of the full-strength red used once a
+// clashing join is actually placed (planStyles.joinWarning) — a hint, not
+// a verdict, since it's still fully selectable. Width is set inline (see
+// joinScroller.tsx) rather than here, same as the joist lines — it has to
+// scale with maxLen like everything else in this viewBox, not a flat CSS
+// value that would render as a sliver on a large deck.
+.clashMark {
+  stroke: var(--color-danger);
+  stroke-linecap: round;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .overlayBtn {
   position: absolute;
   top: 0;
