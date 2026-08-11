@@ -215,9 +215,6 @@ const CutModePage = () => {
               )}
             </div>
           )}
-          <Button size="large" onClick={() => toggle(next.segment.id)}>
-            Mark cut &amp; placed
-          </Button>
         </div>
       ) : (
         <div className={styles.doneCard}>🎉 All boards cut and placed!</div>
@@ -233,17 +230,26 @@ const CutModePage = () => {
         />
       </div>
 
-      {last && (
-        <div className={styles.undoRow}>
-          <Button size="small" variant="secondary" onClick={() => toggle(last.segment.id)}>
-            Undo last placed
-          </Button>
-        </div>
-      )}
-
       {deck.cutLog.length > 0 && (
         <div className={styles.breakdownLink}>
           <Link href={`/decking/${deck.id}#cutting-time`}>Full cutting-time breakdown →</Link>
+        </div>
+      )}
+
+      {(next || last) && (
+        <div className={styles.actionBar}>
+          {last && (
+            <Button size="small" variant="secondary" onClick={() => toggle(last.segment.id)}>
+              Undo
+            </Button>
+          )}
+          {next && (
+            <div className={styles.primarySlot}>
+              <Button size="large" onClick={() => toggle(next.segment.id)}>
+                Mark cut &amp; placed
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
