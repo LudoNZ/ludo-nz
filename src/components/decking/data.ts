@@ -1,6 +1,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -65,6 +66,7 @@ export const subscribeToDecks = (
           layoutSeed: data.layoutSeed ?? 1,
           completedSegmentIds: Array.isArray(data.completedSegmentIds) ? data.completedSegmentIds : [],
           lockedRows: (data.lockedRows ?? {}) as Record<string, LockedRow>,
+          manualJoins: (data.manualJoins ?? {}) as Record<string, number[]>,
           cutLog: Array.isArray(data.cutLog)
             ? data.cutLog.map((e: CutLogEntry & { completedAt: { toDate?: () => Date } }) => ({
                 ...e,
@@ -122,6 +124,25 @@ export const setCompletedSegmentsWithLog = async (
     completedSegmentIds,
     lockedRows,
     cutLog,
+    updatedAt: Timestamp.now(),
+  })
+}
+
+/** Sets (or clears) one row's manual join-position override. Uses a dotted
+ * field path so it only ever touches that single row's entry — safe to
+ * call rapidly as someone taps through the join editor without racing
+ * against anything else being saved at the same time. */
+export const setManualJoins = async (uid: string, deckId: string, rowIndex: number, positions: number[]) => {
+  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+    [`manualJoins.${rowIndex}`]: positions,
+    updatedAt: Timestamp.now(),
+  })
+}
+
+/** Reverts one row back to the auto-computed layout. */
+export const clearManualJoins = async (uid: string, deckId: string, rowIndex: number) => {
+  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+    [`manualJoins.${rowIndex}`]: deleteField(),
     updatedAt: Timestamp.now(),
   })
 }

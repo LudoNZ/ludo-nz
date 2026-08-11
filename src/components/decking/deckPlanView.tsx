@@ -9,9 +9,13 @@ const DeckPlanView: React.FC<{
   config: DeckConfig
   layout: DeckLayout
   completedSegmentIds: string[]
-  onToggleSegment: (id: string) => void
+  onToggleSegment?: (id: string) => void
   activeSegmentId?: string | null
-}> = ({ config, layout, completedSegmentIds, onToggleSegment, activeSegmentId = null }) => {
+  /** highlights a whole row (used by the join editor to show which row its
+   * scroller is currently focused on) — separate from activeSegmentId,
+   * which highlights one board within cutting mode's "next cut" flow */
+  activeRowIndex?: number | null
+}> = ({ config, layout, completedSegmentIds, onToggleSegment, activeSegmentId = null, activeRowIndex = null }) => {
   const clipId = useId()
   const completedSet = new Set(completedSegmentIds)
   const { sideA, sideB, width } = config
@@ -63,6 +67,21 @@ const DeckPlanView: React.FC<{
           )}
 
           <g clipPath={`url(#${clipId})`}>
+            {activeRowIndex != null &&
+              (() => {
+                const row = layout.rows.find((r) => r.index === activeRowIndex)
+                if (!row) return null
+                const rowThickness = row.rowEnd - row.rowStart
+                return (
+                  <rect
+                    x={intoRake ? 0 : row.rowStart}
+                    y={intoRake ? row.rowStart : 0}
+                    width={intoRake ? row.targetLength : rowThickness}
+                    height={intoRake ? rowThickness : row.targetLength}
+                    className={styles.rowHighlight}
+                  />
+                )
+              })()}
             {layout.rows.map((row) => {
               const rowThickness = row.rowEnd - row.rowStart
               const overhang = rowThickness * 0.35
@@ -85,18 +104,22 @@ const DeckPlanView: React.FC<{
                           y={intoRake ? row.rowStart : b.start}
                           width={intoRake ? b.end - b.start : rowThickness}
                           height={intoRake ? rowThickness : b.end - b.start}
-                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""} ${active ? styles.segmentActive : ""}`}
-                          tabIndex={0}
-                          role="button"
-                          aria-pressed={placed}
-                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""} — tap to toggle`}
-                          onClick={() => onToggleSegment(b.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault()
-                              onToggleSegment(b.id)
-                            }
-                          }}
+                          className={`${styles.segment} ${b.stockLength === null ? styles.segmentUnresolved : ""} ${placed ? styles.segmentPlaced : ""} ${active ? styles.segmentActive : ""} ${!onToggleSegment ? styles.segmentStatic : ""}`}
+                          tabIndex={onToggleSegment ? 0 : -1}
+                          role={onToggleSegment ? "button" : undefined}
+                          aria-pressed={onToggleSegment ? placed : undefined}
+                          aria-label={`Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""}${onToggleSegment ? " — tap to toggle" : ""}`}
+                          onClick={onToggleSegment ? () => onToggleSegment(b.id) : undefined}
+                          onKeyDown={
+                            onToggleSegment
+                              ? (e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault()
+                                    onToggleSegment(b.id)
+                                  }
+                                }
+                              : undefined
+                          }
                         />
                         {placed && (
                           <text

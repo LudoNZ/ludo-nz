@@ -103,6 +103,12 @@ export interface DeckConfig {
   /** rows with at least one completed board, frozen at the arrangement they
    * had when first marked — see LockedRow */
   lockedRows: Record<string, LockedRow>
+  /** manual join-position overrides, keyed by row index (string), for rows
+   * that haven't been secured yet — a sorted list of joist positions (mm)
+   * where you want a join, replacing whatever the auto-layout picked for
+   * that row. An empty array means "no joins, one full board." Ignored
+   * once a row is locked (its LockedRow snapshot takes over instead). */
+  manualJoins: Record<string, number[]>
   /** per-board timings, logged as each is marked done in Cutting mode */
   cutLog: CutLogEntry[]
   /** the board Cutting mode is currently timing (null once everything's done
@@ -145,6 +151,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
     completedSegmentIds: [],
     lockedRows: {},
+    manualJoins: {},
     cutLog: [],
     activeCutSegmentId: null,
     activeCutAccumulatedMs: 0,

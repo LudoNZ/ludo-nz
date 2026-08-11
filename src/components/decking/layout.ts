@@ -25,6 +25,9 @@ export interface JoinMark {
 export interface RowPlan {
   index: number
   isSkeleton: boolean
+  /** true if this row's joins were placed by hand (JoinEditor) rather than
+   * the auto-layout — see DeckConfig.manualJoins */
+  manual: boolean
   /** position along the row-stacking axis (width, if boards run into the rake;
    * length, if boards run along the rake) */
   rowStart: number
@@ -130,6 +133,49 @@ function positionOk(
     }
   }
   return true
+}
+
+/** Builds a row from an explicit list of join positions (JoinEditor's
+ * manual override) instead of searching for one: cuts are resolved from
+ * whatever stock is on hand at each gap, in order, same as everywhere
+ * else — but the positions themselves are exactly what was asked for, not
+ * validated against the stagger/exclusion rules or the edge buffer first.
+ * `staggered`/`nearEdge` are still computed on each resulting join purely
+ * so the plan view can flag a manual choice that breaks those rules,
+ * without ever refusing to place it — that's the whole point of doing it
+ * by hand. */
+function planManualRow(
+  targetLength: number,
+  positions: number[],
+  joistIndex: Map<number, number>,
+  inv: Inventory,
+  history: RowHistoryEntry[],
+  exclusions: Set<string>,
+  edgeBuffer: number
+): { boards: BoardSegment[]; joins: JoinMark[] } {
+  const boards: BoardSegment[] = []
+  const joins: JoinMark[] = []
+  const sorted = [...new Set(positions)].filter((p) => p > 1e-6 && p < targetLength - 1e-6).sort((a, b) => a - b)
+
+  let p = 0
+  let priorInRow: number[] = []
+  for (const pos of sorted) {
+    const cutLength = pos - p
+    const stockLength = inv.smallestAtLeast(cutLength)
+    if (stockLength !== null) inv.take(stockLength)
+    boards.push({ id: "", start: p, end: pos, cutLength, stockLength })
+    const staggered = positionOk(pos, [...history, { distance: 0, joins: priorInRow }], exclusions, joistIndex)
+    const nearEdge = !isEdgeSafe(pos, targetLength, edgeBuffer)
+    joins.push({ position: pos, staggered, nearEdge })
+    priorInRow = [...priorInRow, pos]
+    p = pos
+  }
+  const cutLength = targetLength - p
+  const stockLength = inv.smallestAtLeast(cutLength)
+  if (stockLength !== null) inv.take(stockLength)
+  boards.push({ id: "", start: p, end: targetLength, cutLength, stockLength })
+
+  return { boards, joins }
 }
 
 /** Joist positions reachable within a stock length ahead of `p` (or behind
@@ -393,6 +439,9 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const exclusions = exclusionSetFromCells(exclusionCells)
   const rowsAwayLimit = exclusionBounds(exclusionCells).maxD
   const lockedRows = config.lockedRows ?? {}
+  const manualJoins = config.manualJoins ?? {}
+  const hasManualOverride = (index: number) => Object.prototype.hasOwnProperty.call(manualJoins, String(index))
+  const manualRows = new Set<number>()
 
   const rowAxisExtent = intoRake ? width : maxLen
   const joistAxisMax = intoRake ? maxLen : width
@@ -489,9 +538,13 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   let skeletonSeq = 0
   for (const slot of slots.filter((s) => s.isSkeleton)) {
     const history: RowHistoryEntry[] = skeletonHistory.map((joins, i) => ({ distance: i + 1, joins }))
+    const manual = !slot.locked && hasManualOverride(slot.index)
+    if (manual) manualRows.add(slot.index)
     const result = slot.locked
       ? applyLockedRow(slot)
-      : planSkeletonRow(slot.targetLength, joistPositions, joistIndex, inv, history, exclusions, edgeBuffer, skeletonSeq % 2 === 1)
+      : manual
+        ? planManualRow(slot.targetLength, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
+        : planSkeletonRow(slot.targetLength, joistPositions, joistIndex, inv, history, exclusions, edgeBuffer, skeletonSeq % 2 === 1)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
     skeletonHistory = [result.joins.map((j) => j.position), ...skeletonHistory].slice(0, Math.max(1, rowsAwayLimit))
@@ -506,7 +559,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   // next stretch grabbed the next size down, and so on — so both the
   // join-free rows AND the rows that then needed a join clustered into
   // contiguous bands instead of spreading across the whole deck.
-  const fillSlots = slots.filter((s) => !s.isSkeleton && !s.locked)
+  const fillSlots = slots.filter((s) => !s.isSkeleton && !s.locked && !hasManualOverride(s.index))
   const shuffleRand = mulberry32((seed ^ 0x2545f491) | 0)
   const shuffled = [...fillSlots]
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -546,18 +599,22 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       const joins = rowJoins.get(ahead.index)
       if (joins) history.push({ distance: d, joins })
     }
+    const manual = !slot.locked && hasManualOverride(slot.index)
+    if (manual) manualRows.add(slot.index)
     const result = slot.locked
       ? applyLockedRow(slot)
-      : planRowRandomFirst(
-          slot.targetLength,
-          joistPositions,
-          joistIndex,
-          inv,
-          history,
-          exclusions,
-          edgeBuffer,
-          mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
-        )
+      : manual
+        ? planManualRow(slot.targetLength, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
+        : planRowRandomFirst(
+            slot.targetLength,
+            joistPositions,
+            joistIndex,
+            inv,
+            history,
+            exclusions,
+            edgeBuffer,
+            mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
+          )
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
   }
@@ -567,6 +624,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     return {
       index: slot.index,
       isSkeleton: slot.isSkeleton,
+      manual: manualRows.has(slot.index),
       rowStart: slot.rowStart,
       rowEnd: slot.rowEnd,
       targetLength: slot.targetLength,

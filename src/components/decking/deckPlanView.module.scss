@@ -63,8 +63,28 @@
   }
 }
 
+.segmentStatic {
+  cursor: default;
+
+  &:hover {
+    fill: rgba(27, 177, 47, 0.16);
+  }
+}
+
+// whole-row highlight (join editor: shows which row its scroller is
+// currently focused on) — sits under the row's own boards/joins, drawn
+// before them in source order, so it reads as a backdrop rather than a cover
+.rowHighlight {
+  fill: rgba(42, 120, 214, 0.14);
+  stroke: #2a78d6;
+  stroke-width: 0.3%;
+  pointer-events: none;
+  animation: activePulse 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .segmentActive {
+  .segmentActive,
+  .rowHighlight {
     animation: none;
   }
 }

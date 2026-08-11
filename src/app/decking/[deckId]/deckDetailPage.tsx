@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
@@ -9,9 +9,12 @@ import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
+import StockSummary from "@/components/decking/stockSummary"
+import JoinScroller from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
-import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
-import { DeckConfig } from "@/components/decking/types"
+import { computeLockedRows } from "@/components/decking/layout"
+import { useManualJoins } from "@/components/decking/useManualJoins"
+import { DeckConfig, formatLength } from "@/components/decking/types"
 import styles from "./deckDetailPage.module.scss"
 
 const DeckDetailPage = () => {
@@ -21,6 +24,8 @@ const DeckDetailPage = () => {
   const [decks, setDecks] = useState<DeckConfig[]>([])
   const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [editingJoins, setEditingJoins] = useState(false)
+  const [activeJoinRow, setActiveJoinRow] = useState<number | null>(null)
 
   useEffect(() => {
     if (auth && !auth.authLoading && !auth.currentUser) {
@@ -38,7 +43,8 @@ const DeckDetailPage = () => {
   }, [auth?.currentUser])
 
   const deck = decks.find((d) => d.id === params.deckId)
-  const layout = useMemo(() => (deck ? computeDeckLayout(deck) : null), [deck])
+  const { layout, toggleJoin, resetRow } = useManualJoins(deck, auth?.currentUser?.uid)
+  const maxLen = deck ? Math.max(deck.sideA, deck.sideB) : 1
 
   if (!auth?.currentUser) {
     return (
@@ -98,6 +104,7 @@ const DeckDetailPage = () => {
       layoutSeed: Math.floor(Math.random() * 2 ** 31),
       completedSegmentIds: deck.completedSegmentIds,
       lockedRows: deck.lockedRows,
+      manualJoins: deck.manualJoins,
       cutLog: deck.cutLog,
       activeCutSegmentId: deck.activeCutSegmentId,
       activeCutAccumulatedMs: deck.activeCutAccumulatedMs,
@@ -132,6 +139,20 @@ const DeckDetailPage = () => {
             </Link>
           )}
           {!editing && (
+            <Button
+              size="medium"
+              variant="secondary"
+              onClick={() =>
+                setEditingJoins((s) => {
+                  if (s) setActiveJoinRow(null)
+                  return !s
+                })
+              }
+            >
+              {editingJoins ? "Close joins" : "Edit joins"}
+            </Button>
+          )}
+          {!editing && (
             <Button size="medium" variant="secondary" onClick={handleShuffle}>
               Shuffle fill pattern
             </Button>
@@ -156,6 +177,42 @@ const DeckDetailPage = () => {
         </section>
       ) : (
         <>
+          {editingJoins && (
+            <section id="join-editor">
+              <h2>Edit joins</h2>
+              <p className={styles.hint}>
+                Scroll a row to the centre line to activate it, then tap a joist line to add or
+                remove a join there — the row lights up in the plan below. Secured rows are shown
+                for context only.
+              </p>
+              <div className={styles.joinTopRow}>
+                {layout.unresolvedSegments > 0 ? (
+                  <div className={styles.warning}>
+                    ⚠ {layout.unresolvedSegments} segment(s) can&apos;t be covered with current stock.
+                  </div>
+                ) : (
+                  <div className={styles.ok}>✓ Fits your current stock.</div>
+                )}
+                <div className={styles.card}>
+                  <StockSummary
+                    layout={layout}
+                    completedSegmentIds={deck.completedSegmentIds}
+                    groupBySpans={deck.joistSpacing}
+                    note={`By joist spans (${formatLength(deck.joistSpacing)} each)`}
+                  />
+                </div>
+              </div>
+              <JoinScroller
+                layout={layout}
+                maxLen={maxLen}
+                lockedRows={deck.lockedRows}
+                onToggleJoin={toggleJoin}
+                onResetRow={resetRow}
+                onActiveRowChange={setActiveJoinRow}
+              />
+            </section>
+          )}
+
           <section>
             <h2>Plan</h2>
             <div className={styles.card}>
@@ -164,6 +221,7 @@ const DeckDetailPage = () => {
                 layout={layout}
                 completedSegmentIds={deck.completedSegmentIds}
                 onToggleSegment={handleToggleSegment}
+                activeRowIndex={activeJoinRow}
               />
             </div>
           </section>
