@@ -1,4 +1,4 @@
-import { calcHoleVolumeM3, calcLinearPieceCount, calcPostLayout } from "../structures/postRailCalc"
+import { calcHoleVolumeM3, calcPostLayout } from "../structures/postRailCalc"
 import { LaborEstimate } from "../structures/types"
 import { CalcSettings, findReferenceRow, postWidthM } from "./calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
@@ -16,6 +16,13 @@ export interface ControlPoint {
 /** Keyed by post index. */
 export type ControlPoints = Record<number, ControlPoint>
 
+/** Keyed by post index; presence (true) marks that post as a corner —
+ * where the wall changes direction in plan. A facing board physically
+ * can't run past a corner, so board runs always break there regardless of
+ * whether a standard-length board would otherwise have reached further;
+ * see the run-splitting in buildWallProfile below. */
+export type CornerPosts = Record<number, true>
+
 export interface ProfilePost {
   index: number
   /** m, position along the wall */
@@ -26,6 +33,7 @@ export interface ProfilePost {
   /** topLevelM - groundLevelM */
   retainedHeightM: number
   isControlPoint: boolean
+  isCorner: boolean
   /** true if this post's local retained height is outside DIY territory
    * (over the limit, or <= 0) — its own numbers below are still computed
    * (so the diagram can draw it and flag it), but it's excluded from every
@@ -58,6 +66,12 @@ export interface WallProfile {
   postsBySize: { sizeLabel: string; count: number }[]
   totalFillVolumeM3: number
   totalBoardCount: number
+  /** of totalBoardCount, how many are cut as one continuous length across
+   * two bays (the preferred, stronger layout) vs. broken to a single bay
+   * because a corner, an excluded bay, or the standard board length forced
+   * it */
+  twoSpanBoardCount: number
+  oneSpanBoardCount: number
   totalBoardLengthM: number
   totalBackfillVolumeM3: number
   labor: LaborEstimate
@@ -107,12 +121,21 @@ function resolveLevel(
  * post's own size/embedment/hole and each bay's own board coursing that
  * varies with the local height. Any post or bay whose local height is
  * outside DIY territory is flagged (needsEngineer) and excluded from every
- * total rather than silently under-specified. */
+ * total rather than silently under-specified.
+ *
+ * Board coursing is planned as real cut pieces, not just a total-length
+ * divide: a course run breaks at any corner post (a board can't physically
+ * run past one) and at any excluded bay, and within each unbroken run it
+ * prefers a single piece spanning two bays at a time — same reasoning as
+ * lapped fence rails, fewer joints is stronger — falling back to a
+ * single-bay piece wherever a pair wouldn't fit the standard board length
+ * or there's an odd bay left over. See the run/piece loop below. */
 export function buildWallProfile(
   wallLengthM: number,
   retainedHeightM: number,
   soil: SoilType,
   controlPoints: ControlPoints,
+  cornerPosts: CornerPosts,
   rlDatumM: number,
   settings: CalcSettings
 ): WallProfile | null {
@@ -146,6 +169,7 @@ export function buildWallProfile(
       topLevelM,
       retainedHeightM: localHeightM,
       isControlPoint: Boolean(controlPoints[i]),
+      isCorner: Boolean(cornerPosts[i]),
       needsEngineer,
       sizeLabel,
       widthM,
@@ -180,7 +204,48 @@ export function buildWallProfile(
 
   const validBays = bays.filter((b) => !b.needsEngineer)
   const totalBoardLengthM = validBays.reduce((sum, b) => sum + b.boardLengthM, 0)
-  const totalBoardCount = calcLinearPieceCount(totalBoardLengthM, settings.standardBoardLengthM)
+
+  // Group bays into unbroken runs: contiguous, and not separated by a
+  // corner post (an excluded bay already breaks contiguity, since it's
+  // missing from validBays entirely).
+  const runs: ProfileBay[][] = []
+  for (const bay of validBays) {
+    const lastRun = runs[runs.length - 1]
+    const prevBay = lastRun?.[lastRun.length - 1]
+    const breaksRun = !prevBay || prevBay.rightIndex !== bay.leftIndex || posts[prevBay.rightIndex].isCorner
+    if (breaksRun) runs.push([bay])
+    else lastRun.push(bay)
+  }
+
+  // Within each run, plan actual course pieces: walk each course row (a
+  // row only exists in a bay once its height needs that many courses),
+  // preferring one piece across two bays at a time and falling back to a
+  // single bay wherever a pair doesn't fit the standard board length, the
+  // row doesn't continue into the next bay, or there's an odd one left.
+  let twoSpanBoardCount = 0
+  let oneSpanBoardCount = 0
+  for (const run of runs) {
+    const maxCourses = Math.max(0, ...run.map((b) => b.courseCount))
+    for (let k = 0; k < maxCourses; k++) {
+      const rowBays = run.filter((b) => b.courseCount > k)
+      let i = 0
+      while (i < rowBays.length) {
+        const bay = rowBays[i]
+        const next = rowBays[i + 1]
+        const pairs = Boolean(next) && next.leftIndex === bay.rightIndex
+        const pairWidthM = pairs ? bay.widthM + next.widthM : 0
+        if (pairs && pairWidthM <= settings.standardBoardLengthM + 1e-6) {
+          twoSpanBoardCount++
+          i += 2
+        } else {
+          oneSpanBoardCount++
+          i += 1
+        }
+      }
+    }
+  }
+  const totalBoardCount = twoSpanBoardCount + oneSpanBoardCount
+
   const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
   const totalFillVolumeM3 = validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0)
 
@@ -196,6 +261,8 @@ export function buildWallProfile(
     postsBySize: Array.from(sizeCounts.entries()).map(([sizeLabel, count]) => ({ sizeLabel, count })),
     totalFillVolumeM3,
     totalBoardCount,
+    twoSpanBoardCount,
+    oneSpanBoardCount,
     totalBoardLengthM,
     totalBackfillVolumeM3,
     labor: {

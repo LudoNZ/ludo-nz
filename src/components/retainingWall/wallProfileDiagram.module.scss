@@ -68,6 +68,12 @@
   stroke: var(--background);
 }
 
+// same reasoning as .controlDot above re: inline strokeWidth
+.cornerMark {
+  fill: #d68910;
+  stroke: var(--background);
+}
+
 .selectedRing {
   fill: none;
   stroke: #2a78d6;
@@ -132,6 +138,15 @@
   border-radius: 999px;
   display: inline-block;
   background-color: #2a78d6;
+  flex-shrink: 0;
+}
+
+.cornerMarkSwatch {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  background-color: #d68910;
+  transform: rotate(45deg);
   flex-shrink: 0;
 }
 

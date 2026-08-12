@@ -148,7 +148,7 @@ service cloud.firestore {
     match /retainingWallDesigns/{id} {
       allow get, list: if true;
       allow create: if request.resource.data.keys().hasAll(
-          ['name', 'wallLengthM', 'retainedHeightM', 'soil', 'rlDatumM', 'controlPoints', 'calcSettings', 'createdAt']
+          ['name', 'wallLengthM', 'retainedHeightM', 'soil', 'rlDatumM', 'controlPoints', 'cornerPosts', 'calcSettings', 'createdAt']
         )
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0

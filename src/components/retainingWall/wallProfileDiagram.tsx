@@ -140,6 +140,17 @@ const WallProfileDiagram: React.FC<{
               {p.isControlPoint && (
                 <circle cx={p.xM} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
               )}
+              {p.isCorner && (
+                <rect
+                  x={p.xM - strokeW * 3}
+                  y={y(p.groundLevelM) - strokeW * 3}
+                  width={strokeW * 6}
+                  height={strokeW * 6}
+                  transform={`rotate(45 ${p.xM} ${y(p.groundLevelM)})`}
+                  strokeWidth={strokeW * 0.5}
+                  className={styles.cornerMark}
+                />
+              )}
               {p.index === selectedIndex && (
                 <rect
                   x={p.xM - p.widthM}
@@ -198,6 +209,9 @@ const WallProfileDiagram: React.FC<{
         </span>
         <span>
           <span className={styles.controlDotSwatch} /> Set by hand — others rake between these
+        </span>
+        <span>
+          <span className={styles.cornerMarkSwatch} /> Corner post — boards break here, never run through
         </span>
         {profile.engineerPostIndices.length > 0 && (
           <span>

@@ -1,7 +1,7 @@
 import { addDoc, collection, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { CalcSettings } from "./calcSettings"
-import { ControlPoints } from "./postProfile"
+import { ControlPoints, CornerPosts } from "./postProfile"
 import { SoilType } from "./retainingWallCalc"
 
 /** Both collections are public (no auth) — saved presets and designs are
@@ -53,6 +53,7 @@ export interface SavedWallDesign {
   soil: SoilType
   rlDatumM: number
   controlPoints: ControlPoints
+  cornerPosts: CornerPosts
   calcSettings: CalcSettings
   createdAt: Date
 }
@@ -73,6 +74,7 @@ export const subscribeToDesigns = (onData: (list: SavedWallDesign[]) => void, on
             soil: data.soil as SoilType,
             rlDatumM: data.rlDatumM ?? 0,
             controlPoints: (data.controlPoints ?? {}) as ControlPoints,
+            cornerPosts: (data.cornerPosts ?? {}) as CornerPosts,
             calcSettings: data.calcSettings as CalcSettings,
             createdAt: data.createdAt?.toDate?.() ?? new Date(),
           }

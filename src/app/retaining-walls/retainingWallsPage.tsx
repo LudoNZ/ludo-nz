@@ -7,7 +7,7 @@ import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
 import { SaveIcon, OpenIcon, SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
-import { buildWallProfile, ControlPoints } from "@/components/retainingWall/postProfile"
+import { buildWallProfile, ControlPoints, CornerPosts } from "@/components/retainingWall/postProfile"
 import { CalcSettings, DEFAULT_CALC_SETTINGS, findReferenceRow } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import {
@@ -45,6 +45,11 @@ const RetainingWallsPage = () => {
   // settings, which can change post spacing/count) change, since a stale
   // index would silently apply to the wrong physical post otherwise.
   const [controlPoints, setControlPoints] = useState<ControlPoints>({})
+  // keyed by post index — presence marks that post as a corner, where a
+  // board can't physically run through, forcing a joint there regardless
+  // of what the standard-length/2-span piece planning would otherwise do.
+  // Reset alongside controlPoints, same staleness reasoning.
+  const [cornerPosts, setCornerPosts] = useState<CornerPosts>({})
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -65,12 +70,13 @@ const RetainingWallsPage = () => {
 
   const resetProfile = () => {
     setControlPoints({})
+    setCornerPosts({})
     setSelectedIndex(null)
   }
 
   const profile =
     !isNaN(wallLengthM) && !isNaN(retainedHeightM)
-      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, rlDatumM, calcSettings)
+      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, cornerPosts, rlDatumM, calcSettings)
       : null
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
@@ -98,6 +104,16 @@ const RetainingWallsPage = () => {
     })
   }
 
+  const handleToggleCorner = () => {
+    if (selectedIndex === null) return
+    setCornerPosts((cp) => {
+      const next = { ...cp }
+      if (next[selectedIndex]) delete next[selectedIndex]
+      else next[selectedIndex] = true
+      return next
+    })
+  }
+
   const handleApplySettings = (settings: CalcSettings, name: string) => {
     setCalcSettings(settings)
     setCalcSettingsName(name)
@@ -112,6 +128,7 @@ const RetainingWallsPage = () => {
       soil,
       rlDatumM,
       controlPoints,
+      cornerPosts,
       calcSettings,
     })
   }
@@ -124,6 +141,7 @@ const RetainingWallsPage = () => {
     setCalcSettings(design.calcSettings)
     setCalcSettingsName(`From "${design.name}"`)
     setControlPoints(design.controlPoints)
+    setCornerPosts(design.cornerPosts)
     setSelectedIndex(null)
   }
 
@@ -294,6 +312,10 @@ const RetainingWallsPage = () => {
                   />
                 </div>
               </div>
+              <label className={styles.cornerToggle}>
+                <input type="checkbox" checked={selectedPost.isCorner} onChange={handleToggleCorner} />
+                <span>Corner post — a facing board can&apos;t run through it, so a joint is forced here</span>
+              </label>
               <div className={styles.editActions}>
                 <Button size="small" onClick={handleSaveControlPoint}>
                   Save
@@ -325,10 +347,12 @@ const RetainingWallsPage = () => {
                   title="Facing boards"
                   rows={[
                     { label: "Boards needed", value: `${profile.totalBoardCount}` },
+                    { label: "— continuous over 2 spans", value: `${profile.twoSpanBoardCount}` },
+                    { label: "— single-span (joint each side)", value: `${profile.oneSpanBoardCount}` },
                     { label: "Total length", value: formatM(profile.totalBoardLengthM) },
                     { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
                   ]}
-                  note="Assumes simple butt joints at whole-board lengths, and each bay's own local height — not an optimised cutting plan."
+                  note="Each course is planned as real cut pieces: a board runs continuously across two post spans wherever it fits and isn't blocked by a corner post, falling back to a single span otherwise — fewer joints, stronger wall."
                 />
                 <SpecCard
                   title="Drainage backfill"
