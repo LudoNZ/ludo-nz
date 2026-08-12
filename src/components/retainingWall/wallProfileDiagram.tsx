@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { ProfilePost, WallProfile } from "./postProfile"
-import { BOARD_COURSE_HEIGHT_M, GRAVEL_BASE_ALLOWANCE_M } from "./retainingWallCalc"
+import { CalcSettings } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
 
 const formatLevel = (relativeM: number, rlDatumM: number): string =>
@@ -15,14 +15,14 @@ const formatLevel = (relativeM: number, rlDatumM: number): string =>
  * two posts, plus one capping region on top that's level too when the
  * bay isn't actually raked (both posts the same height) and a sloped
  * quadrilateral when it is. */
-function bayCourses(a: ProfilePost, b: ProfilePost) {
+function bayCourses(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number) {
   const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
   const minTopM = Math.min(a.topLevelM, b.topLevelM)
-  const fullCourses = Math.max(0, Math.floor((minTopM - baseLevelM) / BOARD_COURSE_HEIGHT_M))
-  const levelTopM = baseLevelM + fullCourses * BOARD_COURSE_HEIGHT_M
+  const fullCourses = Math.max(0, Math.floor((minTopM - baseLevelM) / boardCourseHeightM))
+  const levelTopM = baseLevelM + fullCourses * boardCourseHeightM
   const levelCourses = Array.from({ length: fullCourses }, (_, i) => ({
-    y0: baseLevelM + i * BOARD_COURSE_HEIGHT_M,
-    y1: baseLevelM + (i + 1) * BOARD_COURSE_HEIGHT_M,
+    y0: baseLevelM + i * boardCourseHeightM,
+    y1: baseLevelM + (i + 1) * boardCourseHeightM,
   }))
   return { levelCourses, capTopM: levelTopM, capTopAM: a.topLevelM, capTopBM: b.topLevelM }
 }
@@ -38,9 +38,10 @@ function bayCourses(a: ProfilePost, b: ProfilePost) {
  * spec to describe it. */
 const WallProfileDiagram: React.FC<{
   profile: WallProfile
+  settings: CalcSettings
   selectedIndex: number | null
   onSelectPost: (index: number) => void
-}> = ({ profile, selectedIndex, onSelectPost }) => {
+}> = ({ profile, settings, selectedIndex, onSelectPost }) => {
   const geometry = useMemo(() => {
     const { posts } = profile
     const spanM = posts[posts.length - 1].xM - posts[0].xM
@@ -84,7 +85,7 @@ const WallProfileDiagram: React.FC<{
             const points = `${a.xM},${y(a.groundLevelM)} ${b.xM},${y(b.groundLevelM)} ${b.xM},${y(b.topLevelM)} ${a.xM},${y(a.topLevelM)}`
             return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
           }
-          const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b)
+          const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b, settings.boardCourseHeightM)
           return (
             <g key={`bay-${bay.leftIndex}`}>
               {levelCourses.map((c) => (
@@ -123,7 +124,7 @@ const WallProfileDiagram: React.FC<{
         {/* posts: above and embedded portions, stopping short of the hole
             floor by the gravel base allowance, same as the uniform diagram */}
         {posts.map((p) => {
-          const postDepthM = Math.max(0, p.embedmentM - GRAVEL_BASE_ALLOWANCE_M)
+          const postDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
           const cls = p.needsEngineer ? styles.postBlocked : styles.postAbove
           return (
             <g key={`post-${p.index}`}>

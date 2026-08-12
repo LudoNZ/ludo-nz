@@ -1,20 +1,25 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import SpecCard from "@/components/structures/specCard"
 import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
+import { SaveIcon, OpenIcon, SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import { buildWallProfile, ControlPoints } from "@/components/retainingWall/postProfile"
+import { CalcSettings, DEFAULT_CALC_SETTINGS, findReferenceRow } from "@/components/retainingWall/calcSettings"
+import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import {
-  ENGINEER_HEIGHT_LIMIT_M,
-  findReferenceRow,
-  SOIL_LABELS,
-  SoilType,
-  STANDARD_BOARD_LENGTH_M,
-} from "@/components/retainingWall/retainingWallCalc"
+  saveDesign,
+  SavedCalcSettings,
+  SavedWallDesign,
+  subscribeToCalcSettingsList,
+  subscribeToDesigns,
+} from "@/components/retainingWall/retainingWallData"
 import ReferenceTableModal from "./referenceTableModal"
+import SettingsPanel from "./settingsPanel"
+import { OpenDesignModal, SaveDesignModal } from "./designModals"
 import styles from "./retainingWallsPage.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
@@ -25,15 +30,34 @@ const RetainingWallsPage = () => {
   const [soil, setSoil] = useState<SoilType>("firmClay")
   const [rlDatum, setRlDatum] = useState("0")
   const [showReferenceTable, setShowReferenceTable] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showSave, setShowSave] = useState(false)
+  const [showOpen, setShowOpen] = useState(false)
+
+  const [calcSettings, setCalcSettings] = useState<CalcSettings>(DEFAULT_CALC_SETTINGS)
+  const [calcSettingsName, setCalcSettingsName] = useState("Default")
+  const [presets, setPresets] = useState<SavedCalcSettings[]>([])
+  const [savedDesigns, setSavedDesigns] = useState<SavedWallDesign[]>([])
+
   // keyed by post index — a post with an entry here is "set by hand"; every
   // other post rakes (linearly interpolates) between whichever of these
-  // bracket it. Reset whenever the base inputs change, since a different
-  // wall length/height/soil can shift post count/positions entirely, and a
-  // stale index would silently apply to the wrong physical post otherwise.
+  // bracket it. Reset whenever the base inputs (or the active calc
+  // settings, which can change post spacing/count) change, since a stale
+  // index would silently apply to the wrong physical post otherwise.
   const [controlPoints, setControlPoints] = useState<ControlPoints>({})
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const unsubscribe = subscribeToCalcSettingsList(setPresets, () => {})
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToDesigns(setSavedDesigns, () => {})
+    return () => unsubscribe()
+  }, [])
 
   const wallLengthM = parseFloat(wallLength)
   const retainedHeightM = parseFloat(retainedHeight)
@@ -46,7 +70,7 @@ const RetainingWallsPage = () => {
 
   const profile =
     !isNaN(wallLengthM) && !isNaN(retainedHeightM)
-      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, rlDatumM)
+      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, rlDatumM, calcSettings)
       : null
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
@@ -54,7 +78,7 @@ const RetainingWallsPage = () => {
   const someBlocked = profile ? profile.engineerPostIndices.length > 0 : false
 
   const referenceRow = profile
-    ? findReferenceRow(Math.min(Math.max(...profile.posts.map((p) => p.retainedHeightM)), ENGINEER_HEIGHT_LIMIT_M), soil)
+    ? findReferenceRow(calcSettings, Math.min(Math.max(...profile.posts.map((p) => p.retainedHeightM)), ENGINEER_HEIGHT_LIMIT_M), soil)
     : null
 
   const handleSaveControlPoint = () => {
@@ -74,14 +98,65 @@ const RetainingWallsPage = () => {
     })
   }
 
+  const handleApplySettings = (settings: CalcSettings, name: string) => {
+    setCalcSettings(settings)
+    setCalcSettingsName(name)
+    resetProfile()
+  }
+
+  const handleSaveDesignSubmit = async (name: string) => {
+    if (isNaN(wallLengthM) || isNaN(retainedHeightM)) return
+    await saveDesign(name, {
+      wallLengthM,
+      retainedHeightM,
+      soil,
+      rlDatumM,
+      controlPoints,
+      calcSettings,
+    })
+  }
+
+  const handleOpenDesign = (design: SavedWallDesign) => {
+    setWallLength(String(design.wallLengthM))
+    setRetainedHeight(String(design.retainedHeightM))
+    setSoil(design.soil)
+    setRlDatum(String(design.rlDatumM))
+    setCalcSettings(design.calcSettings)
+    setCalcSettingsName(`From "${design.name}"`)
+    setControlPoints(design.controlPoints)
+    setSelectedIndex(null)
+  }
+
   return (
     <div className={styles.retainingWallsPage}>
-      <h1>Retaining Wall Calculator</h1>
-      <p className={styles.intro}>
-        A rough DIY materials and labour estimate for a straightforward timber post-and-board
-        retaining wall. Enter your wall length, retained height, and ground conditions to start —
-        then tap any post in the diagram to set its own ground level and top level by hand; posts
-        in between rake (slope evenly) between whichever posts you&apos;ve set.
+      <div className={styles.headerRow}>
+        <div>
+          <h1>Retaining Wall Calculator</h1>
+          <p className={styles.intro}>
+            A rough DIY materials and labour estimate for a straightforward timber post-and-board
+            retaining wall. Enter your wall length, retained height, and ground conditions to start
+            — then tap any post in the diagram to set its own ground level and top level by hand;
+            posts in between rake (slope evenly) between whichever posts you&apos;ve set.
+          </p>
+        </div>
+        <div className={styles.headerActions}>
+          <Button size="icon" variant="secondary" onClick={() => setShowSettings(true)} ariaLabel="Calculation settings">
+            <SettingsIcon />
+          </Button>
+          <Button size="icon" variant="secondary" onClick={() => setShowSave(true)} ariaLabel="Save this wall">
+            <SaveIcon />
+          </Button>
+          <Button size="icon" variant="secondary" onClick={() => setShowOpen(true)} ariaLabel="Open a saved wall">
+            <OpenIcon />
+          </Button>
+        </div>
+      </div>
+
+      <p className={styles.settingsHint}>
+        Using &quot;{calcSettingsName}&quot; calculation settings.{" "}
+        <button type="button" className={styles.inlineLink} onClick={() => setShowSettings(true)}>
+          Change
+        </button>
       </p>
 
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
@@ -149,7 +224,22 @@ const RetainingWallsPage = () => {
         View the reference table this calculator uses →
       </button>
 
-      <ReferenceTableModal isOpen={showReferenceTable} onClose={() => setShowReferenceTable(false)} activeRow={referenceRow} />
+      <ReferenceTableModal
+        isOpen={showReferenceTable}
+        onClose={() => setShowReferenceTable(false)}
+        referenceTable={calcSettings.referenceTable}
+        activeRow={referenceRow}
+      />
+      <SettingsPanel
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        activeSettings={calcSettings}
+        activeName={calcSettingsName}
+        presets={presets}
+        onApply={handleApplySettings}
+      />
+      <SaveDesignModal isOpen={showSave} onClose={() => setShowSave(false)} onSave={handleSaveDesignSubmit} />
+      <OpenDesignModal isOpen={showOpen} onClose={() => setShowOpen(false)} designs={savedDesigns} onOpen={handleOpenDesign} />
 
       {!profile ? (
         <p className={styles.hint}>Enter a wall length and retained height to see a materials estimate.</p>
@@ -171,7 +261,12 @@ const RetainingWallsPage = () => {
 
           <div className={styles.diagramCard}>
             <h3>Elevation</h3>
-            <WallProfileDiagram profile={profile} selectedIndex={selectedIndex} onSelectPost={setSelectedIndex} />
+            <WallProfileDiagram
+              profile={profile}
+              settings={calcSettings}
+              selectedIndex={selectedIndex}
+              onSelectPost={setSelectedIndex}
+            />
           </div>
 
           {selectedPost && (
@@ -231,7 +326,7 @@ const RetainingWallsPage = () => {
                   rows={[
                     { label: "Boards needed", value: `${profile.totalBoardCount}` },
                     { label: "Total length", value: formatM(profile.totalBoardLengthM) },
-                    { label: "Standard length assumed", value: formatM(STANDARD_BOARD_LENGTH_M, 1) },
+                    { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
                   ]}
                   note="Assumes simple butt joints at whole-board lengths, and each bay's own local height — not an optimised cutting plan."
                 />

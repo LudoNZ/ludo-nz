@@ -126,6 +126,40 @@ service cloud.firestore {
         && request.resource.data.stock is list;
     }
 
+    // Retaining wall calculator: saved custom calc-settings presets.
+    // Public for now (no auth) — anyone can create a named preset or list/
+    // read every saved one; update/delete are off entirely, so a save is a
+    // new immutable entry rather than something overwritable in place.
+    match /retainingWallCalcSettings/{id} {
+      allow get, list: if true;
+      allow create: if request.resource.data.keys().hasAll(['name', 'settings', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.settings is map;
+      allow update, delete: if false;
+    }
+
+    // Retaining wall calculator: saved wall designs. Same public-for-now,
+    // create-only shape as the presets above. Each design embeds a full
+    // CalcSettings snapshot rather than referencing a preset by id, so it
+    // always reproduces the exact result it had when saved even if the
+    // preset it started from is later changed.
+    match /retainingWallDesigns/{id} {
+      allow get, list: if true;
+      allow create: if request.resource.data.keys().hasAll(
+          ['name', 'wallLengthM', 'retainedHeightM', 'soil', 'rlDatumM', 'controlPoints', 'calcSettings', 'createdAt']
+        )
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.wallLengthM is number
+        && request.resource.data.retainedHeightM is number
+        && request.resource.data.soil is string
+        && request.resource.data.calcSettings is map;
+      allow update, delete: if false;
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

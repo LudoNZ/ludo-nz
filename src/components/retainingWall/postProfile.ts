@@ -1,20 +1,7 @@
 import { calcHoleVolumeM3, calcLinearPieceCount, calcPostLayout } from "../structures/postRailCalc"
 import { LaborEstimate } from "../structures/types"
-import {
-  BACKFILL_THICKNESS_M,
-  BOARD_COURSE_HEIGHT_M,
-  ENGINEER_HEIGHT_LIMIT_M,
-  findReferenceRow,
-  GRAVEL_BASE_ALLOWANCE_M,
-  HOLE_DIAMETER_MULTIPLIER,
-  HOURS_PER_BOARD,
-  HOURS_PER_M3_BACKFILL,
-  HOURS_PER_POST,
-  postWidthM,
-  SETUP_HOURS,
-  SoilType,
-  STANDARD_BOARD_LENGTH_M,
-} from "./retainingWallCalc"
+import { CalcSettings, findReferenceRow, postWidthM } from "./calcSettings"
+import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
 
 /** A post whose ground level and/or top-of-post level has been set by
  * hand, in metres relative to the RL datum (0 = datum). Every other post
@@ -126,11 +113,12 @@ export function buildWallProfile(
   retainedHeightM: number,
   soil: SoilType,
   controlPoints: ControlPoints,
-  rlDatumM: number
+  rlDatumM: number,
+  settings: CalcSettings
 ): WallProfile | null {
   if (!(wallLengthM > 0) || !(retainedHeightM > 0)) return null
 
-  const layoutRow = findReferenceRow(Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
+  const layoutRow = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
   const { postCount, actualSpacingM } = calcPostLayout(wallLengthM, layoutRow.maxSpacingM)
 
   const sortedCpIndices = Object.keys(controlPoints)
@@ -145,11 +133,11 @@ export function buildWallProfile(
     // clamp purely for the lookup/drawing below — a post over the limit
     // still gets *some* geometry so the diagram can render and flag it,
     // it just never counts toward materials
-    const row = findReferenceRow(Math.min(Math.max(localHeightM, 0.01), ENGINEER_HEIGHT_LIMIT_M), soil)
+    const row = findReferenceRow(settings, Math.min(Math.max(localHeightM, 0.01), ENGINEER_HEIGHT_LIMIT_M), soil)
     const sizeLabel = row.postSizeLabel
     const widthM = postWidthM(sizeLabel)
-    const embedmentM = Math.max(0.01, localHeightM) * row.embedmentRatio + GRAVEL_BASE_ALLOWANCE_M
-    const holeDiameterM = widthM * HOLE_DIAMETER_MULTIPLIER
+    const embedmentM = Math.max(0.01, localHeightM) * row.embedmentRatio + settings.gravelBaseAllowanceM
+    const holeDiameterM = widthM * settings.holeDiameterMultiplier
     const holeVolumeM3 = calcHoleVolumeM3(holeDiameterM, embedmentM)
     return {
       index: i,
@@ -174,7 +162,7 @@ export function buildWallProfile(
     const needsEngineer = a.needsEngineer || b.needsEngineer
     const heightM = Math.max(a.retainedHeightM, b.retainedHeightM)
     const widthM = b.xM - a.xM
-    const courseCount = needsEngineer ? 0 : Math.ceil(heightM / BOARD_COURSE_HEIGHT_M)
+    const courseCount = needsEngineer ? 0 : Math.ceil(heightM / settings.boardCourseHeightM)
     bays.push({
       leftIndex: a.index,
       rightIndex: b.index,
@@ -192,13 +180,13 @@ export function buildWallProfile(
 
   const validBays = bays.filter((b) => !b.needsEngineer)
   const totalBoardLengthM = validBays.reduce((sum, b) => sum + b.boardLengthM, 0)
-  const totalBoardCount = calcLinearPieceCount(totalBoardLengthM, STANDARD_BOARD_LENGTH_M)
-  const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * BACKFILL_THICKNESS_M, 0)
+  const totalBoardCount = calcLinearPieceCount(totalBoardLengthM, settings.standardBoardLengthM)
+  const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
   const totalFillVolumeM3 = validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0)
 
-  const postsHours = validPosts.length * HOURS_PER_POST
-  const railsHours = totalBoardCount * HOURS_PER_BOARD
-  const infillHours = totalBackfillVolumeM3 * HOURS_PER_M3_BACKFILL
+  const postsHours = validPosts.length * settings.hoursPerPost
+  const railsHours = totalBoardCount * settings.hoursPerBoard
+  const infillHours = totalBackfillVolumeM3 * settings.hoursPerM3Backfill
 
   return {
     rlDatumM,
@@ -211,11 +199,11 @@ export function buildWallProfile(
     totalBoardLengthM,
     totalBackfillVolumeM3,
     labor: {
-      setupHours: SETUP_HOURS,
+      setupHours: settings.setupHours,
       postsHours,
       railsHours,
       infillHours,
-      totalHours: SETUP_HOURS + postsHours + railsHours + infillHours,
+      totalHours: settings.setupHours + postsHours + railsHours + infillHours,
     },
     engineerPostIndices: posts.filter((p) => p.needsEngineer).map((p) => p.index),
   }

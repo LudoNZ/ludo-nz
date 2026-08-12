@@ -1,24 +1,27 @@
 "use client"
 
 import { Modal } from "@/app/elements/Modal/modal"
-import { REFERENCE_TABLE, SOIL_LABELS, WallSpecRow } from "@/components/retainingWall/retainingWallCalc"
+import { WallSpecRow } from "@/components/retainingWall/calcSettings"
+import { SOIL_LABELS } from "@/components/retainingWall/retainingWallCalc"
 import { formatM, formatMm } from "@/components/structures/format"
 import styles from "./referenceTableModal.module.scss"
 
 const isSameRow = (a: WallSpecRow, b: WallSpecRow) => a.soil === b.soil && a.maxHeightM === b.maxHeightM
 
-/** The rule-of-thumb table this calculator is actually driven by (see
- * REFERENCE_TABLE in retainingWallCalc.ts), laid out as a real table with
- * whichever row matches the current inputs highlighted — so it's never a
- * black-box formula, you can see exactly which band you landed in and
- * what every other band looks like. Not a citation of a specific code
- * clause: a construction rule of thumb, same as the rest of this
+/** The rule-of-thumb table the active calc settings are driven by, laid
+ * out as a real table with whichever row matches the current inputs
+ * highlighted — so it's never a black-box formula, you can see exactly
+ * which band you landed in and what every other band looks like. Shows
+ * whichever settings are currently active (Default or a saved custom
+ * profile), not always the same fixed table. Not a citation of a specific
+ * code clause: a construction rule of thumb, same as the rest of this
  * calculator, and the same 1.5m cutoff still applies above it. */
 const ReferenceTableModal: React.FC<{
   isOpen: boolean
   onClose: () => void
+  referenceTable: WallSpecRow[]
   activeRow: WallSpecRow | null
-}> = ({ isOpen, onClose, activeRow }) => (
+}> = ({ isOpen, onClose, referenceTable, activeRow }) => (
   <Modal isActive={isOpen} closeModal={onClose}>
     <div className={styles.content}>
       <div className={styles.header}>
@@ -45,7 +48,7 @@ const ReferenceTableModal: React.FC<{
             </tr>
           </thead>
           <tbody>
-            {REFERENCE_TABLE.map((row) => {
+            {referenceTable.map((row) => {
               const active = activeRow != null && isSameRow(row, activeRow)
               return (
                 <tr key={`${row.soil}-${row.maxHeightM}`} className={active ? styles.active : ""}>

@@ -10,10 +10,40 @@
   }
 }
 
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.headerActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .intro {
   max-width: 42rem;
   opacity: 0.8;
-  margin-bottom: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.settingsHint {
+  font-size: 0.82rem;
+  opacity: 0.65;
+  margin-bottom: 1.25rem;
+}
+
+.inlineLink {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
 }
 
 .form {

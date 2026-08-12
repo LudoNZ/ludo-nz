@@ -49,3 +49,24 @@ export const TrashIcon: React.FC<IconProps> = ({ className }) => (
     <path d="M11.5 9v5" />
   </svg>
 )
+
+export const SaveIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M4 3.5h9.5L16.5 6.5V16a.5.5 0 0 1-.5.5H4a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5Z" />
+    <path d="M6 3.5V8h6.5V3.5" />
+    <path d="M6.5 11h5v5.5h-5z" />
+  </svg>
+)
+
+export const OpenIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M3 6.5a1 1 0 0 1 1-1h3.4l1.5 1.7H16a1 1 0 0 1 1 1V15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" />
+  </svg>
+)
+
+export const SettingsIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <circle cx="10" cy="10" r="2.6" />
+    <path d="M10 3v2M10 15v2M17 10h-2M5 10H3M14.8 5.2l-1.4 1.4M6.6 13.4l-1.4 1.4M14.8 14.8l-1.4-1.4M6.6 6.6 5.2 5.2" />
+  </svg>
+)
