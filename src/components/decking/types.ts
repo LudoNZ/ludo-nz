@@ -101,6 +101,14 @@ export interface DeckConfig {
    * staggered against the previous skeleton row; the rows in between are
    * filled in afterwards from a randomised mix of what's left */
   skeletonInterval: number
+  /** -1..1, nudges which stock length the fill-in rows' random pick favours
+   * when more than one on hand could reach the next join: negative skews
+   * toward your shortest lengths (burn through offcuts first), positive
+   * toward your longest, 0 is the plain uniform pick. Only affects that
+   * random fill-in choice — skeleton rows (which deliberately maximise
+   * reach to minimise joins) and any "finish the row in one board" pick
+   * (which deliberately minimises waste) are unaffected either way. */
+  lengthBias: number
   /** seeds the fill-in randomisation so the pattern is stable across
    * re-renders; change it (e.g. via a "shuffle" action) to get a new mix */
   layoutSeed: number
@@ -155,6 +163,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     minEdgeJoists: 3,
     boardDirection: "intoRake",
     skeletonInterval: 4,
+    lengthBias: 0,
     layoutSeed: Math.floor(Math.random() * 2 ** 31),
     completedSegmentIds: [],
     lockedRows: {},

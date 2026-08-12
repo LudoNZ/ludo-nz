@@ -67,6 +67,7 @@ export const subscribeToDecks = (
           minEdgeJoists: data.minEdgeJoists ?? 3,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
           skeletonInterval: data.skeletonInterval || 4,
+          lengthBias: data.lengthBias ?? 0,
           layoutSeed: data.layoutSeed ?? 1,
           completedSegmentIds: Array.isArray(data.completedSegmentIds) ? data.completedSegmentIds : [],
           lockedRows: (data.lockedRows ?? {}) as Record<string, LockedRow>,

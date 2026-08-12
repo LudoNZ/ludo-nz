@@ -330,9 +330,37 @@ function planSkeletonRow(
   return { boards, joins }
 }
 
-/** Rows that need a join: pick a RANDOM board on hand for each join, so the
- * pattern doesn't repeat, falling back to the longest on hand if the random
- * pick can't even reach the next joist. Used for the fill-in rows. */
+/** How strongly the length-bias dial skews the weighted pick below — at the
+ * extremes (bias = ±1) the far end of the available range is picked roughly
+ * e^LENGTH_BIAS_STRENGTH times as often as the near end. Kept well short of
+ * "only ever pick one end" so there's still variety in the fill pattern even
+ * fully cranked over. */
+const LENGTH_BIAS_STRENGTH = 5
+
+/** Picks one of `lengths` at random, weighted by `bias` (-1 = strongly
+ * favour the shortest, 0 = uniform/neutral — the plain random pick this
+ * replaced — +1 = strongly favour the longest). Weighted over each length's
+ * *rank* rather than its raw mm value, so the skew feels the same regardless
+ * of how many distinct lengths are on hand or how far apart they are. */
+function weightedLengthPick(lengths: number[], bias: number, rand: () => number): number {
+  if (lengths.length === 1) return lengths[0]
+  const sorted = [...lengths].sort((a, b) => a - b)
+  const n = sorted.length
+  const weights = sorted.map((_, i) => Math.exp(bias * LENGTH_BIAS_STRENGTH * (i / (n - 1) - 0.5)))
+  const total = weights.reduce((s, w) => s + w, 0)
+  let r = rand() * total
+  for (let i = 0; i < sorted.length; i++) {
+    r -= weights[i]
+    if (r <= 1e-9) return sorted[i]
+  }
+  return sorted[sorted.length - 1]
+}
+
+/** Rows that need a join: pick a board on hand for each join — weighted by
+ * `lengthBias` rather than strictly uniform, so the pattern doesn't repeat
+ * but leans toward your shorter or longer stock as dialled in — falling
+ * back to the longest on hand if nothing reachable turns up. Used for the
+ * fill-in rows. */
 function planRowRandomFirst(
   targetLength: number,
   joistPositions: number[],
@@ -341,7 +369,8 @@ function planRowRandomFirst(
   history: RowHistoryEntry[],
   exclusions: Set<string>,
   edgeBuffer: number,
-  rand: () => number
+  rand: () => number,
+  lengthBias: number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
@@ -371,8 +400,8 @@ function planRowRandomFirst(
     // near-edge one only if none of the tried picks offer anything better
     let bestNearEdgeFallback: { chosenLength: number; candidates: number[] } | null = null
     for (let attempt = 0; attempt < 8 && tried.size < avail.length; attempt++) {
-      const pick = avail[Math.floor(rand() * avail.length)]
-      if (tried.has(pick)) continue
+      const remaining = avail.filter((l) => !tried.has(l))
+      const pick = weightedLengthPick(remaining, lengthBias, rand)
       tried.add(pick)
       const js = reachableJoists(p, pick, 1, joistPositions, joistIndex, exclusions)
       if (!js.length) continue
@@ -429,6 +458,7 @@ function planRowRandomFirst(
 
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock } = config
+  const lengthBias = Math.max(-1, Math.min(1, config.lengthBias || 0))
   const firstBaySpacing = config.firstBaySpacing || joistSpacing
   const pitch = boardWidth + boardGap
   const intoRake = config.boardDirection !== "alongRake"
@@ -613,7 +643,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
             history,
             exclusions,
             edgeBuffer,
-            mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0)
+            mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0),
+            lengthBias
           )
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))

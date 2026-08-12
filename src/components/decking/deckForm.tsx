@@ -82,6 +82,7 @@ const DeckForm: React.FC<{
       minEdgeJoists: state.minEdgeJoists,
       boardDirection: state.boardDirection,
       skeletonInterval: state.skeletonInterval,
+      lengthBias: state.lengthBias,
       layoutSeed: state.layoutSeed,
       completedSegmentIds: state.completedSegmentIds,
       lockedRows: state.lockedRows,
@@ -205,6 +206,30 @@ const DeckForm: React.FC<{
           onChange={num("skeletonInterval")}
           required
         />
+      </div>
+
+      <div className={styles.field}>
+        <label htmlFor="lengthBias">Stock length preference</label>
+        <span className={styles.hint}>
+          Nudges which length gets picked for a fill-in join when more than one on hand could reach —
+          crank it toward &quot;shorter&quot; to burn through leftover offcuts first, or &quot;longer&quot;
+          to save them and reach for fuller lengths instead. Doesn&apos;t affect skeleton rows or a
+          row that finishes cleanly in one board — those stay waste-minimised either way.
+        </span>
+        <input
+          id="lengthBias"
+          type="range"
+          min={-100}
+          max={100}
+          step={10}
+          value={Math.round(state.lengthBias * 100)}
+          onChange={(e) => setState((s) => ({ ...s, lengthBias: Number(e.target.value) / 100 }))}
+        />
+        <div className={styles.sliderLabels}>
+          <span>Favour shorter</span>
+          <span>Neutral</span>
+          <span>Favour longer</span>
+        </div>
       </div>
 
       <div className={styles.field}>

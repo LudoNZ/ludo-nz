@@ -49,6 +49,23 @@
       box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
     }
   }
+
+  // a range input isn't a boxed text field — the generic border/padding
+  // above would just look broken on it
+  input[type="range"] {
+    padding: 0;
+    border: none;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+  }
+}
+
+.sliderLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin-top: -0.2rem;
 }
 
 .actions {

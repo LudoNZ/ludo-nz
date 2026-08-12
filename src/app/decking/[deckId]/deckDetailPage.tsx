@@ -104,6 +104,7 @@ const DeckDetailPage = () => {
       minEdgeJoists: deck.minEdgeJoists,
       boardDirection: deck.boardDirection,
       skeletonInterval: deck.skeletonInterval,
+      lengthBias: deck.lengthBias,
       layoutSeed: Math.floor(Math.random() * 2 ** 31),
       completedSegmentIds: deck.completedSegmentIds,
       lockedRows: deck.lockedRows,
