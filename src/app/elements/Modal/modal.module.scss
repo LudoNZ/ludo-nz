@@ -4,6 +4,12 @@
   bottom: 0;
   left: 0;
   right: 0;
+  // without an explicit z-index, position:fixed alone doesn't guarantee
+  // this paints above later page content — elements with z-index:auto
+  // stack in DOM order among themselves, so anything rendered after this
+  // component in the tree (its whole point being that it can be dropped
+  // in anywhere) would otherwise show through on top of it
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
