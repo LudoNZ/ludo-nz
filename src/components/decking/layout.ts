@@ -337,13 +337,6 @@ function planSkeletonRow(
  * fully cranked over. */
 const LENGTH_BIAS_STRENGTH = 5
 
-/** Below this fraction of the picked board actually used, the pick is
- * overridden by the smallest board that fits instead — see the waste
- * guard-rail below. 0.7 means: don't consume a board for a cut shorter
- * than 70% of it (i.e. don't waste more than 30% of a board) just because
- * that's the length/position the random walk happened to land on. */
-const MIN_BOARD_UTILISATION = 0.7
-
 /** Picks one of `lengths` at random, weighted by `bias` (-1 = strongly
  * favour the shortest, 0 = uniform/neutral — the plain random pick this
  * replaced — +1 = strongly favour the longest). Weighted over each length's
@@ -377,7 +370,8 @@ function planRowRandomFirst(
   exclusions: Set<string>,
   edgeBuffer: number,
   rand: () => number,
-  lengthBias: number
+  lengthBias: number,
+  joistSpacing: number
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
@@ -458,16 +452,17 @@ function planRowRandomFirst(
     // positions (and to explore *which* board length gets used, per the
     // bias dial above), but the random position landed on might turn out
     // much closer than that board could actually reach — e.g. picking a
-    // 4.1m board then landing on a joist only 2.1m away, wasting half of
-    // it for no reason. If the pick isn't actually being used efficiently,
-    // swap to the smallest board that covers this specific cut instead —
-    // same position, same join, just not a needlessly long board behind
-    // it. Only overrides the pick when it'd genuinely go to waste; a
-    // reasonably-used pick (including one nudged toward "longer" by the
-    // bias dial) is left alone.
+    // 4.1m board then landing on a joist only 2.1m away, wasting most of
+    // it for no reason. Once the offcut left over is worth more than one
+    // whole joist bay — a genuinely usable length being thrown away, not
+    // just an ordinary trim — check for a shorter board that still covers
+    // this exact cut and swap to it if one's on hand. Same position, same
+    // join, just not a needlessly long board behind it. A pick that's only
+    // trimming an ordinary amount (including one nudged toward "longer" by
+    // the bias dial) is left alone.
     const cutLength = chosen - p
     let stockLength = chosenLength
-    if (cutLength / chosenLength < MIN_BOARD_UTILISATION) {
+    if (chosenLength - cutLength > joistSpacing) {
       stockLength = inv.smallestAtLeast(cutLength) ?? chosenLength
     }
 
@@ -668,7 +663,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
             exclusions,
             edgeBuffer,
             mulberry32((seed ^ Math.imul(slot.index + 1, 0x9e3779b1)) | 0),
-            lengthBias
+            lengthBias,
+            joistSpacing
           )
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
