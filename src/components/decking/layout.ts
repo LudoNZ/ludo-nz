@@ -337,6 +337,13 @@ function planSkeletonRow(
  * fully cranked over. */
 const LENGTH_BIAS_STRENGTH = 5
 
+/** Below this fraction of the picked board actually used, the pick is
+ * overridden by the smallest board that fits instead — see the waste
+ * guard-rail below. 0.7 means: don't consume a board for a cut shorter
+ * than 70% of it (i.e. don't waste more than 30% of a board) just because
+ * that's the length/position the random walk happened to land on. */
+const MIN_BOARD_UTILISATION = 0.7
+
 /** Picks one of `lengths` at random, weighted by `bias` (-1 = strongly
  * favour the shortest, 0 = uniform/neutral — the plain random pick this
  * replaced — +1 = strongly favour the longest). Weighted over each length's
@@ -447,8 +454,25 @@ function planRowRandomFirst(
     const chosen = pool[Math.floor(rand() * pool.length)]
     const staggered = staggerSafe.length > 0
 
-    inv.take(chosenLength)
-    boards.push({ id: "", start: p, end: chosen, cutLength: chosen - p, stockLength: chosenLength })
+    // waste guard-rail: the length above was picked to find candidate
+    // positions (and to explore *which* board length gets used, per the
+    // bias dial above), but the random position landed on might turn out
+    // much closer than that board could actually reach — e.g. picking a
+    // 4.1m board then landing on a joist only 2.1m away, wasting half of
+    // it for no reason. If the pick isn't actually being used efficiently,
+    // swap to the smallest board that covers this specific cut instead —
+    // same position, same join, just not a needlessly long board behind
+    // it. Only overrides the pick when it'd genuinely go to waste; a
+    // reasonably-used pick (including one nudged toward "longer" by the
+    // bias dial) is left alone.
+    const cutLength = chosen - p
+    let stockLength = chosenLength
+    if (cutLength / chosenLength < MIN_BOARD_UTILISATION) {
+      stockLength = inv.smallestAtLeast(cutLength) ?? chosenLength
+    }
+
+    inv.take(stockLength)
+    boards.push({ id: "", start: p, end: chosen, cutLength, stockLength })
     joins.push({ position: chosen, staggered, nearEdge })
     p = chosen
   }
