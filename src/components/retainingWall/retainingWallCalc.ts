@@ -59,17 +59,18 @@ export function findReferenceRow(retainedHeightM: number, soil: SoilType): WallS
 }
 
 // constants outside the table — construction detail, not soil/height-
-// dependent design values
-const GRAVEL_BASE_ALLOWANCE_M = 0.1 // drainage/bearing pad under the post, below its embedment
-const HOLE_DIAMETER_MULTIPLIER = 3 // hole ~3x the post's own width — common rule of thumb
-const BOARD_COURSE_HEIGHT_M = 0.2 // 200mm treated-pine sleeper
-const STANDARD_BOARD_LENGTH_M = 3.0
-const BACKFILL_THICKNESS_M = 0.15 // compacted drainage gravel behind the boards
+// dependent design values. Exported for postProfile.ts, which needs the
+// same constants for its own per-post version of this same calculation.
+export const GRAVEL_BASE_ALLOWANCE_M = 0.1 // drainage/bearing pad under the post, below its embedment
+export const HOLE_DIAMETER_MULTIPLIER = 3 // hole ~3x the post's own width — common rule of thumb
+export const BOARD_COURSE_HEIGHT_M = 0.2 // 200mm treated-pine sleeper
+export const STANDARD_BOARD_LENGTH_M = 3.0
+export const BACKFILL_THICKNESS_M = 0.15 // compacted drainage gravel behind the boards
 
-const SETUP_HOURS = 1.5
-const HOURS_PER_POST = 0.75
-const HOURS_PER_BOARD = 0.2
-const HOURS_PER_M3_BACKFILL = 0.5
+export const SETUP_HOURS = 1.5
+export const HOURS_PER_POST = 0.75
+export const HOURS_PER_BOARD = 0.2
+export const HOURS_PER_M3_BACKFILL = 0.5
 
 export function calcPostSpacingM(retainedHeightM: number, soil: SoilType): number {
   return findReferenceRow(retainedHeightM, soil).maxSpacingM
@@ -79,7 +80,7 @@ export function calcPostSizeLabel(retainedHeightM: number, soil: SoilType): stri
   return findReferenceRow(retainedHeightM, soil).postSizeLabel
 }
 
-function postWidthM(sizeLabel: string): number {
+export function postWidthM(sizeLabel: string): number {
   return sizeLabel.startsWith("100") ? 0.1 : 0.15
 }
 

@@ -1,0 +1,141 @@
+.diagramRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+// literal material colours, same reasoning as the uniform diagram: these
+// represent real things and shouldn't theme-swap with light/dark mode
+.postAbove {
+  fill: #8b5a2b;
+}
+
+.postBelow {
+  fill: #8b5a2b;
+  stroke: #6e4620;
+}
+
+.hole {
+  fill: #8b8f96;
+  opacity: 0.55;
+}
+
+.bayFill {
+  fill: #c9924f;
+  stroke: #8b5a2b;
+  opacity: 0.9;
+}
+
+// a post or bay whose local height is over the DIY limit — visually
+// distinct (danger colour, hatched) rather than just omitted, since the
+// whole point is to show *where* the profile goes out of scope
+.postBlocked {
+  fill: var(--color-danger);
+  opacity: 0.55;
+}
+
+.bayBlocked {
+  fill: var(--color-danger);
+  opacity: 0.12;
+  stroke: var(--color-danger);
+  stroke-dasharray: 3 2;
+}
+
+.groundLine {
+  fill: none;
+  stroke: var(--foreground);
+  opacity: 0.8;
+}
+
+.topLine {
+  fill: none;
+  stroke: var(--foreground);
+  opacity: 0.4;
+  stroke-dasharray: 4 3;
+}
+
+// stroke-width set inline (see wallProfileDiagram.tsx) — this is the third
+// time a flat CSS stroke-width has bitten this file family, since the
+// coordinate system is in metres; not making that mistake again here
+.controlDot {
+  fill: #2a78d6;
+  stroke: var(--background);
+}
+
+.selectedRing {
+  fill: none;
+  stroke: #2a78d6;
+  stroke-dasharray: 3 2;
+}
+
+.hitArea {
+  fill: transparent;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    fill: rgba(42, 120, 214, 0.12);
+    outline: none;
+  }
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.postAboveSwatch {
+  background-color: #8b5a2b;
+}
+
+.holeSwatch {
+  background-color: #8b8f96;
+  opacity: 0.55;
+}
+
+.bayFillSwatch {
+  background-color: #c9924f;
+  border: 1px solid #8b5a2b;
+}
+
+.postBlockedSwatch {
+  background-color: var(--color-danger);
+  opacity: 0.55;
+}
+
+.controlDotSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+  background-color: #2a78d6;
+  flex-shrink: 0;
+}
+
+.hint {
+  font-size: 0.78rem;
+  opacity: 0.6;
+}

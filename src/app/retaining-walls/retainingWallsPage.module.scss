@@ -74,30 +74,43 @@
   margin-bottom: 1.25rem;
   border: 2px solid var(--color-primary);
   border-radius: var(--borderRadius);
-}
-
-.diagramHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  margin-bottom: 0.6rem;
 
   h3 {
     font-size: 1.05rem;
     color: var(--color-primary);
+    margin-bottom: 0.6rem;
   }
 }
 
-.toggleBtn {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  text-decoration: underline;
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 0;
+.editPanel {
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid #2a78d6;
+  border-radius: var(--borderRadius);
+  background-color: rgba(42, 120, 214, 0.06);
+
+  h3 {
+    font-size: 1rem;
+    color: #2a78d6;
+    margin-bottom: 0.75rem;
+  }
+}
+
+.editFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editActions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .resultsGrid {
