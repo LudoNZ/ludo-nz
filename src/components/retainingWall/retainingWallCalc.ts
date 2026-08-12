@@ -68,8 +68,8 @@ export const STANDARD_BOARD_LENGTH_M = 3.0
 export const BACKFILL_THICKNESS_M = 0.15 // compacted drainage gravel behind the boards
 
 export const SETUP_HOURS = 1.5
-export const HOURS_PER_POST = 0.75
-export const HOURS_PER_BOARD = 0.2
+export const HOURS_PER_POST = 1.5 // dig, set, plumb, fill — doubled, the original rate ran light for real-world digging
+export const HOURS_PER_BOARD = 0.4 // doubled for the same reason
 export const HOURS_PER_M3_BACKFILL = 0.5
 
 export function calcPostSpacingM(retainedHeightM: number, soil: SoilType): number {

@@ -240,7 +240,7 @@ const RetainingWallsPage = () => {
                   rows={[{ label: "Volume", value: formatM3(profile.totalBackfillVolumeM3) }]}
                   note="Compacted free-draining gravel behind the facing boards, roughly 150mm thick."
                 />
-                <LaborSummary estimate={profile.labor} />
+                <LaborSummary estimate={profile.labor} infillLabel="Backfill placement (drainage gravel)" />
               </div>
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
