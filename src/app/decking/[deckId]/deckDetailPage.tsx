@@ -12,10 +12,10 @@ import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
 import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
-import { computeLockedRows } from "@/components/decking/layout"
+import { computeLockedRows, optimizeBoardStockLengths } from "@/components/decking/layout"
 import { useManualJoins } from "@/components/decking/useManualJoins"
-import { DeckConfig, formatLength } from "@/components/decking/types"
-import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon } from "@/components/icons/icons"
+import { DeckConfig, formatLength, LockedRow } from "@/components/decking/types"
+import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon, WandIcon } from "@/components/icons/icons"
 import styles from "./deckDetailPage.module.scss"
 
 const DeckDetailPage = () => {
@@ -84,35 +84,39 @@ const DeckDetailPage = () => {
     }
   }
 
-  const handleShuffle = async () => {
-    await saveDeck(auth.currentUser!.uid, {
-      id: deck.id,
-      name: deck.name,
-      width: deck.width,
-      sideA: deck.sideA,
-      sideB: deck.sideB,
-      sideBLinked: deck.sideBLinked,
-      edgeLabels: deck.edgeLabels,
-      joistSpacing: deck.joistSpacing,
-      firstBaySpacing: deck.firstBaySpacing,
-      boardWidth: deck.boardWidth,
-      boardGap: deck.boardGap,
-      stock: deck.stock,
-      joinExclusions: deck.joinExclusions,
-      minStaggerJoists: deck.minStaggerJoists,
-      minSameRowJoinJoists: deck.minSameRowJoinJoists,
-      minEdgeJoists: deck.minEdgeJoists,
-      boardDirection: deck.boardDirection,
-      skeletonInterval: deck.skeletonInterval,
-      lengthBias: deck.lengthBias,
-      layoutSeed: Math.floor(Math.random() * 2 ** 31),
-      completedSegmentIds: deck.completedSegmentIds,
-      lockedRows: deck.lockedRows,
-      manualJoins: deck.manualJoins,
-      cutLog: deck.cutLog,
-      activeCutSegmentId: deck.activeCutSegmentId,
-      activeCutAccumulatedMs: deck.activeCutAccumulatedMs,
-    })
+  // saveDeck wants every field except updatedAt (it stamps its own) — strip
+  // just that one off the live `deck` rather than hand-listing every other
+  // field, so a save-with-overrides action can't silently drop a field a
+  // future DeckConfig addition needs (bitten twice already this session:
+  // the shape editor's sideBLinked, and lengthBias, both needed adding here
+  // by hand before this existed)
+  const saveDeckWith = (overrides: Partial<Omit<DeckConfig, "id" | "updatedAt">>) => {
+    const rest: Partial<DeckConfig> = { ...deck }
+    delete rest.updatedAt
+    return saveDeck(auth.currentUser!.uid, { ...(rest as Omit<DeckConfig, "updatedAt">), ...overrides })
+  }
+
+  const handleShuffle = () => saveDeckWith({ layoutSeed: Math.floor(Math.random() * 2 ** 31) })
+
+  // Re-assigns which stock length each already-*cut* board is recorded as
+  // coming from to the smallest one that's still long enough for it,
+  // without moving a single join — see optimizeBoardStockLengths. Walks
+  // every locked row's boards together, in row order, against the deck's
+  // real total stock, so it can't over-claim a length beyond what's
+  // actually on hand.
+  const handleOptimizeStock = () => {
+    const lockedEntries = Object.entries(deck.lockedRows).sort(([a], [b]) => Number(a) - Number(b))
+    if (!lockedEntries.length) return
+    const optimized = optimizeBoardStockLengths(
+      lockedEntries.flatMap(([, row]) => row.boards),
+      deck.stock
+    )
+    let i = 0
+    const lockedRows: Record<string, LockedRow> = {}
+    for (const [key, row] of lockedEntries) {
+      lockedRows[key] = { ...row, boards: row.boards.map(() => optimized[i++]) }
+    }
+    return saveDeckWith({ lockedRows })
   }
 
   const handleToggleSegment = (id: string) => {
@@ -159,6 +163,16 @@ const DeckDetailPage = () => {
           {!editing && (
             <Button size="icon" variant="secondary" onClick={handleShuffle} ariaLabel="Shuffle fill pattern">
               <ShuffleIcon />
+            </Button>
+          )}
+          {!editing && Object.keys(deck.lockedRows).length > 0 && (
+            <Button
+              size="icon"
+              variant="secondary"
+              onClick={handleOptimizeStock}
+              ariaLabel="Optimise stock lengths on already-cut rows"
+            >
+              <WandIcon />
             </Button>
           )}
           <Button

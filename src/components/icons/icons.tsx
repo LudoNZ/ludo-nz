@@ -70,3 +70,12 @@ export const SettingsIcon: React.FC<IconProps> = ({ className }) => (
     <path d="M10 3v2M10 15v2M17 10h-2M5 10H3M14.8 5.2l-1.4 1.4M6.6 13.4l-1.4 1.4M14.8 14.8l-1.4-1.4M6.6 6.6 5.2 5.2" />
   </svg>
 )
+
+export const WandIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M4 16 13.5 6.5" />
+    <path d="M11.5 4.5 15.5 8.5" />
+    <path d="M15.5 3v2.4M15.5 3l1.2 1.2M15.5 3l-1.2 1.2" />
+    <path d="M4.5 5v1.6M4.5 5l.9.9M4.5 5l-.9.9" />
+  </svg>
+)
