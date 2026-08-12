@@ -61,6 +61,18 @@ export interface ProfileBay {
   levelBoardLengthM: number
 }
 
+/** A board piece boundary that lands mid-run (not a run's own start/end,
+ * which is already either a corner or a wall end, not a "joint" between
+ * two pieces of the same layer). Every piece always runs bay-to-bay, so a
+ * joint always lands exactly on a post — there's no floating/off-post
+ * case in this model; `levelM` is just where on that post to draw it. */
+export interface BoardJoint {
+  postIndex: number
+  /** m, relative to the RL datum */
+  levelM: number
+  layer: "course" | "topBoard" | "topCap"
+}
+
 /** One category of board (regular facing courses, the top/perimeter
  * board, or the optional top cap) planned into real cut pieces — see the
  * run/piece loops in buildWallProfile. */
@@ -72,6 +84,7 @@ export interface BoardLayerSummary {
   twoSpanCount: number
   oneSpanCount: number
   totalLengthM: number
+  joints: BoardJoint[]
 }
 
 export interface WallProfile {
@@ -145,63 +158,131 @@ function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBa
   return runs
 }
 
-/** Plans a board layer that has exactly one segment per bay running the
- * bay's full width (the top/perimeter board, and the optional top cap) —
- * simpler than the level-course planner below since there's no per-row
- * presence check, every valid bay always has one. Same preference: pair
- * two bays into one continuous piece wherever it fits the standard board
- * length, otherwise fall back to a single bay. */
-function planUniformBoardLayer(runs: ProfileBay[][], standardBoardLengthM: number): BoardLayerSummary {
-  const totalLengthM = runs.reduce((sum, run) => sum + run.reduce((s, b) => s + b.widthM, 0), 0)
-  let twoSpanCount = 0
-  let oneSpanCount = 0
-  for (const run of runs) {
-    let i = 0
-    while (i < run.length) {
-      const bay = run[i]
-      const next = run[i + 1]
-      const pairs = Boolean(next) && bay.widthM + next!.widthM <= standardBoardLengthM + 1e-6
-      if (pairs) {
-        twoSpanCount++
-        i += 2
-      } else {
-        oneSpanCount++
-        i += 1
-      }
+/** Plans one ordered list of bays into pieces: pairs two bays into one
+ * continuous length wherever they're physically adjacent and fit the
+ * standard board length, otherwise a single bay. `phase` offsets where
+ * pairing starts — 0 pairs (0,1)(2,3)…, 1 leaves bay 0 on its own first
+ * so pairing shifts to (1,2)(3,4)… — the mechanism staggered joints are
+ * built from: calling this with an alternating phase row to row moves
+ * each row's joints to different posts, like coursed brickwork, instead
+ * of stacking every row's joint on the same post. */
+function planPieces(bays: ProfileBay[], standardBoardLengthM: number, phase: 0 | 1): { start: number; end: number }[] {
+  const pieces: { start: number; end: number }[] = []
+  let i = 0
+  if (phase === 1 && bays.length > 0) {
+    pieces.push({ start: 0, end: 0 })
+    i = 1
+  }
+  while (i < bays.length) {
+    const bay = bays[i]
+    const next = bays[i + 1]
+    const adjacent = Boolean(next) && next.leftIndex === bay.rightIndex
+    const pairs = adjacent && bay.widthM + next!.widthM <= standardBoardLengthM + 1e-6
+    if (pairs) {
+      pieces.push({ start: i, end: i + 1 })
+      i += 2
+    } else {
+      pieces.push({ start: i, end: i })
+      i += 1
     }
   }
-  return { count: twoSpanCount + oneSpanCount, twoSpanCount, oneSpanCount, totalLengthM }
+  return pieces
 }
 
-/** Plans the regular level-course facing boards: unlike the top board/cap,
- * a given course row only exists in a bay once its height needs that many
- * courses, so rows are walked one at a time and only paired across bays
- * where the row actually continues into the neighbour. */
-function planLevelCourseBoards(runs: ProfileBay[][], standardBoardLengthM: number): BoardLayerSummary {
-  const totalLengthM = runs.reduce((sum, run) => sum + run.reduce((s, b) => s + b.levelBoardLengthM, 0), 0)
-  let twoSpanCount = 0
-  let oneSpanCount = 0
+/** Folds a planned piece list into running totals plus the joints between
+ * consecutive pieces (always at the post shared by the two pieces —
+ * there's no other place a piece boundary can fall). `levelAtPost` gives
+ * the height to draw that joint at, specific to which layer/row it's on. */
+function accumulatePieces(
+  agg: { twoSpanCount: number; oneSpanCount: number; totalLengthM: number; joints: BoardJoint[] },
+  bays: ProfileBay[],
+  pieces: { start: number; end: number }[],
+  lengthOf: (bay: ProfileBay) => number,
+  levelAtPost: (postIndex: number) => number,
+  layer: BoardJoint["layer"]
+) {
+  pieces.forEach((p, idx) => {
+    if (p.end > p.start) agg.twoSpanCount++
+    else agg.oneSpanCount++
+    for (let i = p.start; i <= p.end; i++) agg.totalLengthM += lengthOf(bays[i])
+    const next = pieces[idx + 1]
+    if (next) {
+      const jointPostIndex = bays[p.end].rightIndex
+      agg.joints.push({ postIndex: jointPostIndex, levelM: levelAtPost(jointPostIndex), layer })
+    }
+  })
+}
+
+/** Plans every board layer for every run in one pass, so joint staggering
+ * can carry its alternating phase upward — row to row through the level
+ * courses, then on into the top board and (if enabled) the top cap —
+ * without every row starting back at the same phase. Each run stagger-
+ * plans independently, since runs are already split at corners and
+ * excluded bays; a corner always forces a break there regardless of
+ * phase, so staggering never needs to (and can't) continue across one. */
+function planBoardLayers(
+  runs: ProfileBay[][],
+  posts: ProfilePost[],
+  settings: CalcSettings,
+  topCapEnabled: boolean
+): { boards: BoardLayerSummary; topBoard: BoardLayerSummary; topCap: BoardLayerSummary | null } {
+  const courseAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
+  const topBoardAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
+  const topCapAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
+  const ch = settings.boardCourseHeightM
+  // schematic cap thickness, kept in sync with the diagram's own constant
+  const capThicknessM = ch * 0.25
+
   for (const run of runs) {
     const maxCourses = Math.max(0, ...run.map((b) => b.levelCourseCount))
     for (let k = 0; k < maxCourses; k++) {
       const rowBays = run.filter((b) => b.levelCourseCount > k)
-      let i = 0
-      while (i < rowBays.length) {
-        const bay = rowBays[i]
-        const next = rowBays[i + 1]
-        const pairs = Boolean(next) && next.leftIndex === bay.rightIndex
-        const pairWidthM = pairs ? bay.widthM + next!.widthM : 0
-        if (pairs && pairWidthM <= standardBoardLengthM + 1e-6) {
-          twoSpanCount++
-          i += 2
-        } else {
-          oneSpanCount++
-          i += 1
-        }
-      }
+      const phase: 0 | 1 = (k % 2) as 0 | 1
+      const pieces = planPieces(rowBays, settings.standardBoardLengthM, phase)
+      accumulatePieces(
+        courseAgg,
+        rowBays,
+        pieces,
+        (bay) => bay.widthM,
+        (postIndex) => posts[postIndex].groundLevelM + (k + 0.5) * ch,
+        "course"
+      )
+    }
+
+    // continue the alternation up from wherever the level courses left off,
+    // so the top board's joint doesn't land back on the same post as the
+    // course immediately below it
+    const topBoardPhase: 0 | 1 = (maxCourses % 2) as 0 | 1
+    const topBoardPieces = planPieces(run, settings.standardBoardLengthM, topBoardPhase)
+    accumulatePieces(topBoardAgg, run, topBoardPieces, (bay) => bay.widthM, (postIndex) => posts[postIndex].topLevelM, "topBoard")
+
+    if (topCapEnabled) {
+      const capPhase: 0 | 1 = ((maxCourses + 1) % 2) as 0 | 1
+      const capPieces = planPieces(run, settings.standardBoardLengthM, capPhase)
+      accumulatePieces(
+        topCapAgg,
+        run,
+        capPieces,
+        (bay) => bay.widthM,
+        (postIndex) => posts[postIndex].topLevelM + capThicknessM,
+        "topCap"
+      )
     }
   }
-  return { count: twoSpanCount + oneSpanCount, twoSpanCount, oneSpanCount, totalLengthM }
+
+  const finalize = (agg: typeof courseAgg): BoardLayerSummary => ({
+    count: agg.twoSpanCount + agg.oneSpanCount,
+    twoSpanCount: agg.twoSpanCount,
+    oneSpanCount: agg.oneSpanCount,
+    totalLengthM: agg.totalLengthM,
+    joints: agg.joints,
+  })
+
+  return {
+    boards: finalize(courseAgg),
+    topBoard: finalize(topBoardAgg),
+    topCap: topCapEnabled ? finalize(topCapAgg) : null,
+  }
 }
 
 /** Builds the full per-post, per-bay profile for a raked (or, with no
@@ -218,15 +299,12 @@ function planLevelCourseBoards(runs: ProfileBay[][], standardBoardLengthM: numbe
  * divide: a course run breaks at any corner post (a board can't physically
  * run past one) and at any excluded bay, and within each unbroken run it
  * prefers a single piece spanning two bays at a time — same reasoning as
- * lapped fence rails, fewer joints is stronger — falling back to a
- * single-bay piece wherever a pair wouldn't fit the standard board length
- * or there's an odd bay left over.
- *
- * On top of the level courses, every bay also gets a top/perimeter board —
- * the piece that actually follows the rake and ties the wall together
- * along its whole top edge, planned the same two-span-preferred way. An
- * optional top cap (topCapEnabled) adds one more such layer on top of
- * that, for a finished look and to protect end grain. */
+ * lapped fence rails, fewer joints is stronger. Where a run's long enough
+ * that joints can't be avoided, each row's joints are staggered onto
+ * different posts than the row below it (and the top board and top cap
+ * continue that same alternation), so joints never all stack on one post
+ * — except at a corner, which always forces every row to break there
+ * regardless, since a board can't physically run past one. */
 export function buildWallProfile(
   wallLengthM: number,
   retainedHeightM: number,
@@ -320,10 +398,7 @@ export function buildWallProfile(
 
   const validBays = bays.filter((b) => !b.needsEngineer)
   const runs = groupIntoRuns(validBays, posts)
-
-  const boards = planLevelCourseBoards(runs, settings.standardBoardLengthM)
-  const topBoard = planUniformBoardLayer(runs, settings.standardBoardLengthM)
-  const topCap = topCapEnabled ? planUniformBoardLayer(runs, settings.standardBoardLengthM) : null
+  const { boards, topBoard, topCap } = planBoardLayers(runs, posts, settings, topCapEnabled)
 
   const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
   const totalFillVolumeM3 = validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0)

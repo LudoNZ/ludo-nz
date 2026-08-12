@@ -356,38 +356,33 @@ const RetainingWallsPage = () => {
                   note="Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load."
                 />
                 <SpecCard
-                  title="Facing boards"
+                  title="Boards"
                   rows={[
-                    { label: "Boards needed", value: `${profile.boards.count}` },
-                    { label: "— continuous over 2 spans", value: `${profile.boards.twoSpanCount}` },
-                    { label: "— single-span (joint each side)", value: `${profile.boards.oneSpanCount}` },
-                    { label: "Total length", value: formatM(profile.boards.totalLengthM) },
+                    { label: "Facing boards", value: `${profile.boards.count}` },
+                    { label: "Facing — continuous (2-span)", value: `${profile.boards.twoSpanCount}` },
+                    { label: "Facing — single-span joint", value: `${profile.boards.oneSpanCount}` },
+                    { label: "Top/perimeter board", value: `${profile.topBoard.count}` },
+                    { label: "Top board — continuous (2-span)", value: `${profile.topBoard.twoSpanCount}` },
+                    { label: "Top board — single-span joint", value: `${profile.topBoard.oneSpanCount}` },
+                    ...(profile.topCap
+                      ? [
+                          { label: "Top cap", value: `${profile.topCap.count}` },
+                          { label: "Top cap — continuous (2-span)", value: `${profile.topCap.twoSpanCount}` },
+                          { label: "Top cap — single-span joint", value: `${profile.topCap.oneSpanCount}` },
+                        ]
+                      : []),
+                    {
+                      label: "Total boards, all layers",
+                      value: `${profile.boards.count + profile.topBoard.count + (profile.topCap?.count ?? 0)}`,
+                    },
+                    {
+                      label: "Total length, all layers",
+                      value: formatM(profile.boards.totalLengthM + profile.topBoard.totalLengthM + (profile.topCap?.totalLengthM ?? 0)),
+                    },
                     { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
                   ]}
-                  note="Each course is planned as real cut pieces: a board runs continuously across two post spans wherever it fits and isn't blocked by a corner post, falling back to a single span otherwise — fewer joints, stronger wall."
+                  note="Every layer (facing courses, the top/perimeter board, and the cap if enabled) is planned as real cut pieces: continuous across two post spans wherever it fits, breaking to a single span only where a corner, an excluded bay, or the standard length forces it. Where joints can't be avoided, each row's joints are staggered onto different posts than the row below — see the elevation diagram's join marks."
                 />
-                <SpecCard
-                  title="Top/perimeter board"
-                  rows={[
-                    { label: "Boards needed", value: `${profile.topBoard.count}` },
-                    { label: "— continuous over 2 spans", value: `${profile.topBoard.twoSpanCount}` },
-                    { label: "— single-span (joint each side)", value: `${profile.topBoard.oneSpanCount}` },
-                    { label: "Total length", value: formatM(profile.topBoard.totalLengthM) },
-                  ]}
-                  note="Runs along the very top of the wall, following the rake, tying the posts together — always cut and planned separately from the level facing-board courses below it."
-                />
-                {profile.topCap && (
-                  <SpecCard
-                    title="Top cap"
-                    rows={[
-                      { label: "Boards needed", value: `${profile.topCap.count}` },
-                      { label: "— continuous over 2 spans", value: `${profile.topCap.twoSpanCount}` },
-                      { label: "— single-span (joint each side)", value: `${profile.topCap.oneSpanCount}` },
-                      { label: "Total length", value: formatM(profile.topCap.totalLengthM) },
-                    ]}
-                    note="Optional finishing layer over the top board and post tops — protects end grain and gives a clean, level-looking cap line."
-                  />
-                )}
                 <SpecCard
                   title="Drainage backfill"
                   rows={[{ label: "Volume", value: formatM3(profile.totalBackfillVolumeM3) }]}

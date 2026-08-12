@@ -201,6 +201,28 @@ const WallProfileDiagram: React.FC<{
           )
         })}
 
+        {/* board joints — every piece runs bay-to-bay, so a joint always
+            lands exactly on a post; these just mark where. Course joints
+            are kept subtle since there can be many, stacked one per row;
+            top board/cap joints are bolder since there's at most one per
+            post and they matter more structurally */}
+        {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].map((j, idx) => {
+          const p = posts[j.postIndex]
+          const tickHalfW = p.widthM * 0.9
+          const cls = j.layer === "course" ? styles.jointMarkCourse : j.layer === "topBoard" ? styles.jointMarkTopBoard : styles.jointMarkTopCap
+          return (
+            <line
+              key={`joint-${j.layer}-${j.postIndex}-${idx}`}
+              x1={p.xM - tickHalfW}
+              x2={p.xM + tickHalfW}
+              y1={y(j.levelM)}
+              y2={y(j.levelM)}
+              className={cls}
+              strokeWidth={strokeW * (j.layer === "course" ? 0.35 : 0.5)}
+            />
+          )
+        })}
+
         {/* ground and top-of-wall lines, following the actual rake */}
         <polyline
           points={posts.map((p) => `${p.xM},${y(p.groundLevelM)}`).join(" ")}
@@ -237,6 +259,9 @@ const WallProfileDiagram: React.FC<{
         </span>
         <span>
           <span className={styles.cornerMarkSwatch} /> Corner post — boards break here, never run through
+        </span>
+        <span>
+          <span className={styles.jointTickSwatch} /> Board joint — staggered row to row, always lands on a post
         </span>
         {profile.engineerPostIndices.length > 0 && (
           <span>

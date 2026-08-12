@@ -90,6 +90,25 @@
   stroke: var(--background);
 }
 
+// board-joint ticks — straddle the post so they visibly land "on" it.
+// Course joints are kept faint since there's one per row, potentially
+// many; top board/cap joints are bolder, matching their own fill colour,
+// since there's at most one per post and it's more structurally notable
+.jointMarkCourse {
+  stroke: var(--foreground);
+  opacity: 0.35;
+}
+
+.jointMarkTopBoard {
+  stroke: #4a2f14;
+  opacity: 0.9;
+}
+
+.jointMarkTopCap {
+  stroke: #8b5a2b;
+  opacity: 0.9;
+}
+
 .selectedRing {
   fill: none;
   stroke: #2a78d6;
@@ -151,6 +170,14 @@
 .topCapFillSwatch {
   background-color: #e0b374;
   border: 1px solid #8b5a2b;
+}
+
+.jointTickSwatch {
+  width: 14px;
+  height: 2px;
+  display: inline-block;
+  background-color: #4a2f14;
+  flex-shrink: 0;
 }
 
 .postBlockedSwatch {
