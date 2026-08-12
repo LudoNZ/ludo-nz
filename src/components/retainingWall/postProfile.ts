@@ -144,13 +144,24 @@ export function buildWallProfile(
   const layoutRow = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
   const { postCount, actualSpacingM } = calcPostLayout(wallLengthM, layoutRow.maxSpacingM)
 
-  const sortedCpIndices = Object.keys(controlPoints)
+  // Both end posts always anchor the rake — at the page's default level
+  // unless the user has explicitly overridden that particular end — so
+  // editing one end (or any single interior post) blends back to the
+  // default at the far side instead of flat-extending across the whole
+  // wall. Only synthesised for resolving levels; isControlPoint below
+  // still reflects just what the user actually set.
+  const lastIndex = postCount - 1
+  const effectiveControlPoints: ControlPoints = { ...controlPoints }
+  if (effectiveControlPoints[0] === undefined) effectiveControlPoints[0] = DEFAULT_LEVEL(retainedHeightM)
+  if (effectiveControlPoints[lastIndex] === undefined) effectiveControlPoints[lastIndex] = DEFAULT_LEVEL(retainedHeightM)
+
+  const sortedCpIndices = Object.keys(effectiveControlPoints)
     .map(Number)
     .filter((i) => i >= 0 && i < postCount)
     .sort((a, b) => a - b)
 
   const posts: ProfilePost[] = Array.from({ length: postCount }, (_, i) => {
-    const { groundLevelM, topLevelM } = resolveLevel(i, controlPoints, sortedCpIndices, retainedHeightM)
+    const { groundLevelM, topLevelM } = resolveLevel(i, effectiveControlPoints, sortedCpIndices, retainedHeightM)
     const localHeightM = topLevelM - groundLevelM
     const needsEngineer = localHeightM > ENGINEER_HEIGHT_LIMIT_M || localHeightM <= 0
     // clamp purely for the lookup/drawing below — a post over the limit
