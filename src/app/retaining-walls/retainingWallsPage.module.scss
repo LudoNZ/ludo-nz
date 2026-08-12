@@ -69,6 +69,13 @@
   margin-bottom: 1.5rem;
 }
 
+.diagramCard {
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+}
+
 .resultsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));

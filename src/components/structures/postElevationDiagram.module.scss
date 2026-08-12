@@ -1,0 +1,107 @@
+.diagramRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+// literal material colours rather than the app's green accent palette —
+// these represent real things (timber, concrete) so they don't theme-swap
+// with light/dark mode, just chosen to read reasonably in both
+.postAbove {
+  fill: #8b5a2b;
+}
+
+// same timber, but visibly "buried": muted and outlined with a dashed
+// stroke, the same visual language technical drawings use for hidden/
+// below-grade elements
+.postBelow {
+  fill: #8b5a2b;
+  opacity: 0.5;
+  stroke: #8b5a2b;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+// solid and distinctly cool-toned so it reads as concrete/gravel against
+// the warm browns everywhere else, rather than blending with the
+// underground wash beneath it
+.hole {
+  fill: #8b8f96;
+}
+
+.rail {
+  fill: #c9924f;
+  stroke: #8b5a2b;
+}
+
+.underground {
+  fill: #7c5a3a;
+  opacity: 0.08;
+}
+
+.groundLine {
+  stroke: var(--foreground);
+  opacity: 0.8;
+}
+
+.dimText {
+  fill: var(--foreground);
+  opacity: 0.75;
+}
+
+.dimLine {
+  stroke: var(--foreground);
+  opacity: 0.55;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.82rem;
+  opacity: 0.85;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.postAboveSwatch {
+  background-color: #8b5a2b;
+}
+
+.postBelowSwatch {
+  background-color: #8b5a2b;
+  opacity: 0.5;
+  border: 1px dashed #8b5a2b;
+}
+
+.holeSwatch {
+  background-color: #8b8f96;
+}
+
+.railSwatch {
+  background-color: #c9924f;
+  border: 1px solid #8b5a2b;
+}
+
+.hint {
+  font-size: 0.78rem;
+  opacity: 0.6;
+}

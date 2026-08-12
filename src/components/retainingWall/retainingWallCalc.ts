@@ -104,11 +104,13 @@ export function calcRetainingWall(wallLengthM: number, retainedHeightM: number, 
 
   const embedmentM = retainedHeightM * referenceRow.embedmentRatio + GRAVEL_BASE_ALLOWANCE_M
   const sizeLabel = referenceRow.postSizeLabel
-  const holeDiameterM = postWidthM(sizeLabel) * HOLE_DIAMETER_MULTIPLIER
+  const widthM = postWidthM(sizeLabel)
+  const holeDiameterM = widthM * HOLE_DIAMETER_MULTIPLIER
   const holeVolumeM3 = calcHoleVolumeM3(holeDiameterM, embedmentM)
 
   const posts: PostSpec = {
     sizeLabel,
+    widthM,
     spacingM: actualSpacingM,
     count: postCount,
     lengthM: embedmentM + retainedHeightM,

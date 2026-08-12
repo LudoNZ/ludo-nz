@@ -5,6 +5,7 @@ import PostsSummary from "@/components/structures/postsSummary"
 import RailsSummary from "@/components/structures/railsSummary"
 import InfillSummary from "@/components/structures/infillSummary"
 import LaborSummary from "@/components/structures/laborSummary"
+import PostElevationDiagram from "@/components/structures/postElevationDiagram"
 import {
   calcRetainingWall,
   ENGINEER_HEIGHT_LIMIT_M,
@@ -101,6 +102,9 @@ const RetainingWallsPage = () => {
         </div>
       ) : result ? (
         <>
+          <div className={styles.diagramCard}>
+            <PostElevationDiagram posts={result.posts} rails={result.rails} />
+          </div>
           <div className={styles.resultsGrid}>
             <PostsSummary
               spec={result.posts}

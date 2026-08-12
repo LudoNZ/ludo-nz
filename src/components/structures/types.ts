@@ -7,6 +7,9 @@
 export interface PostSpec {
   /** e.g. "100 x 100mm" */
   sizeLabel: string
+  /** m, the post's own face width — used for drawing to scale (see
+   * postElevationDiagram.tsx), not just display */
+  widthM: number
   /** m, evenly divided across the run — see calcPostLayout */
   spacingM: number
   count: number
