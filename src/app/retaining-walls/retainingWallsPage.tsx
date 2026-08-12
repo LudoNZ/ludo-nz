@@ -22,6 +22,7 @@ const RetainingWallsPage = () => {
   const [retainedHeight, setRetainedHeight] = useState("1.0")
   const [soil, setSoil] = useState<SoilType>("firmClay")
   const [showReferenceTable, setShowReferenceTable] = useState(false)
+  const [showFullWall, setShowFullWall] = useState(false)
 
   const wallLengthM = parseFloat(wallLength)
   const retainedHeightM = parseFloat(retainedHeight)
@@ -103,7 +104,19 @@ const RetainingWallsPage = () => {
       ) : result ? (
         <>
           <div className={styles.diagramCard}>
-            <PostElevationDiagram posts={result.posts} rails={result.rails} />
+            <div className={styles.diagramHeader}>
+              <h3>Elevation</h3>
+              {result.posts.count > 3 && (
+                <button type="button" className={styles.toggleBtn} onClick={() => setShowFullWall((s) => !s)}>
+                  {showFullWall ? "Show typical section only" : `Show entire wall (${result.posts.count} posts) →`}
+                </button>
+              )}
+            </div>
+            <PostElevationDiagram
+              posts={result.posts}
+              rails={result.rails}
+              postsToShow={showFullWall ? result.posts.count : 3}
+            />
           </div>
           <div className={styles.resultsGrid}>
             <PostsSummary

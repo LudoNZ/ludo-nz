@@ -76,6 +76,30 @@
   border-radius: var(--borderRadius);
 }
 
+.diagramHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.6rem;
+
+  h3 {
+    font-size: 1.05rem;
+    color: var(--color-primary);
+  }
+}
+
+.toggleBtn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+}
+
 .resultsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));

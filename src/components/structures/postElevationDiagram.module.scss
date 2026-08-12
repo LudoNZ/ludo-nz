@@ -17,22 +17,22 @@
   fill: #8b5a2b;
 }
 
-// same timber, but visibly "buried": muted and outlined with a dashed
-// stroke, the same visual language technical drawings use for hidden/
-// below-grade elements
+// same timber as above ground, kept solid rather than faded — the post
+// itself doesn't get any bigger below grade, only the hole around it
+// does, and a faded post read as "the buried post is one big blurry
+// mass" rather than "a normal post sitting inside a wider hole"
 .postBelow {
   fill: #8b5a2b;
-  opacity: 0.5;
-  stroke: #8b5a2b;
+  stroke: #6e4620;
   stroke-width: 1;
-  stroke-dasharray: 4 3;
 }
 
-// solid and distinctly cool-toned so it reads as concrete/gravel against
-// the warm browns everywhere else, rather than blending with the
-// underground wash beneath it
+// distinctly cool-toned (concrete, not more timber) and semi-transparent
+// — a halo of fill around the post, not a second solid mass competing
+// with it for attention
 .hole {
   fill: #8b8f96;
+  opacity: 0.55;
 }
 
 .rail {
@@ -88,12 +88,12 @@
 
 .postBelowSwatch {
   background-color: #8b5a2b;
-  opacity: 0.5;
-  border: 1px dashed #8b5a2b;
+  border: 1px solid #6e4620;
 }
 
 .holeSwatch {
   background-color: #8b8f96;
+  opacity: 0.55;
 }
 
 .railSwatch {
