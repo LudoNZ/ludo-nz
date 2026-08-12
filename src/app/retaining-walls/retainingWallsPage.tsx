@@ -11,6 +11,7 @@ import {
   SOIL_LABELS,
   SoilType,
 } from "@/components/retainingWall/retainingWallCalc"
+import ReferenceTableModal from "./referenceTableModal"
 import styles from "./retainingWallsPage.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
@@ -19,6 +20,7 @@ const RetainingWallsPage = () => {
   const [wallLength, setWallLength] = useState("5")
   const [retainedHeight, setRetainedHeight] = useState("1.0")
   const [soil, setSoil] = useState<SoilType>("firmClay")
+  const [showReferenceTable, setShowReferenceTable] = useState(false)
 
   const wallLengthM = parseFloat(wallLength)
   const retainedHeightM = parseFloat(retainedHeight)
@@ -74,6 +76,16 @@ const RetainingWallsPage = () => {
         </div>
       </form>
 
+      <button type="button" className={styles.referenceLink} onClick={() => setShowReferenceTable(true)}>
+        View the reference table this calculator uses →
+      </button>
+
+      <ReferenceTableModal
+        isOpen={showReferenceTable}
+        onClose={() => setShowReferenceTable(false)}
+        activeRow={result?.referenceRow ?? null}
+      />
+
       {needsEngineer ? (
         <div className={styles.engineerWarning}>
           <h2>⚠ This needs a chartered engineer</h2>
@@ -90,7 +102,10 @@ const RetainingWallsPage = () => {
       ) : result ? (
         <>
           <div className={styles.resultsGrid}>
-            <PostsSummary spec={result.posts} />
+            <PostsSummary
+              spec={result.posts}
+              note="Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load. See the reference table for other soil/height bands."
+            />
             <RailsSummary spec={result.rails} />
             <InfillSummary spec={result.infill} />
             <LaborSummary estimate={result.labor} />

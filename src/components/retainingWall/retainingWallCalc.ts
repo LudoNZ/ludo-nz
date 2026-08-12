@@ -14,24 +14,54 @@ export const SOIL_LABELS: Record<SoilType, string> = {
  * threshold for an un-surcharged retaining wall. */
 export const ENGINEER_HEIGHT_LIMIT_M = 1.5
 
-// tightest/loosest spacing per soil type, in metres, at 0m and at the
-// engineer-limit height respectively — interpolated between the two by
-// calcPostSpacingM so spacing tightens smoothly as height (or how loose
-// the ground is) increases, never leaving the 1.0-1.5m band asked for
-const SOIL_SPACING_M: Record<SoilType, { atZeroHeight: number; atLimitHeight: number }> = {
-  firmClay: { atZeroHeight: 1.5, atLimitHeight: 1.2 },
-  looseSandy: { atZeroHeight: 1.3, atLimitHeight: 1.0 },
-  fill: { atZeroHeight: 1.2, atLimitHeight: 1.0 },
+/** One row of the reference table this whole calculator is driven by —
+ * banded by "up to this retained height", not a smooth curve, so it reads
+ * (and displays) as a real ready-reference table rather than a hidden
+ * formula. A post embeds deeper, proportionally, than a simple fence post
+ * would: it has to resist the retained soil's lateral (overturning)
+ * pressure over its whole embedded length, not just wind load on an
+ * above-ground picket area, so embedmentRatio is deliberately well above
+ * the "bury a third of the post" rule of thumb a fence gets away with. */
+export interface WallSpecRow {
+  soil: SoilType
+  /** m, this row applies for walls up to and including this retained height */
+  maxHeightM: number
+  postSizeLabel: string
+  /** m, tightest allowed centres at this row's height/soil */
+  maxSpacingM: number
+  /** fraction of the retained height embedded in undisturbed ground below
+   * it (the gravel base pad sits below that again — see
+   * GRAVEL_BASE_ALLOWANCE_M — and isn't counted as structural embedment) */
+  embedmentRatio: number
 }
 
-/** m, retained height below which a post steps from 100x100 to 150x150 —
- * see calcPostSizeLabel. */
-const POST_SIZE_STEP_HEIGHT_M = 1.0
+export const REFERENCE_TABLE: WallSpecRow[] = [
+  { soil: "firmClay", maxHeightM: 0.6, postSizeLabel: "100 x 100mm", maxSpacingM: 1.5, embedmentRatio: 0.5 },
+  { soil: "firmClay", maxHeightM: 1.0, postSizeLabel: "100 x 100mm", maxSpacingM: 1.35, embedmentRatio: 0.5 },
+  { soil: "firmClay", maxHeightM: 1.5, postSizeLabel: "150 x 150mm", maxSpacingM: 1.2, embedmentRatio: 0.55 },
 
-// rule-of-thumb constants — all in one place so they're easy to see and
-// tune together, rather than scattered through the calculation
-const GRAVEL_BASE_ALLOWANCE_M = 0.1 // under the post, below its embedment
-const HOLE_DIAMETER_MULTIPLIER = 3 // hole ~3x the post's own width
+  { soil: "looseSandy", maxHeightM: 0.6, postSizeLabel: "100 x 100mm", maxSpacingM: 1.3, embedmentRatio: 0.55 },
+  { soil: "looseSandy", maxHeightM: 1.0, postSizeLabel: "100 x 100mm", maxSpacingM: 1.15, embedmentRatio: 0.6 },
+  { soil: "looseSandy", maxHeightM: 1.5, postSizeLabel: "150 x 150mm", maxSpacingM: 1.0, embedmentRatio: 0.65 },
+
+  { soil: "fill", maxHeightM: 0.6, postSizeLabel: "100 x 100mm", maxSpacingM: 1.2, embedmentRatio: 0.6 },
+  { soil: "fill", maxHeightM: 1.0, postSizeLabel: "150 x 150mm", maxSpacingM: 1.05, embedmentRatio: 0.68 },
+  { soil: "fill", maxHeightM: 1.5, postSizeLabel: "150 x 150mm", maxSpacingM: 1.0, embedmentRatio: 0.75 },
+]
+
+/** The row this calculator is using for a given soil/height — whichever
+ * band's maxHeightM is the smallest one the retained height still fits
+ * under. Exported so the page can highlight exactly this row when it
+ * shows the reference table. */
+export function findReferenceRow(retainedHeightM: number, soil: SoilType): WallSpecRow {
+  const rows = REFERENCE_TABLE.filter((r) => r.soil === soil).sort((a, b) => a.maxHeightM - b.maxHeightM)
+  return rows.find((r) => retainedHeightM <= r.maxHeightM + 1e-6) ?? rows[rows.length - 1]
+}
+
+// constants outside the table — construction detail, not soil/height-
+// dependent design values
+const GRAVEL_BASE_ALLOWANCE_M = 0.1 // drainage/bearing pad under the post, below its embedment
+const HOLE_DIAMETER_MULTIPLIER = 3 // hole ~3x the post's own width — common rule of thumb
 const BOARD_COURSE_HEIGHT_M = 0.2 // 200mm treated-pine sleeper
 const STANDARD_BOARD_LENGTH_M = 3.0
 const BACKFILL_THICKNESS_M = 0.15 // compacted drainage gravel behind the boards
@@ -41,16 +71,12 @@ const HOURS_PER_POST = 0.75
 const HOURS_PER_BOARD = 0.2
 const HOURS_PER_M3_BACKFILL = 0.5
 
-/** Tighter for a taller wall and for looser ground, interpolated linearly
- * between each soil type's 0m and engineer-limit-height spacing. */
 export function calcPostSpacingM(retainedHeightM: number, soil: SoilType): number {
-  const { atZeroHeight, atLimitHeight } = SOIL_SPACING_M[soil]
-  const t = Math.min(1, Math.max(0, retainedHeightM / ENGINEER_HEIGHT_LIMIT_M))
-  return atZeroHeight - (atZeroHeight - atLimitHeight) * t
+  return findReferenceRow(retainedHeightM, soil).maxSpacingM
 }
 
-export function calcPostSizeLabel(retainedHeightM: number): string {
-  return retainedHeightM < POST_SIZE_STEP_HEIGHT_M ? "100 x 100mm" : "150 x 150mm"
+export function calcPostSizeLabel(retainedHeightM: number, soil: SoilType): string {
+  return findReferenceRow(retainedHeightM, soil).postSizeLabel
 }
 
 function postWidthM(sizeLabel: string): number {
@@ -62,6 +88,7 @@ export interface RetainingWallResult {
   rails: RailSpec
   infill: InfillSpec
   labor: LaborEstimate
+  referenceRow: WallSpecRow
 }
 
 /** Full DIY spec for a timber-post-and-board retaining wall, or null if
@@ -72,11 +99,11 @@ export function calcRetainingWall(wallLengthM: number, retainedHeightM: number, 
   if (retainedHeightM > ENGINEER_HEIGHT_LIMIT_M) return null
   if (!(wallLengthM > 0) || !(retainedHeightM > 0)) return null
 
-  const spacingM = calcPostSpacingM(retainedHeightM, soil)
-  const { postCount, actualSpacingM } = calcPostLayout(wallLengthM, spacingM)
+  const referenceRow = findReferenceRow(retainedHeightM, soil)
+  const { postCount, actualSpacingM } = calcPostLayout(wallLengthM, referenceRow.maxSpacingM)
 
-  const embedmentM = retainedHeightM / 3 + GRAVEL_BASE_ALLOWANCE_M
-  const sizeLabel = calcPostSizeLabel(retainedHeightM)
+  const embedmentM = retainedHeightM * referenceRow.embedmentRatio + GRAVEL_BASE_ALLOWANCE_M
+  const sizeLabel = referenceRow.postSizeLabel
   const holeDiameterM = postWidthM(sizeLabel) * HOLE_DIAMETER_MULTIPLIER
   const holeVolumeM3 = calcHoleVolumeM3(holeDiameterM, embedmentM)
 
@@ -126,5 +153,5 @@ export function calcRetainingWall(wallLengthM: number, retainedHeightM: number, 
     totalHours: SETUP_HOURS + postsHours + railsHours + infillHours,
   }
 
-  return { posts, rails, infill, labor }
+  return { posts, rails, infill, labor, referenceRow }
 }
