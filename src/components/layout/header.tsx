@@ -56,6 +56,9 @@ const Header = () => {
           <li>
             <Link href={"/menu"}>Menu</Link>
           </li>
+          <li>
+            <Link href={"/retaining-walls"}>Retaining Walls</Link>
+          </li>
           {!!auth &&
             !!auth.currentUser && ( //user loged in
               <>
