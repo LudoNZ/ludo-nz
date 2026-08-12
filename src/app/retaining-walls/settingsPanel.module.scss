@@ -3,6 +3,12 @@
   max-height: 85vh;
   overflow-y: auto;
   padding: 1.5rem;
+
+  h3 {
+    font-size: 0.95rem;
+    color: var(--color-primary);
+    margin: 1.25rem 0 0.6rem;
+  }
 }
 
 .header {
@@ -37,12 +43,6 @@
   opacity: 0.75;
   line-height: 1.45;
   margin-bottom: 1rem;
-}
-
-h3 {
-  font-size: 0.95rem;
-  color: var(--color-primary);
-  margin: 1.25rem 0 0.6rem;
 }
 
 .field {
