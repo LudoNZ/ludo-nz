@@ -1,12 +1,31 @@
 "use client"
 
 import { useMemo } from "react"
-import { WallProfile } from "./postProfile"
-import { GRAVEL_BASE_ALLOWANCE_M } from "./retainingWallCalc"
+import { ProfilePost, WallProfile } from "./postProfile"
+import { BOARD_COURSE_HEIGHT_M, GRAVEL_BASE_ALLOWANCE_M } from "./retainingWallCalc"
 import styles from "./wallProfileDiagram.module.scss"
 
 const formatLevel = (relativeM: number, rlDatumM: number): string =>
   rlDatumM !== 0 ? `RL ${(rlDatumM + relativeM).toFixed(3)}` : `${relativeM.toFixed(2)} m`
+
+/** Boards are laid level, not individually raked — only the very top
+ * course follows the slope, cut/set to it, while every course under that
+ * stacks level from the lower of the two posts' ground levels. Splits a
+ * bay into however many full level courses fit under the *shorter* of its
+ * two posts, plus one capping region on top that's level too when the
+ * bay isn't actually raked (both posts the same height) and a sloped
+ * quadrilateral when it is. */
+function bayCourses(a: ProfilePost, b: ProfilePost) {
+  const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
+  const minTopM = Math.min(a.topLevelM, b.topLevelM)
+  const fullCourses = Math.max(0, Math.floor((minTopM - baseLevelM) / BOARD_COURSE_HEIGHT_M))
+  const levelTopM = baseLevelM + fullCourses * BOARD_COURSE_HEIGHT_M
+  const levelCourses = Array.from({ length: fullCourses }, (_, i) => ({
+    y0: baseLevelM + i * BOARD_COURSE_HEIGHT_M,
+    y1: baseLevelM + (i + 1) * BOARD_COURSE_HEIGHT_M,
+  }))
+  return { levelCourses, capTopM: levelTopM, capTopAM: a.topLevelM, capTopBM: b.topLevelM }
+}
 
 /** Interactive front elevation of a raked (or, with no control points set,
  * perfectly uniform) wall: sloped ground and top-of-wall lines through
@@ -56,19 +75,35 @@ const WallProfileDiagram: React.FC<{
   return (
     <div className={styles.diagramRoot}>
       <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Wall elevation profile, to scale">
-        {/* bay board fill, one quadrilateral per bay so it follows the rake
-            rather than assuming a flat rectangle */}
+        {/* bay board fill: level courses stacked from the ground, same as a
+            real build — only the top course actually follows the rake */}
         {bays.map((bay) => {
           const a = posts[bay.leftIndex]
           const b = posts[bay.rightIndex]
-          const points = `${a.xM},${y(a.groundLevelM)} ${b.xM},${y(b.groundLevelM)} ${b.xM},${y(b.topLevelM)} ${a.xM},${y(a.topLevelM)}`
+          if (bay.needsEngineer) {
+            const points = `${a.xM},${y(a.groundLevelM)} ${b.xM},${y(b.groundLevelM)} ${b.xM},${y(b.topLevelM)} ${a.xM},${y(a.topLevelM)}`
+            return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
+          }
+          const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b)
           return (
-            <polygon
-              key={`bay-${bay.leftIndex}`}
-              points={points}
-              className={bay.needsEngineer ? styles.bayBlocked : styles.bayFill}
-              strokeWidth={strokeW}
-            />
+            <g key={`bay-${bay.leftIndex}`}>
+              {levelCourses.map((c) => (
+                <rect
+                  key={c.y0}
+                  x={a.xM}
+                  y={y(c.y1)}
+                  width={b.xM - a.xM}
+                  height={c.y1 - c.y0}
+                  className={styles.bayFill}
+                  strokeWidth={strokeW * 0.4}
+                />
+              ))}
+              <polygon
+                points={`${a.xM},${y(capTopM)} ${b.xM},${y(capTopM)} ${b.xM},${y(capTopBM)} ${a.xM},${y(capTopAM)}`}
+                className={styles.bayFill}
+                strokeWidth={strokeW * 0.4}
+              />
+            </g>
           )
         })}
 
