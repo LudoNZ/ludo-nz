@@ -21,10 +21,12 @@
 // itself doesn't get any bigger below grade, only the hole around it
 // does, and a faded post read as "the buried post is one big blurry
 // mass" rather than "a normal post sitting inside a wider hole"
+// stroke-width is set inline (see postElevationDiagram.tsx), not here —
+// this diagram's coordinate system is in metres, so a flat CSS value like
+// `1` would be a full metre thick, swallowing a 0.1m-wide post outright
 .postBelow {
   fill: #8b5a2b;
   stroke: #6e4620;
-  stroke-width: 1;
 }
 
 // distinctly cool-toned (concrete, not more timber) and semi-transparent

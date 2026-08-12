@@ -123,7 +123,14 @@ const PostElevationDiagram: React.FC<{
         {postXs.map((x) => (
           <g key={`post-${x}`}>
             <rect x={x - posts.widthM / 2} y={-aboveGroundM} width={posts.widthM} height={aboveGroundM} className={styles.postAbove} />
-            <rect x={x - posts.widthM / 2} y={0} width={posts.widthM} height={posts.embedmentM} className={styles.postBelow} />
+            <rect
+              x={x - posts.widthM / 2}
+              y={0}
+              width={posts.widthM}
+              height={posts.embedmentM}
+              className={styles.postBelow}
+              strokeWidth={strokeW * 0.5}
+            />
           </g>
         ))}
 
