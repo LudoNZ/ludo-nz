@@ -21,6 +21,12 @@ export interface PostSpec {
   holeVolumeM3: number
   /** m³, holeVolumeM3 × count */
   totalFillVolumeM3: number
+  /** m, base pad of fill left under the post's own tip (compacted gravel
+   * for drainage/bearing, typically) — not counted as embedment depth
+   * itself, but part of the hole. 0/undefined if the post is set straight
+   * on the hole bottom. Lets the elevation diagram draw the post stopping
+   * short of the hole floor instead of bottoming out on it. */
+  baseAllowanceM?: number
 }
 
 export interface RailSpec {

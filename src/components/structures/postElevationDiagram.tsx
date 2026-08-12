@@ -85,6 +85,9 @@ const PostElevationDiagram: React.FC<{
     truncated,
   } = geometry
   const courses = Array.from({ length: rails.courseCount }, (_, i) => i)
+  // clamp defensively — a base allowance that somehow exceeded the
+  // embedment itself would otherwise draw the post with negative height
+  const postDepthM = Math.max(0, posts.embedmentM - (posts.baseAllowanceM ?? 0))
 
   return (
     <div className={styles.diagramRoot}>
@@ -119,7 +122,11 @@ const PostElevationDiagram: React.FC<{
         ))}
 
         {/* posts: above-ground and embedded portions styled distinctly so
-            the pile depth reads at a glance */}
+            the pile depth reads at a glance. The embedded portion stops
+            short of the hole floor by baseAllowanceM, if the domain
+            calculator supplied one, so a sliver of fill shows under the
+            post's own tip instead of it looking like it bottoms out
+            directly on bare ground. */}
         {postXs.map((x) => (
           <g key={`post-${x}`}>
             <rect x={x - posts.widthM / 2} y={-aboveGroundM} width={posts.widthM} height={aboveGroundM} className={styles.postAbove} />
@@ -127,7 +134,7 @@ const PostElevationDiagram: React.FC<{
               x={x - posts.widthM / 2}
               y={0}
               width={posts.widthM}
-              height={posts.embedmentM}
+              height={postDepthM}
               className={styles.postBelow}
               strokeWidth={strokeW * 0.5}
             />

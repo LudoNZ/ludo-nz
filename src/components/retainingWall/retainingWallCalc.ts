@@ -118,6 +118,7 @@ export function calcRetainingWall(wallLengthM: number, retainedHeightM: number, 
     holeDiameterM,
     holeVolumeM3,
     totalFillVolumeM3: holeVolumeM3 * postCount,
+    baseAllowanceM: GRAVEL_BASE_ALLOWANCE_M,
   }
 
   // facing boards run horizontally, stacked from ground level to the top
