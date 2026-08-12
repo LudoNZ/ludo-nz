@@ -54,6 +54,7 @@ export interface SavedWallDesign {
   rlDatumM: number
   controlPoints: ControlPoints
   cornerPosts: CornerPosts
+  topCapEnabled: boolean
   calcSettings: CalcSettings
   createdAt: Date
 }
@@ -75,6 +76,7 @@ export const subscribeToDesigns = (onData: (list: SavedWallDesign[]) => void, on
             rlDatumM: data.rlDatumM ?? 0,
             controlPoints: (data.controlPoints ?? {}) as ControlPoints,
             cornerPosts: (data.cornerPosts ?? {}) as CornerPosts,
+            topCapEnabled: Boolean(data.topCapEnabled),
             calcSettings: data.calcSettings as CalcSettings,
             createdAt: data.createdAt?.toDate?.() ?? new Date(),
           }

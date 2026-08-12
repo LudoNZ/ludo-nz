@@ -50,6 +50,9 @@ const RetainingWallsPage = () => {
   // of what the standard-length/2-span piece planning would otherwise do.
   // Reset alongside controlPoints, same staleness reasoning.
   const [cornerPosts, setCornerPosts] = useState<CornerPosts>({})
+  // whole-wall option, not per-post — an extra flat board laid over the
+  // top board/post tops for a finished look and to protect end grain
+  const [topCapEnabled, setTopCapEnabled] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -76,7 +79,7 @@ const RetainingWallsPage = () => {
 
   const profile =
     !isNaN(wallLengthM) && !isNaN(retainedHeightM)
-      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, cornerPosts, rlDatumM, calcSettings)
+      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, cornerPosts, topCapEnabled, rlDatumM, calcSettings)
       : null
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
@@ -129,6 +132,7 @@ const RetainingWallsPage = () => {
       rlDatumM,
       controlPoints,
       cornerPosts,
+      topCapEnabled,
       calcSettings,
     })
   }
@@ -142,6 +146,7 @@ const RetainingWallsPage = () => {
     setCalcSettingsName(`From "${design.name}"`)
     setControlPoints(design.controlPoints)
     setCornerPosts(design.cornerPosts)
+    setTopCapEnabled(design.topCapEnabled)
     setSelectedIndex(null)
   }
 
@@ -278,10 +283,17 @@ const RetainingWallsPage = () => {
           )}
 
           <div className={styles.diagramCard}>
-            <h3>Elevation</h3>
+            <div className={styles.diagramCardHeader}>
+              <h3>Elevation</h3>
+              <label className={styles.topCapToggle}>
+                <input type="checkbox" checked={topCapEnabled} onChange={(e) => setTopCapEnabled(e.target.checked)} />
+                <span>Add top cap</span>
+              </label>
+            </div>
             <WallProfileDiagram
               profile={profile}
               settings={calcSettings}
+              topCapEnabled={topCapEnabled}
               selectedIndex={selectedIndex}
               onSelectPost={setSelectedIndex}
             />
@@ -346,14 +358,36 @@ const RetainingWallsPage = () => {
                 <SpecCard
                   title="Facing boards"
                   rows={[
-                    { label: "Boards needed", value: `${profile.totalBoardCount}` },
-                    { label: "— continuous over 2 spans", value: `${profile.twoSpanBoardCount}` },
-                    { label: "— single-span (joint each side)", value: `${profile.oneSpanBoardCount}` },
-                    { label: "Total length", value: formatM(profile.totalBoardLengthM) },
+                    { label: "Boards needed", value: `${profile.boards.count}` },
+                    { label: "— continuous over 2 spans", value: `${profile.boards.twoSpanCount}` },
+                    { label: "— single-span (joint each side)", value: `${profile.boards.oneSpanCount}` },
+                    { label: "Total length", value: formatM(profile.boards.totalLengthM) },
                     { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
                   ]}
                   note="Each course is planned as real cut pieces: a board runs continuously across two post spans wherever it fits and isn't blocked by a corner post, falling back to a single span otherwise — fewer joints, stronger wall."
                 />
+                <SpecCard
+                  title="Top/perimeter board"
+                  rows={[
+                    { label: "Boards needed", value: `${profile.topBoard.count}` },
+                    { label: "— continuous over 2 spans", value: `${profile.topBoard.twoSpanCount}` },
+                    { label: "— single-span (joint each side)", value: `${profile.topBoard.oneSpanCount}` },
+                    { label: "Total length", value: formatM(profile.topBoard.totalLengthM) },
+                  ]}
+                  note="Runs along the very top of the wall, following the rake, tying the posts together — always cut and planned separately from the level facing-board courses below it."
+                />
+                {profile.topCap && (
+                  <SpecCard
+                    title="Top cap"
+                    rows={[
+                      { label: "Boards needed", value: `${profile.topCap.count}` },
+                      { label: "— continuous over 2 spans", value: `${profile.topCap.twoSpanCount}` },
+                      { label: "— single-span (joint each side)", value: `${profile.topCap.oneSpanCount}` },
+                      { label: "Total length", value: formatM(profile.topCap.totalLengthM) },
+                    ]}
+                    note="Optional finishing layer over the top board and post tops — protects end grain and gives a clean, level-looking cap line."
+                  />
+                )}
                 <SpecCard
                   title="Drainage backfill"
                   rows={[{ label: "Volume", value: formatM3(profile.totalBackfillVolumeM3) }]}

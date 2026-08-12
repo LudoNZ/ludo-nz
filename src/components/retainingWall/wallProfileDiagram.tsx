@@ -39,13 +39,17 @@ function bayCourses(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number) 
 const WallProfileDiagram: React.FC<{
   profile: WallProfile
   settings: CalcSettings
+  topCapEnabled: boolean
   selectedIndex: number | null
   onSelectPost: (index: number) => void
-}> = ({ profile, settings, selectedIndex, onSelectPost }) => {
+}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost }) => {
   const geometry = useMemo(() => {
     const { posts } = profile
     const spanM = posts[posts.length - 1].xM - posts[0].xM
-    const tops = posts.map((p) => p.topLevelM)
+    // leave room above the highest post top for the optional top cap's
+    // schematic sliver, same thickness used when actually drawing it
+    const capThicknessM = topCapEnabled ? settings.boardCourseHeightM * 0.25 : 0
+    const tops = posts.map((p) => p.topLevelM + capThicknessM)
     const bottoms = posts.map((p) => p.groundLevelM - p.embedmentM)
     const maxTop = Math.max(...tops)
     const minBottom = Math.min(...bottoms)
@@ -64,7 +68,7 @@ const WallProfileDiagram: React.FC<{
     const vbH = maxTop - minBottom + padTop + padBottom
 
     return { spanM, maxTop, minBottom, fontSize, strokeW, padX, viewBox: `${vbMinX} ${vbMinY} ${vbW} ${vbH}` }
-  }, [profile])
+  }, [profile, settings.boardCourseHeightM, topCapEnabled])
 
   const { fontSize, strokeW, viewBox } = geometry
   const { posts, bays, rlDatumM } = profile
@@ -86,6 +90,10 @@ const WallProfileDiagram: React.FC<{
             return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
           }
           const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b, settings.boardCourseHeightM)
+          // purely a schematic sliver on top of the top board — real
+          // thickness isn't tracked (no calc setting for it), just enough
+          // to read as a distinct capping layer at any wall scale
+          const capThicknessM = settings.boardCourseHeightM * 0.25
           return (
             <g key={`bay-${bay.leftIndex}`}>
               {levelCourses.map((c) => (
@@ -99,11 +107,20 @@ const WallProfileDiagram: React.FC<{
                   strokeWidth={strokeW * 0.4}
                 />
               ))}
+              {/* top/perimeter board — the piece that actually follows the
+                  rake, visually distinct from the level courses below it */}
               <polygon
                 points={`${a.xM},${y(capTopM)} ${b.xM},${y(capTopM)} ${b.xM},${y(capTopBM)} ${a.xM},${y(capTopAM)}`}
-                className={styles.bayFill}
+                className={styles.topBoardFill}
                 strokeWidth={strokeW * 0.4}
               />
+              {topCapEnabled && (
+                <polygon
+                  points={`${a.xM},${y(capTopAM)} ${b.xM},${y(capTopBM)} ${b.xM},${y(capTopBM + capThicknessM)} ${a.xM},${y(capTopAM + capThicknessM)}`}
+                  className={styles.topCapFill}
+                  strokeWidth={strokeW * 0.3}
+                />
+              )}
             </g>
           )
         })}
@@ -207,6 +224,14 @@ const WallProfileDiagram: React.FC<{
         <span>
           <span className={`${styles.swatch} ${styles.bayFillSwatch}`} /> Facing boards
         </span>
+        <span>
+          <span className={`${styles.swatch} ${styles.topBoardFillSwatch}`} /> Top/perimeter board
+        </span>
+        {topCapEnabled && (
+          <span>
+            <span className={`${styles.swatch} ${styles.topCapFillSwatch}`} /> Top cap
+          </span>
+        )}
         <span>
           <span className={styles.controlDotSwatch} /> Set by hand — others rake between these
         </span>

@@ -54,8 +54,24 @@ export interface ProfileBay {
    * cover the taller side regardless of how the ground line reads */
   heightM: number
   needsEngineer: boolean
-  courseCount: number
-  boardLengthM: number
+  /** full-height level facing-board courses stacked from the ground —
+   * not counting the top/perimeter board, which is always the final
+   * piece on top of these (see WallProfile.topBoard) */
+  levelCourseCount: number
+  levelBoardLengthM: number
+}
+
+/** One category of board (regular facing courses, the top/perimeter
+ * board, or the optional top cap) planned into real cut pieces — see the
+ * run/piece loops in buildWallProfile. */
+export interface BoardLayerSummary {
+  count: number
+  /** of count, how many are cut as one continuous length across two bays
+   * (the preferred, stronger layout) vs. broken to a single bay because a
+   * corner, an excluded bay, or the standard board length forced it */
+  twoSpanCount: number
+  oneSpanCount: number
+  totalLengthM: number
 }
 
 export interface WallProfile {
@@ -65,14 +81,14 @@ export interface WallProfile {
   bays: ProfileBay[]
   postsBySize: { sizeLabel: string; count: number }[]
   totalFillVolumeM3: number
-  totalBoardCount: number
-  /** of totalBoardCount, how many are cut as one continuous length across
-   * two bays (the preferred, stronger layout) vs. broken to a single bay
-   * because a corner, an excluded bay, or the standard board length forced
-   * it */
-  twoSpanBoardCount: number
-  oneSpanBoardCount: number
-  totalBoardLengthM: number
+  /** regular level facing-board courses */
+  boards: BoardLayerSummary
+  /** the continuous perimeter/capping board along the very top of the
+   * wall, following the rake — always present (one per valid bay) */
+  topBoard: BoardLayerSummary
+  /** an extra flat board laid over the top board/post tops for a
+   * finished look and to protect end grain — null when not enabled */
+  topCap: BoardLayerSummary | null
   totalBackfillVolumeM3: number
   labor: LaborEstimate
   engineerPostIndices: number[]
@@ -113,6 +129,81 @@ function resolveLevel(
   }
 }
 
+/** Groups bays into unbroken runs: contiguous, and not separated by a
+ * corner post. An excluded (needsEngineer) bay already breaks contiguity
+ * on its own, since it's missing from `bays` entirely by the time this
+ * runs (callers pass only the valid ones in). */
+function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBay[][] {
+  const runs: ProfileBay[][] = []
+  for (const bay of validBays) {
+    const lastRun = runs[runs.length - 1]
+    const prevBay = lastRun?.[lastRun.length - 1]
+    const breaksRun = !prevBay || prevBay.rightIndex !== bay.leftIndex || posts[prevBay.rightIndex].isCorner
+    if (breaksRun) runs.push([bay])
+    else lastRun.push(bay)
+  }
+  return runs
+}
+
+/** Plans a board layer that has exactly one segment per bay running the
+ * bay's full width (the top/perimeter board, and the optional top cap) —
+ * simpler than the level-course planner below since there's no per-row
+ * presence check, every valid bay always has one. Same preference: pair
+ * two bays into one continuous piece wherever it fits the standard board
+ * length, otherwise fall back to a single bay. */
+function planUniformBoardLayer(runs: ProfileBay[][], standardBoardLengthM: number): BoardLayerSummary {
+  const totalLengthM = runs.reduce((sum, run) => sum + run.reduce((s, b) => s + b.widthM, 0), 0)
+  let twoSpanCount = 0
+  let oneSpanCount = 0
+  for (const run of runs) {
+    let i = 0
+    while (i < run.length) {
+      const bay = run[i]
+      const next = run[i + 1]
+      const pairs = Boolean(next) && bay.widthM + next!.widthM <= standardBoardLengthM + 1e-6
+      if (pairs) {
+        twoSpanCount++
+        i += 2
+      } else {
+        oneSpanCount++
+        i += 1
+      }
+    }
+  }
+  return { count: twoSpanCount + oneSpanCount, twoSpanCount, oneSpanCount, totalLengthM }
+}
+
+/** Plans the regular level-course facing boards: unlike the top board/cap,
+ * a given course row only exists in a bay once its height needs that many
+ * courses, so rows are walked one at a time and only paired across bays
+ * where the row actually continues into the neighbour. */
+function planLevelCourseBoards(runs: ProfileBay[][], standardBoardLengthM: number): BoardLayerSummary {
+  const totalLengthM = runs.reduce((sum, run) => sum + run.reduce((s, b) => s + b.levelBoardLengthM, 0), 0)
+  let twoSpanCount = 0
+  let oneSpanCount = 0
+  for (const run of runs) {
+    const maxCourses = Math.max(0, ...run.map((b) => b.levelCourseCount))
+    for (let k = 0; k < maxCourses; k++) {
+      const rowBays = run.filter((b) => b.levelCourseCount > k)
+      let i = 0
+      while (i < rowBays.length) {
+        const bay = rowBays[i]
+        const next = rowBays[i + 1]
+        const pairs = Boolean(next) && next.leftIndex === bay.rightIndex
+        const pairWidthM = pairs ? bay.widthM + next!.widthM : 0
+        if (pairs && pairWidthM <= standardBoardLengthM + 1e-6) {
+          twoSpanCount++
+          i += 2
+        } else {
+          oneSpanCount++
+          i += 1
+        }
+      }
+    }
+  }
+  return { count: twoSpanCount + oneSpanCount, twoSpanCount, oneSpanCount, totalLengthM }
+}
+
 /** Builds the full per-post, per-bay profile for a raked (or, with no
  * control points set, perfectly uniform) wall. Post count and spacing are
  * still established once from the base wallLengthM/retainedHeightM/soil
@@ -129,13 +220,20 @@ function resolveLevel(
  * prefers a single piece spanning two bays at a time — same reasoning as
  * lapped fence rails, fewer joints is stronger — falling back to a
  * single-bay piece wherever a pair wouldn't fit the standard board length
- * or there's an odd bay left over. See the run/piece loop below. */
+ * or there's an odd bay left over.
+ *
+ * On top of the level courses, every bay also gets a top/perimeter board —
+ * the piece that actually follows the rake and ties the wall together
+ * along its whole top edge, planned the same two-span-preferred way. An
+ * optional top cap (topCapEnabled) adds one more such layer on top of
+ * that, for a finished look and to protect end grain. */
 export function buildWallProfile(
   wallLengthM: number,
   retainedHeightM: number,
   soil: SoilType,
   controlPoints: ControlPoints,
   cornerPosts: CornerPosts,
+  topCapEnabled: boolean,
   rlDatumM: number,
   settings: CalcSettings
 ): WallProfile | null {
@@ -197,15 +295,22 @@ export function buildWallProfile(
     const needsEngineer = a.needsEngineer || b.needsEngineer
     const heightM = Math.max(a.retainedHeightM, b.retainedHeightM)
     const widthM = b.xM - a.xM
-    const courseCount = needsEngineer ? 0 : Math.ceil(heightM / settings.boardCourseHeightM)
+    // level courses fill from the lower of the two ground levels up to the
+    // lower of the two top levels — the shorter side's own top — same
+    // geometry the diagram draws; whatever's left above that (always
+    // something, even if it's a full course's worth) is the top board,
+    // not counted here
+    const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
+    const minTopM = Math.min(a.topLevelM, b.topLevelM)
+    const levelCourseCount = needsEngineer ? 0 : Math.max(0, Math.floor((minTopM - baseLevelM) / settings.boardCourseHeightM))
     bays.push({
       leftIndex: a.index,
       rightIndex: b.index,
       widthM,
       heightM,
       needsEngineer,
-      courseCount,
-      boardLengthM: needsEngineer ? 0 : widthM * courseCount,
+      levelCourseCount,
+      levelBoardLengthM: needsEngineer ? 0 : widthM * levelCourseCount,
     })
   }
 
@@ -214,52 +319,16 @@ export function buildWallProfile(
   for (const p of validPosts) sizeCounts.set(p.sizeLabel, (sizeCounts.get(p.sizeLabel) ?? 0) + 1)
 
   const validBays = bays.filter((b) => !b.needsEngineer)
-  const totalBoardLengthM = validBays.reduce((sum, b) => sum + b.boardLengthM, 0)
+  const runs = groupIntoRuns(validBays, posts)
 
-  // Group bays into unbroken runs: contiguous, and not separated by a
-  // corner post (an excluded bay already breaks contiguity, since it's
-  // missing from validBays entirely).
-  const runs: ProfileBay[][] = []
-  for (const bay of validBays) {
-    const lastRun = runs[runs.length - 1]
-    const prevBay = lastRun?.[lastRun.length - 1]
-    const breaksRun = !prevBay || prevBay.rightIndex !== bay.leftIndex || posts[prevBay.rightIndex].isCorner
-    if (breaksRun) runs.push([bay])
-    else lastRun.push(bay)
-  }
-
-  // Within each run, plan actual course pieces: walk each course row (a
-  // row only exists in a bay once its height needs that many courses),
-  // preferring one piece across two bays at a time and falling back to a
-  // single bay wherever a pair doesn't fit the standard board length, the
-  // row doesn't continue into the next bay, or there's an odd one left.
-  let twoSpanBoardCount = 0
-  let oneSpanBoardCount = 0
-  for (const run of runs) {
-    const maxCourses = Math.max(0, ...run.map((b) => b.courseCount))
-    for (let k = 0; k < maxCourses; k++) {
-      const rowBays = run.filter((b) => b.courseCount > k)
-      let i = 0
-      while (i < rowBays.length) {
-        const bay = rowBays[i]
-        const next = rowBays[i + 1]
-        const pairs = Boolean(next) && next.leftIndex === bay.rightIndex
-        const pairWidthM = pairs ? bay.widthM + next.widthM : 0
-        if (pairs && pairWidthM <= settings.standardBoardLengthM + 1e-6) {
-          twoSpanBoardCount++
-          i += 2
-        } else {
-          oneSpanBoardCount++
-          i += 1
-        }
-      }
-    }
-  }
-  const totalBoardCount = twoSpanBoardCount + oneSpanBoardCount
+  const boards = planLevelCourseBoards(runs, settings.standardBoardLengthM)
+  const topBoard = planUniformBoardLayer(runs, settings.standardBoardLengthM)
+  const topCap = topCapEnabled ? planUniformBoardLayer(runs, settings.standardBoardLengthM) : null
 
   const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
   const totalFillVolumeM3 = validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0)
 
+  const totalBoardCount = boards.count + topBoard.count + (topCap?.count ?? 0)
   const postsHours = validPosts.length * settings.hoursPerPost
   const railsHours = totalBoardCount * settings.hoursPerBoard
   const infillHours = totalBackfillVolumeM3 * settings.hoursPerM3Backfill
@@ -271,10 +340,9 @@ export function buildWallProfile(
     bays,
     postsBySize: Array.from(sizeCounts.entries()).map(([sizeLabel, count]) => ({ sizeLabel, count })),
     totalFillVolumeM3,
-    totalBoardCount,
-    twoSpanBoardCount,
-    oneSpanBoardCount,
-    totalBoardLengthM,
+    boards,
+    topBoard,
+    topCap,
     totalBackfillVolumeM3,
     labor: {
       setupHours: settings.setupHours,

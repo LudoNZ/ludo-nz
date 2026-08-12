@@ -32,6 +32,22 @@
   opacity: 0.9;
 }
 
+// the top/perimeter board — same timber, drawn a shade darker/richer so it
+// reads as the distinct capping piece it is, not just another course
+.topBoardFill {
+  fill: #a5723a;
+  stroke: #6e4620;
+  opacity: 0.95;
+}
+
+// optional top cap — a lighter, contrasting finish so it clearly sits
+// above everything else
+.topCapFill {
+  fill: #e0b374;
+  stroke: #8b5a2b;
+  opacity: 0.95;
+}
+
 // a post or bay whose local height is over the DIY limit — visually
 // distinct (danger colour, hatched) rather than just omitted, since the
 // whole point is to show *where* the profile goes out of scope
@@ -124,6 +140,16 @@
 
 .bayFillSwatch {
   background-color: #c9924f;
+  border: 1px solid #8b5a2b;
+}
+
+.topBoardFillSwatch {
+  background-color: #a5723a;
+  border: 1px solid #6e4620;
+}
+
+.topCapFillSwatch {
+  background-color: #e0b374;
   border: 1px solid #8b5a2b;
 }
 
