@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useAuth } from "@/context/auth"
 import styles from "./calculatorsPage.module.scss"
 
 interface LiveCalculator {
@@ -10,7 +9,6 @@ interface LiveCalculator {
   description: string
   tags: string[]
   link: string
-  requiresLogin?: boolean
 }
 
 interface PlannedCalculator {
@@ -28,7 +26,6 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
       "Plan a full deck's board layout from your actual stock on hand — joist grid, staggered joins, a real cutting plan, and a shopping list, not just a square-metre estimate.",
     tags: ["Board layout", "Cutting plan", "Stock tracking"],
     link: "/decking",
-    requiresLogin: true,
   },
   {
     id: "retaining-walls",
@@ -129,13 +126,9 @@ const PLANNED_CALCULATORS: PlannedCalculator[] = [
 /** Landing page for every estimating tool on the site — what's actually
  * built (Decking, Retaining Walls) plus a roadmap of what's planned next,
  * so the "coming soon" list itself sets expectations rather than those
- * tools just quietly not existing yet. Public: Decking is auth-gated on
- * its own page (redirects to /login), but the showcase itself should be
- * browsable by anyone, same as the rest of the site. */
+ * tools just quietly not existing yet. Every card is freely browsable —
+ * Decking only asks for a login once you actually try to save a deck. */
 const CalculatorsPage = () => {
-  const auth = useAuth()
-  const loggedIn = !!auth?.currentUser
-
   return (
     <div className={styles.calculatorsPage}>
       <section className={styles.hero}>
@@ -160,7 +153,7 @@ const CalculatorsPage = () => {
                   </span>
                 ))}
               </div>
-              <span className={styles.cardLink}>{c.requiresLogin && !loggedIn ? "Login to use →" : "Open →"}</span>
+              <span className={styles.cardLink}>Open →</span>
             </Link>
           ))}
         </div>
