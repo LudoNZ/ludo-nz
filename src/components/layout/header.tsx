@@ -57,6 +57,9 @@ const Header = () => {
             <Link href={"/menu"}>Menu</Link>
           </li>
           <li>
+            <Link href={"/calculators"}>Calculators</Link>
+          </li>
+          <li>
             <Link href={"/retaining-walls"}>Retaining Walls</Link>
           </li>
           {!!auth &&
