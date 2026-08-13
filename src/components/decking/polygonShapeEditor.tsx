@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { BoardDirection, formatLength } from "./types"
 import {
   DeckPoint,
@@ -24,6 +24,67 @@ const edgeLength = (points: DeckPoint[], i: number): number => {
   const a = points[i]
   const b = points[(i + 1) % points.length]
   return Math.hypot(b.x - a.x, b.y - a.y)
+}
+
+const parseIntOrNull = (raw: string): number | null => {
+  if (raw.trim() === "") return null
+  const n = Math.round(Number(raw))
+  return Number.isFinite(n) ? n : null
+}
+const parseFloatOrNull = (raw: string): number | null => {
+  if (raw.trim() === "") return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+/** A numeric input decoupled from the live value it displays via local
+ * "draft" text state, committing only on blur/Enter rather than on every
+ * keystroke. Without this, an input fully controlled by the computed value
+ * (X/Y/angle/length here) snaps straight back the instant you clear it —
+ * an empty or partial string always fails to parse, so the rejected edit
+ * leaves the old value in place — which makes it impossible to backspace
+ * out a whole number and type a fresh one; you're stuck editing around at
+ * least one leftover digit. Same pattern deckShapeEditor.tsx already uses
+ * for its own dimension chips. Resyncing the draft off `value` (rather
+ * than only on mount) still catches every other way the number can change
+ * underneath this field — switching which corner/side is selected, or a
+ * drag on the very corner whose panel is open — without interfering with
+ * typing, since `value` only changes once a commit actually lands. */
+const DraftNumberInput: React.FC<{
+  value: string
+  parse: (raw: string) => number | null
+  onCommit: (n: number) => void
+  inputMode?: "numeric" | "decimal"
+  step?: number
+  min?: number
+}> = ({ value, parse, onCommit, inputMode, step, min }) => {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => setDraft(value), [value])
+
+  const commit = () => {
+    const n = parse(draft)
+    if (n !== null) onCommit(n)
+    else setDraft(value)
+  }
+
+  return (
+    <input
+      type="number"
+      inputMode={inputMode ?? "numeric"}
+      step={step}
+      min={min}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          e.currentTarget.blur()
+        }
+        if (e.key === "Escape") setDraft(value)
+      }}
+    />
+  )
 }
 
 type Selection = { kind: "vertex" | "edge"; index: number } | null
@@ -307,20 +368,18 @@ const PolygonShapeEditor: React.FC<{
               <div className={styles.pointFields}>
                 <label>
                   X (mm)
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={p.x}
-                    onChange={(e) => setVertexPosition(i, { x: Math.round(Number(e.target.value) || 0), y: p.y })}
+                  <DraftNumberInput
+                    value={String(p.x)}
+                    parse={parseIntOrNull}
+                    onCommit={(v) => setVertexPosition(i, { x: v, y: p.y })}
                   />
                 </label>
                 <label>
                   Y (mm)
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={p.y}
-                    onChange={(e) => setVertexPosition(i, { x: p.x, y: Math.round(Number(e.target.value) || 0) })}
+                  <DraftNumberInput
+                    value={String(p.y)}
+                    parse={parseIntOrNull}
+                    onCommit={(v) => setVertexPosition(i, { x: p.x, y: v })}
                   />
                 </label>
               </div>
@@ -331,15 +390,12 @@ const PolygonShapeEditor: React.FC<{
                   <div className={styles.pointFields}>
                     <label>
                       Angle (°)
-                      <input
-                        type="number"
+                      <DraftNumberInput
+                        value={interiorAngleDeg(points, i).toFixed(1)}
+                        parse={parseFloatOrNull}
+                        onCommit={(v) => setVertexAngle(i, v)}
                         inputMode="decimal"
                         step={0.1}
-                        value={interiorAngleDeg(points, i).toFixed(1)}
-                        onChange={(e) => {
-                          const v = Number(e.target.value)
-                          if (!isNaN(v)) setVertexAngle(i, v)
-                        }}
                       />
                     </label>
                   </div>
@@ -378,15 +434,14 @@ const PolygonShapeEditor: React.FC<{
                   <div className={styles.pointFields}>
                     <label>
                       Length (mm)
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        value={Math.round(edgeLength(points, i))}
-                        onChange={(e) => {
-                          const v = Math.round(Number(e.target.value) || 0)
-                          if (v > 0) setEdgeLength(i, v)
+                      <DraftNumberInput
+                        value={String(Math.round(edgeLength(points, i)))}
+                        parse={(raw) => {
+                          const n = parseIntOrNull(raw)
+                          return n !== null && n > 0 ? n : null
                         }}
+                        onCommit={(v) => setEdgeLength(i, v)}
+                        min={1}
                       />
                     </label>
                   </div>
