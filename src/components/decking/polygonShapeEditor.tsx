@@ -22,11 +22,15 @@ import styles from "./polygonShapeEditor.module.scss"
 const DRAG_THRESHOLD_PX = 5
 
 /** A second tap on the same corner/side within this many ms of the first
- * counts as a double-tap (or a mouse double-click — the same handler
- * covers both, since a touch tap and a click both fire onClick/pointerUp)
- * and opens the quick-entry modal instead of just toggling the inline
- * panel. */
-const DOUBLE_TAP_MS = 400
+ * counts as a double-tap and opens the quick-entry modal instead of just
+ * toggling the inline panel. Generous on purpose: the two taps this times
+ * are the *processed* events (after React's re-render from the first tap,
+ * and whatever click-synthesis delay the browser adds on top of the raw
+ * touches), not the raw touch timestamps — a real double-tap can easily
+ * end up several hundred ms apart by the time both handlers actually run,
+ * especially on a slower phone. Mouse users get a second, independent path
+ * that doesn't depend on this constant at all — see onDoubleClick below. */
+const DOUBLE_TAP_MS = 600
 
 const edgeLength = (points: DeckPoint[], i: number): number => {
   const a = points[i]
@@ -130,18 +134,24 @@ const PolygonShapeEditor: React.FC<{
   const lastTapRef = useRef<{ kind: "vertex" | "edge"; index: number; time: number } | null>(null)
   const n = points.length
 
+  const openModal = (target: { kind: "vertex" | "edge"; index: number }) => {
+    lastTapRef.current = null
+    setSelection(null)
+    setModalTarget(target)
+    setModalOpen(true)
+  }
+
   // Single tap/click: toggles the inline panel, exactly as before. A
   // second tap/click on the *same* corner or side within DOUBLE_TAP_MS
   // instead opens the same fields in a modal, and closes the inline panel
-  // so the two don't end up open on top of each other.
+  // so the two don't end up open on top of each other. Mouse users also
+  // get this for free via the browser's own native dblclick (wired
+  // separately below) regardless of how this timing constant is tuned.
   const handleTap = (target: { kind: "vertex" | "edge"; index: number }) => {
     const now = Date.now()
     const last = lastTapRef.current
     if (last && last.kind === target.kind && last.index === target.index && now - last.time < DOUBLE_TAP_MS) {
-      lastTapRef.current = null
-      setSelection(null)
-      setModalTarget(target)
-      setModalOpen(true)
+      openModal(target)
       return
     }
     lastTapRef.current = { ...target, time: now }
@@ -438,6 +448,7 @@ const PolygonShapeEditor: React.FC<{
                   r={strokeW * 8}
                   className={styles.hitArea}
                   onClick={() => handleTap({ kind: "edge", index: i })}
+                  onDoubleClick={() => openModal({ kind: "edge", index: i })}
                   role="button"
                   tabIndex={0}
                   aria-label={`Side ${i + 1}, ${formatLength(edgeLength(points, i))} — tap to set an exact length, double-tap for a quick-entry popup`}
@@ -498,6 +509,7 @@ const PolygonShapeEditor: React.FC<{
                 onPointerDown={handlePointerDown(i)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp(i)}
+                onDoubleClick={() => openModal({ kind: "vertex", index: i })}
                 role="button"
                 tabIndex={0}
                 aria-label={`Corner ${i + 1} — drag to move, tap to set exact position, angle, or remove it, double-tap for a quick-entry popup`}
