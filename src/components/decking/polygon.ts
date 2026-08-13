@@ -178,29 +178,55 @@ export function scaleAroundPoint(points: DeckPoint[], anchor: DeckPoint, factor:
   }))
 }
 
+/** Every edge that could currently serve as "the" automatic one (see
+ * solvePolygon) — unlocked itself, and neither of its two corners has a
+ * locked angle either, since an automatic edge's own two corners can't be
+ * independently angled (same reason its length can't be independently
+ * set). At least one always exists as long as nothing's over-constrained
+ * — polygonShapeEditor.tsx is responsible for never offering a lock that
+ * would empty this list (see its edgeForcedAuto/vertexForcedAuto). */
+export function candidateAutoEdges(
+  n: number,
+  lockedEdgeLengths: Record<string, number>,
+  lockedVertexAngles: Record<string, number>
+): number[] {
+  const indices: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (lockedEdgeLengths[String(i)] !== undefined) continue
+    if (lockedVertexAngles[String(i)] !== undefined) continue
+    if (lockedVertexAngles[String((i + 1) % n)] !== undefined) continue
+    indices.push(i)
+  }
+  return indices
+}
+
 /** Recomputes the polygon from a set of locked side lengths/corner angles
  * (keyed by index as a string, same as manualJoins elsewhere in this
  * app) — every unlocked side/angle just keeps its current value, so only
- * what's actually downstream of a lock moves. Walks the perimeter from
- * `points[0]` (never moves) along edge 0's *current* world direction
- * (also preserved, so unrelated edits don't spontaneously rotate the
- * shape): edge `i` uses its locked length if set, else its current
- * length; the turn at each vertex uses its locked angle if set, else its
- * current angle.
+ * what's actually downstream of a lock moves.
  *
- * Edge `n-1` (back to points[0]) and the angle *at* points[0] are never
- * independently applied from a lock — whatever's in lockedEdgeLengths["n-1"]
- * or lockedVertexAngles["0"] is ignored. A closed shape can't have every
- * side and every angle independently fixed at once (same reason a
- * triangle's three angles always sum to 180°); leaving exactly one side
- * and one corner to always close the loop this way means the walk is
- * always well-defined — no solver, no iteration, no possible failure to
- * converge. The caller (polygonShapeEditor.tsx) is responsible for not
- * offering a lock on that one side/corner in the first place. */
+ * `autoEdgeIndex` is the one edge treated as the implicit "closer" —
+ * never read from lockedEdgeLengths, and its own two corners are never
+ * read from lockedVertexAngles either (see candidateAutoEdges above).
+ * Walks the perimeter starting at that edge's *far* corner (`autoEdgeIndex
+ * + 1`, which never moves) along that corner's outgoing edge's *current*
+ * world direction (also preserved, so unrelated edits don't spontaneously
+ * rotate the shape): each edge uses its locked length if set, else its
+ * current length; the turn at each corner uses its locked angle if set,
+ * else its current angle.
+ *
+ * A closed shape can't have every side and every angle independently
+ * fixed at once (same reason a triangle's three angles always sum to
+ * 180°); leaving exactly one side (and, as a consequence, its two end
+ * corners) to always close the loop this way means the walk is always
+ * well-defined — no solver, no iteration, no possible failure to
+ * converge. Which side that is can move around freely (any edge, chosen
+ * by the caller) — it's only ever *one* at a time that has to give. */
 export function solvePolygon(
   points: DeckPoint[],
   lockedEdgeLengths: Record<string, number>,
-  lockedVertexAngles: Record<string, number>
+  lockedVertexAngles: Record<string, number>,
+  autoEdgeIndex: number
 ): DeckPoint[] {
   const n = points.length
   if (n < 3) return points
@@ -212,23 +238,31 @@ export function solvePolygon(
     return Math.hypot(b.x - a.x, b.y - a.y)
   }
 
-  const result: DeckPoint[] = [points[0]]
-  let dir = Math.atan2(points[1].y - points[0].y, points[1].x - points[0].x)
+  const anchorIndex = (autoEdgeIndex + 1) % n
+  const result: DeckPoint[] = new Array(n)
+  result[anchorIndex] = points[anchorIndex]
 
-  for (let i = 0; i < n - 1; i++) {
-    const length = lockedEdgeLengths[String(i)] ?? currentEdgeLength(i)
-    const from = result[i]
-    result.push({
-      x: Math.round(from.x + length * Math.cos(dir)),
-      y: Math.round(from.y + length * Math.sin(dir)),
-    })
+  const anchorNext = points[(anchorIndex + 1) % n]
+  let dir = Math.atan2(anchorNext.y - points[anchorIndex].y, anchorNext.x - points[anchorIndex].x)
+  let prevPoint = points[anchorIndex]
 
-    if (i < n - 2) {
-      const vertexIndex = i + 1
-      const lockedAngle = lockedVertexAngles[String(vertexIndex)]
-      const turn = lockedAngle !== undefined ? (lockedAngle - 180) * winding : turnAngleDeg(points, vertexIndex)
+  for (let step = 0; step < n - 1; step++) {
+    const edgeIndex = (anchorIndex + step) % n
+    const length = lockedEdgeLengths[String(edgeIndex)] ?? currentEdgeLength(edgeIndex)
+    const nextIndex = (edgeIndex + 1) % n
+    const nextPoint = {
+      x: Math.round(prevPoint.x + length * Math.cos(dir)),
+      y: Math.round(prevPoint.y + length * Math.sin(dir)),
+    }
+    result[nextIndex] = nextPoint
+
+    if (step < n - 2) {
+      const lockedAngle = lockedVertexAngles[String(nextIndex)]
+      const turn = lockedAngle !== undefined ? (lockedAngle - 180) * winding : turnAngleDeg(points, nextIndex)
       dir += (turn * Math.PI) / 180
     }
+
+    prevPoint = nextPoint
   }
 
   return result

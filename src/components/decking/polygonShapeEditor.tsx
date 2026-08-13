@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Modal } from "@/app/elements/Modal/modal"
 import { BoardDirection, formatLength } from "./types"
 import {
+  candidateAutoEdges,
   DeckPoint,
   insertMidpointOnLongestEdge,
   interiorAngleDeg,
@@ -171,11 +172,26 @@ const PolygonShapeEditor: React.FC<{
 
   // A closed shape can't have every side length *and* every corner angle
   // independently fixed at once (same reason a triangle's three angles
-  // always sum to 180°) — exactly one side and one corner always stay
-  // automatic so solvePolygon's walk is always well-defined. Which ones:
-  // see solvePolygon's own doc comment for why it's these two specifically.
-  const autoEdgeIndex = n - 1
-  const autoAngleIndex = 0
+  // always sum to 180°) — exactly one side, and as a consequence its two
+  // end corners, always stay automatic so solvePolygon's walk is always
+  // well-defined. Which one moves around freely with whatever you've
+  // actually locked — see candidateAutoEdges' own doc comment — rather
+  // than being pinned to a specific corner regardless of what you do.
+  const candidates = useMemo(
+    () => candidateAutoEdges(n, lockedEdgeLengths, lockedVertexAngles),
+    [n, lockedEdgeLengths, lockedVertexAngles]
+  )
+  // An edge can be locked unless it's the *only* remaining candidate —
+  // locking it would leave none, so the shape could no longer close.
+  const edgeForcedAuto = (i: number) => candidates.length === 1 && candidates[0] === i
+  // A corner's angle can be locked unless every remaining candidate edge
+  // touches it — locking it would then disqualify all of them at once
+  // (an automatic edge's own two corners can't be independently angled),
+  // leaving none.
+  const vertexForcedAuto = (v: number) =>
+    lockedVertexAngles[String(v)] === undefined &&
+    candidates.length > 0 &&
+    candidates.every((e) => e === v || (e + 1) % n === v)
   const hasAnyLock = Object.keys(lockedEdgeLengths).length > 0 || Object.keys(lockedVertexAngles).length > 0
 
   const { viewBox, strokeW, vbW, vbH } = useMemo(() => {
@@ -256,6 +272,20 @@ const PolygonShapeEditor: React.FC<{
     if (!d?.dragging) handleTap({ kind: "vertex", index })
   }
 
+  // Recomputes which edge solvePolygon should treat as the closer for
+  // whatever the *new* lock set is about to become — the currently
+  // rendered `candidates` above reflects the locks *before* this edit,
+  // which isn't necessarily still valid once a lock is added or removed.
+  // Preferring the last edge among whichever candidates remain is purely
+  // for a stable, unsurprising starting point (matches what this always
+  // defaulted to before it became dynamic) — solvePolygon's result is
+  // identical no matter which valid candidate is picked.
+  const pickAutoEdge = (cands: number[]) => (cands.includes(n - 1) ? n - 1 : (cands[cands.length - 1] ?? n - 1))
+  const solveWith = (
+    nextEdges: Record<string, number>,
+    nextAngles: Record<string, number>
+  ) => solvePolygon(points, nextEdges, nextAngles, pickAutoEdge(candidateAutoEdges(n, nextEdges, nextAngles)))
+
   // Typing an exact length/angle: the *first* lock ever set on this shape
   // scales the whole thing uniformly (preserving proportions) rather than
   // distorting it — with nothing else constrained yet, "resize to this"
@@ -274,21 +304,21 @@ const PolygonShapeEditor: React.FC<{
       return
     }
     const nextEdges = { ...lockedEdgeLengths, [String(index)]: newLength }
-    onShapeChange(solvePolygon(points, nextEdges, lockedVertexAngles), nextEdges, lockedVertexAngles)
+    onShapeChange(solveWith(nextEdges, lockedVertexAngles), nextEdges, lockedVertexAngles)
   }
   const setVertexAngle = (index: number, newAngleDeg: number) => {
     const nextAngles = { ...lockedVertexAngles, [String(index)]: newAngleDeg }
-    onShapeChange(solvePolygon(points, lockedEdgeLengths, nextAngles), lockedEdgeLengths, nextAngles)
+    onShapeChange(solveWith(lockedEdgeLengths, nextAngles), lockedEdgeLengths, nextAngles)
   }
   const resetEdge = (index: number) => {
     const nextEdges = { ...lockedEdgeLengths }
     delete nextEdges[String(index)]
-    onShapeChange(solvePolygon(points, nextEdges, lockedVertexAngles), nextEdges, lockedVertexAngles)
+    onShapeChange(solveWith(nextEdges, lockedVertexAngles), nextEdges, lockedVertexAngles)
   }
   const resetAngle = (index: number) => {
     const nextAngles = { ...lockedVertexAngles }
     delete nextAngles[String(index)]
-    onShapeChange(solvePolygon(points, lockedEdgeLengths, nextAngles), lockedEdgeLengths, nextAngles)
+    onShapeChange(solveWith(lockedEdgeLengths, nextAngles), lockedEdgeLengths, nextAngles)
   }
 
   // Adding or removing a corner changes the shape's whole structure —
@@ -332,7 +362,7 @@ const PolygonShapeEditor: React.FC<{
             <DraftNumberInput value={String(p.y)} parse={parseIntOrNull} onCommit={(v) => setVertexPosition(i, { x: p.x, y: v })} />
           </label>
         </div>
-        {i === autoAngleIndex ? (
+        {vertexForcedAuto(i) ? (
           <p className={styles.autoNote}>This corner&apos;s angle stays automatic so the shape can close.</p>
         ) : (
           <>
@@ -374,7 +404,7 @@ const PolygonShapeEditor: React.FC<{
             ✕
           </button>
         </div>
-        {i === autoEdgeIndex ? (
+        {edgeForcedAuto(i) ? (
           <p className={styles.autoNote}>This side stays automatic so the shape can close.</p>
         ) : (
           <>
