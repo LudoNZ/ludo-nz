@@ -150,6 +150,15 @@
   background-color: rgba(42, 120, 214, 0.06);
 }
 
+// wraps the same .pointPanel content when it's shown in the double-tap
+// modal instead of inline below the shape — .pointPanel itself has no
+// width of its own (it just fits whatever column it's dropped into), so
+// floating alone in the middle of the screen it needs one
+.modalPanel {
+  width: min(88vw, 22rem);
+  padding: 0.5rem;
+}
+
 .pointHeader {
   display: flex;
   justify-content: space-between;

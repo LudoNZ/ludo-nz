@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { Modal } from "@/app/elements/Modal/modal"
 import { BoardDirection, formatLength } from "./types"
 import {
   DeckPoint,
@@ -19,6 +20,13 @@ import styles from "./polygonShapeEditor.module.scss"
  * many screen pixels of movement, a pointer-down-then-up on a corner is
  * still a tap (select it), not a drag. */
 const DRAG_THRESHOLD_PX = 5
+
+/** A second tap on the same corner/side within this many ms of the first
+ * counts as a double-tap (or a mouse double-click — the same handler
+ * covers both, since a touch tap and a click both fire onClick/pointerUp)
+ * and opens the quick-entry modal instead of just toggling the inline
+ * panel. */
+const DOUBLE_TAP_MS = 400
 
 const edgeLength = (points: DeckPoint[], i: number): number => {
   const a = points[i]
@@ -110,7 +118,35 @@ const PolygonShapeEditor: React.FC<{
   const clipId = useId()
   const svgRef = useRef<SVGSVGElement>(null)
   const [selection, setSelection] = useState<Selection>(null)
+  // The quick-entry modal, for when the inline panel below the shape is
+  // fiddlier to reach than you'd like (e.g. one-handed on a phone).
+  // modalTarget deliberately isn't cleared on close — only modalOpen is —
+  // so the modal's own closing transition still has content to fade out
+  // rather than going blank a frame early; it's overwritten the next time
+  // something is double-tapped, same "sticky until replaced" reasoning as
+  // any other last-known-value.
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalTarget, setModalTarget] = useState<Selection>(null)
+  const lastTapRef = useRef<{ kind: "vertex" | "edge"; index: number; time: number } | null>(null)
   const n = points.length
+
+  // Single tap/click: toggles the inline panel, exactly as before. A
+  // second tap/click on the *same* corner or side within DOUBLE_TAP_MS
+  // instead opens the same fields in a modal, and closes the inline panel
+  // so the two don't end up open on top of each other.
+  const handleTap = (target: { kind: "vertex" | "edge"; index: number }) => {
+    const now = Date.now()
+    const last = lastTapRef.current
+    if (last && last.kind === target.kind && last.index === target.index && now - last.time < DOUBLE_TAP_MS) {
+      lastTapRef.current = null
+      setSelection(null)
+      setModalTarget(target)
+      setModalOpen(true)
+      return
+    }
+    lastTapRef.current = { ...target, time: now }
+    setSelection((s) => (s?.kind === target.kind && s.index === target.index ? null : target))
+  }
 
   const bounds = useMemo(() => polygonBounds(points), [points])
   const simple = useMemo(() => isSimplePolygon(points), [points])
@@ -207,7 +243,7 @@ const PolygonShapeEditor: React.FC<{
     const d = dragRef.current
     dragRef.current = null
     e.currentTarget.releasePointerCapture(e.pointerId)
-    if (!d?.dragging) setSelection((s) => (s?.kind === "vertex" && s.index === index ? null : { kind: "vertex", index }))
+    if (!d?.dragging) handleTap({ kind: "vertex", index })
   }
 
   // Typing an exact length/angle: the *first* lock ever set on this shape
@@ -253,6 +289,108 @@ const PolygonShapeEditor: React.FC<{
   const handleRemoveCorner = (index: number) => {
     onShapeChange(removePoint(points, index), {}, {})
     setSelection(null)
+    setModalOpen(false)
+    // unlike a normal close, this one has to drop the target too — indices
+    // shift on removal, and modalTarget is deliberately kept around through
+    // an ordinary close (see its declaration) so the closing transition has
+    // something to fade out, which would otherwise now point at a corner
+    // that no longer exists
+    setModalTarget(null)
+  }
+
+  // Shared between the inline panel below the shape and the double-tap
+  // modal — same fields, same behaviour, just a different container
+  // (and a different way to dismiss it) either way.
+  const renderVertexPanel = (i: number, onClose: () => void) => {
+    const p = points[i]
+    const angleLocked = lockedVertexAngles[String(i)] !== undefined
+    return (
+      <div className={styles.pointPanel}>
+        <div className={styles.pointHeader}>
+          <span>Corner {i + 1}</span>
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div className={styles.pointFields}>
+          <label>
+            X (mm)
+            <DraftNumberInput value={String(p.x)} parse={parseIntOrNull} onCommit={(v) => setVertexPosition(i, { x: v, y: p.y })} />
+          </label>
+          <label>
+            Y (mm)
+            <DraftNumberInput value={String(p.y)} parse={parseIntOrNull} onCommit={(v) => setVertexPosition(i, { x: p.x, y: v })} />
+          </label>
+        </div>
+        {i === autoAngleIndex ? (
+          <p className={styles.autoNote}>This corner&apos;s angle stays automatic so the shape can close.</p>
+        ) : (
+          <>
+            <div className={styles.pointFields}>
+              <label>
+                Angle (°)
+                <DraftNumberInput
+                  value={interiorAngleDeg(points, i).toFixed(1)}
+                  parse={parseFloatOrNull}
+                  onCommit={(v) => setVertexAngle(i, v)}
+                  inputMode="decimal"
+                  step={0.1}
+                />
+              </label>
+            </div>
+            {angleLocked && (
+              <button type="button" className={styles.resetBtn} onClick={() => resetAngle(i)}>
+                Reset angle to auto
+              </button>
+            )}
+          </>
+        )}
+        {n > 3 && (
+          <button type="button" className={styles.removeBtn} onClick={() => handleRemoveCorner(i)}>
+            Remove this corner
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderEdgePanel = (i: number, onClose: () => void) => {
+    const locked = lockedEdgeLengths[String(i)] !== undefined
+    return (
+      <div className={styles.pointPanel}>
+        <div className={styles.pointHeader}>
+          <span>Side {i + 1}</span>
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        {i === autoEdgeIndex ? (
+          <p className={styles.autoNote}>This side stays automatic so the shape can close.</p>
+        ) : (
+          <>
+            <div className={styles.pointFields}>
+              <label>
+                Length (mm)
+                <DraftNumberInput
+                  value={String(Math.round(edgeLength(points, i)))}
+                  parse={(raw) => {
+                    const n = parseIntOrNull(raw)
+                    return n !== null && n > 0 ? n : null
+                  }}
+                  onCommit={(v) => setEdgeLength(i, v)}
+                  min={1}
+                />
+              </label>
+            </div>
+            {locked && (
+              <button type="button" className={styles.resetBtn} onClick={() => resetEdge(i)}>
+                Reset to auto
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -299,10 +437,10 @@ const PolygonShapeEditor: React.FC<{
                   cy={midY}
                   r={strokeW * 8}
                   className={styles.hitArea}
-                  onClick={() => setSelection((s) => (s?.kind === "edge" && s.index === i ? null : { kind: "edge", index: i }))}
+                  onClick={() => handleTap({ kind: "edge", index: i })}
                   role="button"
                   tabIndex={0}
-                  aria-label={`Side ${i + 1}, ${formatLength(edgeLength(points, i))} — tap to set an exact length`}
+                  aria-label={`Side ${i + 1}, ${formatLength(edgeLength(points, i))} — tap to set an exact length, double-tap for a quick-entry popup`}
                 />
               </g>
             )
@@ -362,7 +500,7 @@ const PolygonShapeEditor: React.FC<{
                 onPointerUp={handlePointerUp(i)}
                 role="button"
                 tabIndex={0}
-                aria-label={`Corner ${i + 1} — drag to move, tap to set exact position, angle, or remove it`}
+                aria-label={`Corner ${i + 1} — drag to move, tap to set exact position, angle, or remove it, double-tap for a quick-entry popup`}
               />
             </g>
           ))}
@@ -415,115 +553,26 @@ const PolygonShapeEditor: React.FC<{
         </button>
       </div>
 
-      {selection?.kind === "vertex" &&
-        (() => {
-          const i = selection.index
-          const p = points[i]
-          const angleLocked = lockedVertexAngles[String(i)] !== undefined
-          return (
-            <div className={styles.pointPanel}>
-              <div className={styles.pointHeader}>
-                <span>Corner {i + 1}</span>
-                <button type="button" className={styles.closeBtn} onClick={() => setSelection(null)} aria-label="Close">
-                  ✕
-                </button>
-              </div>
-              <div className={styles.pointFields}>
-                <label>
-                  X (mm)
-                  <DraftNumberInput
-                    value={String(p.x)}
-                    parse={parseIntOrNull}
-                    onCommit={(v) => setVertexPosition(i, { x: v, y: p.y })}
-                  />
-                </label>
-                <label>
-                  Y (mm)
-                  <DraftNumberInput
-                    value={String(p.y)}
-                    parse={parseIntOrNull}
-                    onCommit={(v) => setVertexPosition(i, { x: p.x, y: v })}
-                  />
-                </label>
-              </div>
-              {i === autoAngleIndex ? (
-                <p className={styles.autoNote}>This corner&apos;s angle stays automatic so the shape can close.</p>
-              ) : (
-                <>
-                  <div className={styles.pointFields}>
-                    <label>
-                      Angle (°)
-                      <DraftNumberInput
-                        value={interiorAngleDeg(points, i).toFixed(1)}
-                        parse={parseFloatOrNull}
-                        onCommit={(v) => setVertexAngle(i, v)}
-                        inputMode="decimal"
-                        step={0.1}
-                      />
-                    </label>
-                  </div>
-                  {angleLocked && (
-                    <button type="button" className={styles.resetBtn} onClick={() => resetAngle(i)}>
-                      Reset angle to auto
-                    </button>
-                  )}
-                </>
-              )}
-              {n > 3 && (
-                <button type="button" className={styles.removeBtn} onClick={() => handleRemoveCorner(i)}>
-                  Remove this corner
-                </button>
-              )}
-            </div>
-          )
-        })()}
-
-      {selection?.kind === "edge" &&
-        (() => {
-          const i = selection.index
-          const locked = lockedEdgeLengths[String(i)] !== undefined
-          return (
-            <div className={styles.pointPanel}>
-              <div className={styles.pointHeader}>
-                <span>Side {i + 1}</span>
-                <button type="button" className={styles.closeBtn} onClick={() => setSelection(null)} aria-label="Close">
-                  ✕
-                </button>
-              </div>
-              {i === autoEdgeIndex ? (
-                <p className={styles.autoNote}>This side stays automatic so the shape can close.</p>
-              ) : (
-                <>
-                  <div className={styles.pointFields}>
-                    <label>
-                      Length (mm)
-                      <DraftNumberInput
-                        value={String(Math.round(edgeLength(points, i)))}
-                        parse={(raw) => {
-                          const n = parseIntOrNull(raw)
-                          return n !== null && n > 0 ? n : null
-                        }}
-                        onCommit={(v) => setEdgeLength(i, v)}
-                        min={1}
-                      />
-                    </label>
-                  </div>
-                  {locked && (
-                    <button type="button" className={styles.resetBtn} onClick={() => resetEdge(i)}>
-                      Reset to auto
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )
-        })()}
+      {selection?.kind === "vertex" && renderVertexPanel(selection.index, () => setSelection(null))}
+      {selection?.kind === "edge" && renderEdgePanel(selection.index, () => setSelection(null))}
 
       <p className={styles.hint}>
         Drag any corner to reshape the deck, or tap a corner or a side&apos;s midpoint to type an exact
-        angle or length — everything still unset just follows the shape. Boards all run one consistent
-        direction across the whole shape.
+        angle or length — everything still unset just follows the shape. Double-tap either one for a
+        quick-entry popup instead. Boards all run one consistent direction across the whole shape.
       </p>
+
+      <Modal isActive={modalOpen} closeModal={() => setModalOpen(false)}>
+        <div className={styles.modalPanel}>
+          {modalTarget?.kind === "vertex" ? (
+            renderVertexPanel(modalTarget.index, () => setModalOpen(false))
+          ) : modalTarget?.kind === "edge" ? (
+            renderEdgePanel(modalTarget.index, () => setModalOpen(false))
+          ) : (
+            <></>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
