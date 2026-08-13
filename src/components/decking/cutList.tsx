@@ -22,6 +22,10 @@ const CutList: React.FC<{
     0
   )
   const nearEdgeCount = layout.rows.reduce((sum, r) => sum + r.joins.filter((j) => j.nearEdge).length, 0)
+  // total lineal length of stock actually allocated to the plan — the
+  // full stock length of every board used, before any cutting/offcut is
+  // subtracted (see totalWasteMm for that part)
+  const usedLinealMm = layout.shoppingList.reduce((sum, s) => sum + s.used * s.stockLength, 0)
   // stock that's on hand but never even made it into the plan — every
   // length's own onHand minus however much of it got used, summed across
   // the whole shopping list (already per-length, so this is separate from
@@ -46,6 +50,10 @@ const CutList: React.FC<{
         <div className={styles.stat}>
           <strong>{layout.totalJoins}</strong>
           <span>joins</span>
+        </div>
+        <div className={styles.stat}>
+          <strong>{formatLength(usedLinealMm)}</strong>
+          <span>used lineal</span>
         </div>
         <div className={styles.stat}>
           <strong>{formatLength(layout.totalWasteMm)}</strong>
