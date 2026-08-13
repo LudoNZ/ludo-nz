@@ -38,6 +38,14 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     tags: ["Posts & boards", "RL profiles", "NZ Building Code aware"],
     link: "/retaining-walls",
   },
+  {
+    id: "mid-floor-framing",
+    title: "Mid-Floor Framing",
+    description:
+      "Joist size and spacing off a rule-of-thumb NZS 3604-style span table, hangers or skew-nail fixings, blocking, and a flooring sheet count — all with a labour estimate and a to-scale plan.",
+    tags: ["Joist spans", "Hangers", "Blocking", "Flooring"],
+    link: "/mid-floor-framing",
+  },
 ]
 
 // Ideas queued up for the same rule-of-thumb, real-materials-list treatment
@@ -59,12 +67,6 @@ const PLANNED_CALCULATORS: PlannedCalculator[] = [
     title: "Piles",
     description: "Timber pile size and spacing under a floor, from bearer spans and pile height — with a full pile and bearer materials list.",
     tags: ["Pile spacing", "Pile size", "Bearers"],
-  },
-  {
-    id: "mid-floor-framing",
-    title: "Mid-Floor Framing",
-    description: "Joist and bearer spans, sizing, and blocking for a mid-floor off the NZS 3604 span tables, with a full joist/bearer materials list.",
-    tags: ["Joist spans", "Bearer spans", "Blocking"],
   },
   {
     id: "wall-framing",
