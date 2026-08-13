@@ -1,11 +1,16 @@
 import { DeckConfig, lengthAt, LockedRow, StockItem, widthAt } from "./types"
 import { defaultExclusionCells, exclusionBounds, exclusionSetFromCells, isExcluded } from "./joinRules"
+import { polygonBounds, polygonSpanAtX, polygonSpanAtY } from "./polygon"
 
 export interface BoardSegment {
   /** stable id (row index + position within the row) for tracking completion,
    * stable as long as the deck's config and layout seed don't change */
   id: string
-  /** mm, position along the row from the square end */
+  /** mm, absolute position along the board-run axis (not relative to the
+   * row's own start) — matches row.runStart/joistPositions' coordinate
+   * space. For the classic trapezoid this is the same as "from the square
+   * end" (runStart is always 0 there); for a polygon deck it's an offset
+   * from the polygon's own bounding-box origin instead. */
   start: number
   end: number
   cutLength: number
@@ -32,6 +37,13 @@ export interface RowPlan {
    * length, if boards run along the rake) */
   rowStart: number
   rowEnd: number
+  /** mm, absolute — where this row's board-run actually begins along the
+   * board-run axis. Always 0 for the classic trapezoid (its left/near
+   * boundary is always a straight edge at the origin); can be non-zero for
+   * a polygon deck whose near boundary isn't straight. board.start/.end
+   * below are in this same absolute coordinate space, not relative to
+   * this row's own start. */
+  runStart: number
   /** stock length the row's board(s) must cover before the raked end is trimmed */
   targetLength: number
   boards: BoardSegment[]
@@ -146,6 +158,7 @@ function positionOk(
  * by hand. */
 function planManualRow(
   targetLength: number,
+  runStart: number,
   positions: number[],
   joistIndex: Map<number, number>,
   inv: Inventory,
@@ -155,9 +168,10 @@ function planManualRow(
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
-  const sorted = [...new Set(positions)].filter((p) => p > 1e-6 && p < targetLength - 1e-6).sort((a, b) => a - b)
+  const rowEnd = runStart + targetLength
+  const sorted = [...new Set(positions)].filter((p) => p > runStart + 1e-6 && p < rowEnd - 1e-6).sort((a, b) => a - b)
 
-  let p = 0
+  let p = runStart
   let priorInRow: number[] = []
   for (const pos of sorted) {
     const cutLength = pos - p
@@ -165,15 +179,15 @@ function planManualRow(
     if (stockLength !== null) inv.take(stockLength)
     boards.push({ id: "", start: p, end: pos, cutLength, stockLength })
     const staggered = positionOk(pos, [...history, { distance: 0, joins: priorInRow }], exclusions, joistIndex)
-    const nearEdge = !isEdgeSafe(pos, targetLength, edgeBuffer)
+    const nearEdge = !isEdgeSafe(pos, runStart, targetLength, edgeBuffer)
     joins.push({ position: pos, staggered, nearEdge })
     priorInRow = [...priorInRow, pos]
     p = pos
   }
-  const cutLength = targetLength - p
+  const cutLength = rowEnd - p
   const stockLength = inv.smallestAtLeast(cutLength)
   if (stockLength !== null) inv.take(stockLength)
-  boards.push({ id: "", start: p, end: targetLength, cutLength, stockLength })
+  boards.push({ id: "", start: p, end: rowEnd, cutLength, stockLength })
 
   return { boards, joins }
 }
@@ -206,18 +220,19 @@ function reachableJoists(
   })
 }
 
-function isEdgeSafe(position: number, targetLength: number, edgeBuffer: number): boolean {
-  return position >= edgeBuffer - 1e-6 && position <= targetLength - edgeBuffer + 1e-6
+function isEdgeSafe(position: number, runStart: number, targetLength: number, edgeBuffer: number): boolean {
+  return position >= runStart + edgeBuffer - 1e-6 && position <= runStart + targetLength - edgeBuffer + 1e-6
 }
 
 /** Prefer candidates clear of both row ends; fall back to the full set (and
  * flag it) only if nothing reachable clears the edge buffer at all. */
 function applyEdgeBuffer(
   candidates: number[],
+  runStart: number,
   targetLength: number,
   edgeBuffer: number
 ): { candidates: number[]; nearEdge: boolean } {
-  const safe = candidates.filter((j) => isEdgeSafe(j, targetLength, edgeBuffer))
+  const safe = candidates.filter((j) => isEdgeSafe(j, runStart, targetLength, edgeBuffer))
   return safe.length ? { candidates: safe, nearEdge: false } : { candidates, nearEdge: true }
 }
 
@@ -234,6 +249,7 @@ function applyEdgeBuffer(
  * a minimum-stagger check alone doesn't guarantee. */
 function planSkeletonRow(
   targetLength: number,
+  runStart: number,
   joistPositions: number[],
   joistIndex: Map<number, number>,
   inv: Inventory,
@@ -244,29 +260,30 @@ function planSkeletonRow(
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
+  const rowEnd = runStart + targetLength
   let safety = 0
 
   if (!reversed) {
-    let p = 0
+    let p = runStart
     while (safety++ < 200) {
-      const remaining = targetLength - p
+      const remaining = rowEnd - p
       const finish = inv.smallestAtLeast(remaining)
       if (finish !== null) {
         inv.take(finish)
-        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+        boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: finish })
         break
       }
 
       const maxReach = inv.longest()
       if (maxReach === null) {
-        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+        boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: null })
         break
       }
       const reach = reachableJoists(p, maxReach, 1, joistPositions, joistIndex, exclusions)
-      const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
+      const { candidates, nearEdge } = applyEdgeBuffer(reach, runStart, targetLength, edgeBuffer)
       candidates.sort((a, b) => b - a)
       if (!candidates.length) {
-        boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+        boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: null })
         break
       }
 
@@ -286,27 +303,27 @@ function planSkeletonRow(
     }
   } else {
     // mirror of the forward walk: p is the far boundary of the not-yet-placed
-    // region [0, p]; step backward, keeping joins on real joist positions.
-    let p = targetLength
+    // region [runStart, p]; step backward, keeping joins on real joist positions.
+    let p = rowEnd
     while (safety++ < 200) {
-      const remaining = p
+      const remaining = p - runStart
       const finish = inv.smallestAtLeast(remaining)
       if (finish !== null) {
         inv.take(finish)
-        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: finish })
+        boards.push({ id: "", start: runStart, end: p, cutLength: remaining, stockLength: finish })
         break
       }
 
       const maxReach = inv.longest()
       if (maxReach === null) {
-        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
+        boards.push({ id: "", start: runStart, end: p, cutLength: remaining, stockLength: null })
         break
       }
       const reach = reachableJoists(p, maxReach, -1, joistPositions, joistIndex, exclusions)
-      const { candidates, nearEdge } = applyEdgeBuffer(reach, targetLength, edgeBuffer)
+      const { candidates, nearEdge } = applyEdgeBuffer(reach, runStart, targetLength, edgeBuffer)
       candidates.sort((a, b) => a - b)
       if (!candidates.length) {
-        boards.push({ id: "", start: 0, end: p, cutLength: remaining, stockLength: null })
+        boards.push({ id: "", start: runStart, end: p, cutLength: remaining, stockLength: null })
         break
       }
 
@@ -363,6 +380,7 @@ function weightedLengthPick(lengths: number[], bias: number, rand: () => number)
  * fill-in rows. */
 function planRowRandomFirst(
   targetLength: number,
+  runStart: number,
   joistPositions: number[],
   joistIndex: Map<number, number>,
   inv: Inventory,
@@ -375,21 +393,22 @@ function planRowRandomFirst(
 ): { boards: BoardSegment[]; joins: JoinMark[] } {
   const boards: BoardSegment[] = []
   const joins: JoinMark[] = []
-  let p = 0
+  const rowEnd = runStart + targetLength
+  let p = runStart
   let safety = 0
 
   while (safety++ < 200) {
-    const remaining = targetLength - p
+    const remaining = rowEnd - p
     const finish = inv.smallestAtLeast(remaining)
     if (finish !== null) {
       inv.take(finish)
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: finish })
+      boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: finish })
       break
     }
 
     const avail = inv.available()
     if (!avail.length) {
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: null })
       break
     }
 
@@ -406,7 +425,7 @@ function planRowRandomFirst(
       tried.add(pick)
       const js = reachableJoists(p, pick, 1, joistPositions, joistIndex, exclusions)
       if (!js.length) continue
-      const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
+      const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, runStart, targetLength, edgeBuffer)
       if (!fellBack) {
         chosenLength = pick
         candidates = safe
@@ -425,7 +444,7 @@ function planRowRandomFirst(
       if (longest !== null) {
         const js = reachableJoists(p, longest, 1, joistPositions, joistIndex, exclusions)
         if (js.length) {
-          const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, targetLength, edgeBuffer)
+          const { candidates: safe, nearEdge: fellBack } = applyEdgeBuffer(js, runStart, targetLength, edgeBuffer)
           chosenLength = longest
           candidates = safe
           nearEdge = fellBack
@@ -433,7 +452,7 @@ function planRowRandomFirst(
       }
     }
     if (chosenLength === null) {
-      boards.push({ id: "", start: p, end: targetLength, cutLength: remaining, stockLength: null })
+      boards.push({ id: "", start: p, end: rowEnd, cutLength: remaining, stockLength: null })
       break
     }
 
@@ -476,11 +495,17 @@ function planRowRandomFirst(
 }
 
 export function computeDeckLayout(config: DeckConfig): DeckLayout {
-  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock } = config
+  const { width, sideA, sideB, joistSpacing, boardWidth, boardGap, stock, points } = config
   const lengthBias = Math.max(-1, Math.min(1, config.lengthBias || 0))
   const firstBaySpacing = config.firstBaySpacing || joistSpacing
   const pitch = boardWidth + boardGap
   const intoRake = config.boardDirection !== "alongRake"
+  // A polygon deck (points set) replaces the trapezoid's width/sideA/sideB
+  // as the source of shape entirely — see the doc comment on
+  // DeckConfig.points. Every trapezoid deck (the overwhelming majority
+  // today) takes the exact same path as before this existed.
+  const isPolygon = Array.isArray(points) && points.length >= 3
+  const bounds = isPolygon ? polygonBounds(points) : null
   const maxLen = Math.max(sideA, sideB)
   const skeletonInterval = Math.max(1, Math.round(config.skeletonInterval || 4))
   const edgeBuffer = joistSpacing * Math.max(0, config.minEdgeJoists ?? 2)
@@ -492,14 +517,21 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const hasManualOverride = (index: number) => Object.prototype.hasOwnProperty.call(manualJoins, String(index))
   const manualRows = new Set<number>()
 
-  const rowAxisExtent = intoRake ? width : maxLen
-  const joistAxisMax = intoRake ? maxLen : width
+  // Row-stacking axis (rowStart/rowEnd) and board-run axis (the joist grid,
+  // and every board's own start/end) origins and extents. The trapezoid
+  // always starts both axes at 0 (its near/left boundary is always a
+  // straight edge at the origin); a polygon deck's own bounding box sets
+  // both instead, since its near boundary might not be straight.
+  const rowAxisOrigin = isPolygon ? (intoRake ? bounds!.minY : bounds!.minX) : 0
+  const rowAxisExtent = isPolygon ? (intoRake ? bounds!.maxY - bounds!.minY : bounds!.maxX - bounds!.minX) : intoRake ? width : maxLen
+  const runAxisOrigin = isPolygon ? (intoRake ? bounds!.minX : bounds!.minY) : 0
+  const joistAxisMax = isPolygon ? (intoRake ? bounds!.maxX - bounds!.minX : bounds!.maxY - bounds!.minY) : intoRake ? maxLen : width
   const rowCount = Math.max(1, Math.ceil(rowAxisExtent / pitch))
 
   // the first bay (off the ledger/bearer) can differ from the rest of the run
-  const joistPositions: number[] = [0]
+  const joistPositions: number[] = [runAxisOrigin]
   if (firstBaySpacing > 0) {
-    for (let x = firstBaySpacing; x <= joistAxisMax + 1e-6; x += joistSpacing) {
+    for (let x = runAxisOrigin + firstBaySpacing; x <= runAxisOrigin + joistAxisMax + 1e-6; x += joistSpacing) {
       joistPositions.push(Math.round(x))
     }
   }
@@ -532,6 +564,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     index: number
     rowStart: number
     rowEnd: number
+    runStart: number
     targetLength: number
     isSkeleton: boolean
     locked?: { boards: BoardSegment[]; joins: JoinMark[] }
@@ -539,14 +572,50 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const slots: Slot[] = []
   let hasNarrowLastRow = false
 
+  // A scanline query exactly on the polygon's own max boundary always
+  // misses (the half-open crossing convention needs a "b > value" on some
+  // edge, which nothing can satisfy right at the max) — nudge inward by a
+  // hair before querying rather than exactly at either bound. See
+  // polygon.ts's polygonSpanAtY/X doc comment.
+  const nudgeInside = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo + 1e-6), hi - 1e-6)
+
   for (let i = 0; i < rowCount; i++) {
-    const rowStart = i * pitch
-    const rowEnd = Math.min(rowStart + boardWidth, rowAxisExtent)
+    const rowStart = rowAxisOrigin + i * pitch
+    const rowEnd = Math.min(rowStart + boardWidth, rowAxisOrigin + rowAxisExtent)
     if (rowEnd - rowStart < boardWidth - 1e-6) hasNarrowLastRow = true
 
-    const targetLength = intoRake
-      ? Math.max(lengthAt(config, rowStart), lengthAt(config, rowEnd))
-      : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
+    let runStart: number
+    let targetLength: number
+    if (isPolygon) {
+      const b = bounds!
+      // union of both edges' spans — same "cover the wider side" reasoning
+      // the trapezoid's own Math.max(lengthAt/widthAt at both edges) uses.
+      // Split by axis (rather than one shared spanStart/spanEnd) so each
+      // branch's {xMin,xMax} vs {yMin,yMax} shape stays concrete instead of
+      // a union TypeScript can't narrow through the intoRake ternaries.
+      if (intoRake) {
+        const spanStart = polygonSpanAtY(points!, nudgeInside(rowStart, b.minY, b.maxY))
+        const spanEnd = polygonSpanAtY(points!, nudgeInside(rowEnd, b.minY, b.maxY))
+        if (!spanStart && !spanEnd) continue // this row band falls entirely outside the shape
+        const lo = Math.min(spanStart?.xMin ?? Infinity, spanEnd?.xMin ?? Infinity)
+        const hi = Math.max(spanStart?.xMax ?? -Infinity, spanEnd?.xMax ?? -Infinity)
+        runStart = lo
+        targetLength = hi - lo
+      } else {
+        const spanStart = polygonSpanAtX(points!, nudgeInside(rowStart, b.minX, b.maxX))
+        const spanEnd = polygonSpanAtX(points!, nudgeInside(rowEnd, b.minX, b.maxX))
+        if (!spanStart && !spanEnd) continue
+        const lo = Math.min(spanStart?.yMin ?? Infinity, spanEnd?.yMin ?? Infinity)
+        const hi = Math.max(spanStart?.yMax ?? -Infinity, spanEnd?.yMax ?? -Infinity)
+        runStart = lo
+        targetLength = hi - lo
+      }
+    } else {
+      targetLength = intoRake
+        ? Math.max(lengthAt(config, rowStart), lengthAt(config, rowEnd))
+        : Math.max(widthAt(config, rowStart), widthAt(config, rowEnd))
+      runStart = 0
+    }
     if (targetLength < 1) continue // deck has tapered to nothing here
 
     const locked = lockedRows[String(slots.length)]
@@ -554,6 +623,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       index: slots.length,
       rowStart,
       rowEnd,
+      runStart,
       targetLength,
       isSkeleton: locked ? locked.isSkeleton : slots.length % skeletonInterval === skeletonOffset,
       locked: locked ? { boards: locked.boards, joins: locked.joins } : undefined,
@@ -592,8 +662,8 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     const result = slot.locked
       ? applyLockedRow(slot)
       : manual
-        ? planManualRow(slot.targetLength, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
-        : planSkeletonRow(slot.targetLength, joistPositions, joistIndex, inv, history, exclusions, edgeBuffer, skeletonSeq % 2 === 1)
+        ? planManualRow(slot.targetLength, slot.runStart, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
+        : planSkeletonRow(slot.targetLength, slot.runStart, joistPositions, joistIndex, inv, history, exclusions, edgeBuffer, skeletonSeq % 2 === 1)
     results.set(slot.index, result)
     rowJoins.set(slot.index, result.joins.map((j) => j.position))
     skeletonHistory = [result.joins.map((j) => j.position), ...skeletonHistory].slice(0, Math.max(1, rowsAwayLimit))
@@ -621,7 +691,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     if (finish === null) continue
     inv.take(finish)
     results.set(slot.index, {
-      boards: [{ id: "", start: 0, end: slot.targetLength, cutLength: slot.targetLength, stockLength: finish }],
+      boards: [{ id: "", start: slot.runStart, end: slot.runStart + slot.targetLength, cutLength: slot.targetLength, stockLength: finish }],
       joins: [],
     })
     rowJoins.set(slot.index, [])
@@ -653,9 +723,10 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
     const result = slot.locked
       ? applyLockedRow(slot)
       : manual
-        ? planManualRow(slot.targetLength, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
+        ? planManualRow(slot.targetLength, slot.runStart, manualJoins[String(slot.index)], joistIndex, inv, history, exclusions, edgeBuffer)
         : planRowRandomFirst(
             slot.targetLength,
+            slot.runStart,
             joistPositions,
             joistIndex,
             inv,
@@ -678,6 +749,7 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       manual: manualRows.has(slot.index),
       rowStart: slot.rowStart,
       rowEnd: slot.rowEnd,
+      runStart: slot.runStart,
       targetLength: slot.targetLength,
       boards: r.boards.map((b, i) => ({ ...b, id: `${slot.index}-${i}` })),
       joins: r.joins,
@@ -763,10 +835,10 @@ export function previewBoardReach(layout: DeckLayout, rowIndex: number, stockLen
   const row = layout.rows.find((r) => r.index === rowIndex)
   if (!row) return null
   const current = row.joins.map((j) => j.position)
-  const start = current.length ? Math.max(...current) : 0
+  const start = current.length ? Math.max(...current) : row.runStart
   const reach = start + stockLength
   const candidates = layout.joistPositions.filter(
-    (p) => p > start + 1e-6 && p <= reach + 1e-6 && p < row.targetLength - 1e-6
+    (p) => p > start + 1e-6 && p <= reach + 1e-6 && p < row.runStart + row.targetLength - 1e-6
   )
   if (candidates.length === 0) return null
   const position = Math.max(...candidates)

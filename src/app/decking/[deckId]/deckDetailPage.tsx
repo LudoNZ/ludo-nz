@@ -14,6 +14,7 @@ import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScrol
 import { deleteDeck, saveDeck, setCompletedSegments, StoredDeck, subscribeToDecks } from "@/components/decking/data"
 import { computeLockedRows, optimizeBoardStockLengths } from "@/components/decking/layout"
 import { useManualJoins } from "@/components/decking/useManualJoins"
+import { polygonBounds } from "@/components/decking/polygon"
 import { DeckConfig, formatLength, LockedRow } from "@/components/decking/types"
 import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon, WandIcon } from "@/components/icons/icons"
 import styles from "./deckDetailPage.module.scss"
@@ -62,7 +63,14 @@ const DeckDetailPage = () => {
   const loaded = publicLoaded && privateLoaded
   const deck = [...privateDecks, ...publicDecks].find((d) => d.id === params.deckId)
   const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, deck?.location)
-  const maxLen = deck ? Math.max(deck.sideA, deck.sideB) : 1
+  // Same axis JoinScroller's track lines up against regardless of board
+  // direction — mirrors deck.sideA/sideB exactly for a trapezoid deck (the
+  // pre-existing behaviour, unchanged); a polygon deck's own bounding box
+  // along that same axis otherwise.
+  const points = deck?.points
+  const bounds = points && points.length >= 3 ? polygonBounds(points) : null
+  const maxLen = bounds ? bounds.maxX - bounds.minX : deck ? Math.max(deck.sideA, deck.sideB) : 1
+  const axisOrigin = bounds ? bounds.minX : 0
 
   if (!loaded) {
     return (
@@ -260,6 +268,7 @@ const DeckDetailPage = () => {
                 layout={layout}
                 config={effectiveConfig}
                 maxLen={maxLen}
+                axisOrigin={axisOrigin}
                 lockedRows={deck.lockedRows}
                 onToggleJoin={toggleJoin}
                 onResetRow={resetRow}

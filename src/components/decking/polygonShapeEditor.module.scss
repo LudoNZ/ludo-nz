@@ -1,0 +1,186 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.shapeWrap {
+  position: relative;
+  width: 100%;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+}
+
+.outline {
+  fill: rgba(27, 177, 47, 0.06);
+  stroke: var(--color-primary);
+}
+
+.invalidOutline {
+  stroke: var(--color-danger);
+  fill: rgba(177, 27, 27, 0.08);
+}
+
+.previewLine {
+  stroke: #898781;
+  stroke-dasharray: 1.5% 1.2%;
+  opacity: 0.55;
+}
+
+.vertex {
+  fill: var(--background);
+  stroke: var(--color-primary);
+}
+
+.vertexSelected {
+  fill: #2a78d6;
+  stroke: #2a78d6;
+}
+
+.hitArea {
+  fill: transparent;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.rotateBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid var(--color-secondary);
+  border-radius: var(--borderRadius);
+  background-color: var(--background);
+  color: var(--color-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.08);
+  }
+}
+
+.rotated {
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.warning {
+  padding: 0.6rem 0.8rem;
+  border: 1.5px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  background-color: rgba(177, 27, 27, 0.06);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.addBtn {
+  padding: 0.5rem 0.9rem;
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background-color: var(--background);
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.08);
+  }
+}
+
+.pointPanel {
+  padding: 0.8rem 1rem;
+  border: 1.5px solid #2a78d6;
+  border-radius: var(--borderRadius);
+  background-color: rgba(42, 120, 214, 0.06);
+}
+
+.pointHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.15rem;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.pointFields {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  input {
+    padding: 0.45rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: max(0.95rem, 16px);
+    font-family: inherit;
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
+    }
+  }
+}
+
+.removeBtn {
+  padding: 0.4rem 0.7rem;
+  border: 1.5px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(177, 27, 27, 0.08);
+  }
+}
+
+.hint {
+  font-size: 0.8rem;
+  opacity: 0.65;
+  margin: 0;
+}

@@ -8,6 +8,7 @@
 export type BoardDirection = "intoRake" | "alongRake"
 
 import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
+import { DeckPoint } from "./polygon"
 
 /** A length of board you have on hand and how many of it. */
 export interface StockItem {
@@ -73,6 +74,16 @@ export interface DeckConfig {
   /** names for the sideA/sideB/width/diagonal edges, shown wherever the
    * shape is drawn — defaults to generic terms, editable per deck */
   edgeLabels: EdgeLabels
+  /** mm, ordered polygon corners — undefined/absent means the deck is the
+   * classic 4-corner right-trapezoid above (width/sideA/sideB drive
+   * everything, exactly as before); once set (≥3 points) it becomes the
+   * source of truth for shape instead, and width/sideA/sideB are ignored.
+   * Deliberately a separate, optional field rather than replacing
+   * width/sideA/sideB outright — every existing deck, and all the
+   * trapezoid-specific rendering/editing built around it, keeps working
+   * completely unchanged unless a corner is deliberately added. See
+   * polygon.ts for the geometry this drives once it's set. */
+  points?: DeckPoint[]
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults

@@ -5,6 +5,24 @@
   max-width: 30rem;
 }
 
+.addCornerLink {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.shapeInvalidNote {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  margin: -0.5rem 0 0;
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;

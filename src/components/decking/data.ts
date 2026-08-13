@@ -65,6 +65,10 @@ export const subscribeToDecks = (
           // already deliberately set — only new decks start linked
           sideBLinked: data.sideBLinked ?? false,
           edgeLabels: { ...DEFAULT_EDGE_LABELS, ...(data.edgeLabels ?? {}) },
+          // absent for every deck saved before polygon shapes existed (and
+          // for any deck that's never had a corner added) — undefined here
+          // means "trapezoid mode", exactly like a freshly created deck
+          points: Array.isArray(data.points) && data.points.length >= 3 ? data.points : undefined,
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,
@@ -109,10 +113,26 @@ export const subscribeToDecks = (
   )
 }
 
+/** Firestore's client SDK rejects a field explicitly set to `undefined`
+ * (unlike `null`, which it's fine with) — and DeckConfig.points is the
+ * first genuinely optional (`?:`) field on the type, so every non-polygon
+ * deck now carries an explicit `points: undefined` once it's round-tripped
+ * through a StoredDeck (see subscribeToDecks) and spread back out again
+ * (deckDetailPage's saveDeckWith, handleShuffle, etc. all do this). Strip
+ * any such keys here, once, rather than relying on every save call site to
+ * remember not to ever spread one through. */
+const stripUndefined = <T extends Record<string, unknown>>(obj: T): T => {
+  const result = { ...obj }
+  for (const key of Object.keys(result)) {
+    if (result[key] === undefined) delete result[key]
+  }
+  return result
+}
+
 export const saveDeck = async (location: DeckLocation, deck: Omit<DeckConfig, "updatedAt">) => {
   const { id, ...rest } = deck
   await setDoc(deckDocRef(location, id), {
-    ...rest,
+    ...stripUndefined(rest),
     updatedAt: Timestamp.now(),
   })
 }

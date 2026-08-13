@@ -6,8 +6,10 @@ import styles from "./deckShapeEditor.module.scss"
 
 /** A bent double-headed arrow: one head pointing along the width, the other
  * along the length, bridged by a quarter-turn — reads as "rotate 90°"
- * rather than "slide back and forth" the way a straight ↔ would. */
-const RotateIcon: React.FC<{ className?: string }> = ({ className }) => (
+ * rather than "slide back and forth" the way a straight ↔ would. Exported
+ * for reuse by polygonShapeEditor.tsx, the polygon-mode counterpart to
+ * this component — same rotate affordance either way. */
+export const RotateIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
     viewBox="0 0 24 24"
     width="22"
@@ -29,6 +31,12 @@ const RotateIcon: React.FC<{ className?: string }> = ({ className }) => (
 type EdgeKey = "width" | "sideA" | "sideB" | "rake"
 type EditField = "value" | "label" | "angle"
 type EditTarget = { key: EdgeKey; field: EditField } | null
+
+/** Below this many screen pixels of movement, a pointer-down-then-up on
+ * the value button is still treated as a tap (opens the text input),
+ * not a drag — otherwise an ordinary tap's inevitable sub-pixel jitter
+ * would keep nudging the value by a mm or two before the edit box opens. */
+const DRAG_THRESHOLD_PX = 5
 
 const Edge: React.FC<{
   keyName: EdgeKey
@@ -55,6 +63,19 @@ const Edge: React.FC<{
   onStart: (t: EditTarget, current: string) => void
   onCommit: () => void
   onCancel: () => void
+  /** Enables "grab the edge and drag" resizing on top of the existing
+   * tap-to-edit behaviour: dragging along `dragAxis` (screen x for a
+   * horizontal-length edge like sideA/sideB, screen y for the vertical
+   * width edge) calls this with the live proposed new value as the
+   * pointer moves. `getMmPerPixel` is called once per drag-start rather
+   * than passed as a plain number, so it always reflects the SVG's
+   * *current* on-screen scale even if the layout has reflowed since the
+   * last render (e.g. the window was resized). Omitted entirely for an
+   * edge that isn't drag-resizable (the rake angle isn't a single linear
+   * dimension the way the other three are). */
+  onDragResize?: (newValue: number) => void
+  dragAxis?: "x" | "y"
+  getMmPerPixel?: () => number
 }> = ({
   keyName,
   value,
@@ -72,12 +93,43 @@ const Edge: React.FC<{
   onStart,
   onCommit,
   onCancel,
+  onDragResize,
+  dragAxis,
+  getMmPerPixel,
 }) => {
   const style = { left: `${leftPct}%`, top: `${topPct}%` }
   const valueField: EditField = angle ? "angle" : "value"
   const editingValue = editTarget?.key === keyName && editTarget.field === valueField
   const editingLabel = editTarget?.key === keyName && editTarget.field === "label"
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const dragRef = useRef<{ startClientPos: number; startValue: number; mmPerPixel: number; dragging: boolean } | null>(null)
+
+  const handleValuePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!onDragResize || !dragAxis || !getMmPerPixel) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = {
+      startClientPos: dragAxis === "x" ? e.clientX : e.clientY,
+      startValue: value,
+      mmPerPixel: getMmPerPixel(),
+      dragging: false,
+    }
+  }
+  const handleValuePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current
+    if (!d || !onDragResize || !dragAxis) return
+    const clientPos = dragAxis === "x" ? e.clientX : e.clientY
+    const deltaPx = clientPos - d.startClientPos
+    if (!d.dragging && Math.abs(deltaPx) < DRAG_THRESHOLD_PX) return
+    d.dragging = true
+    const newValue = Math.max(100, Math.round(d.startValue + deltaPx * d.mmPerPixel))
+    onDragResize(newValue)
+  }
+  const handleValuePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current
+    dragRef.current = null
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    if (!d?.dragging) onStart({ key: keyName, field: valueField }, angle ? value.toFixed(1) : String(value))
+  }
 
   // focus + select once, when this chip starts being edited — not on every
   // keystroke. A ref callback (the previous approach) is a new function
@@ -134,7 +186,15 @@ const Edge: React.FC<{
           {displayValue} <span className={styles.dimUnit}>{unit}</span>
         </span>
       ) : (
-        <button type="button" className={styles.dimValueBtn} onClick={() => onStart({ key: keyName, field: valueField }, angle ? value.toFixed(1) : String(value))}>
+        <button
+          type="button"
+          className={`${styles.dimValueBtn} ${
+            onDragResize ? `${styles.draggable} ${dragAxis === "x" ? styles.draggableX : styles.draggableY}` : ""
+          }`}
+          onPointerDown={handleValuePointerDown}
+          onPointerMove={handleValuePointerMove}
+          onPointerUp={handleValuePointerUp}
+        >
           {displayValue} <span className={styles.dimUnit}>{unit}</span>
         </button>
       )}
@@ -191,6 +251,7 @@ const DeckShapeEditor: React.FC<{
   const intoRake = boardDirection !== "alongRake"
   const [editTarget, setEditTarget] = useState<EditTarget>(null)
   const [draft, setDraft] = useState("")
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const { viewBox, vbMinX, vbMinY, vbW, vbH, maxLen, strokeW } = useMemo(() => {
     const maxLen = Math.max(sideA, sideB, 1)
@@ -251,10 +312,25 @@ const DeckShapeEditor: React.FC<{
 
   const edgeProps = { editTarget, draft, setDraft, onStart: startEdit, onCommit: commitEdit, onCancel: cancelEdit }
 
+  // Uniform SVG-units-per-screen-pixel scale, read fresh at the start of
+  // each drag (not memoised) so it's always right even if the layout has
+  // reflowed since the last render — e.g. the window was resized, or the
+  // deck's own aspect ratio changed enough to alter the SVG's rendered
+  // height between one drag and the next. min() rather than a straight
+  // width or height ratio, matching the SVG's own default "meet" scaling
+  // behaviour, in case the rendered box and viewBox aspect ratios ever
+  // don't match exactly.
+  const getMmPerPixel = () => {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (!rect || !rect.width || !rect.height) return 1
+    const scale = Math.min(rect.width / vbW, rect.height / vbH)
+    return scale > 0 ? 1 / scale : 1
+  }
+
   return (
     <div className={styles.editor}>
       <div className={styles.shapeWrap}>
-        <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Deck shape, tap a measurement or label to edit it">
+        <svg ref={svgRef} viewBox={viewBox} className={styles.svg} role="img" aria-label="Deck shape, tap a measurement or label to edit it">
           <path d={`M0,0 L${sideA},0 L${sideB},${width} L0,${width} Z`} className={styles.outline} strokeWidth={strokeW * 1.6} />
           <line x1={sideA} y1={0} x2={sideB} y2={width} className={styles.rakeEdge} strokeWidth={strokeW * 1.6} />
           {intoRake
@@ -277,7 +353,17 @@ const DeckShapeEditor: React.FC<{
           <span className={styles.rotateLabel}>{intoRake ? "Into the rake" : "Along the rake"}</span>
         </button>
 
-        <Edge keyName="sideA" value={sideA} label={edgeLabels.sideA} leftPct={sideAPos.leftPct} topPct={sideAPos.topPct} {...edgeProps} />
+        <Edge
+          keyName="sideA"
+          value={sideA}
+          label={edgeLabels.sideA}
+          leftPct={sideAPos.leftPct}
+          topPct={sideAPos.topPct}
+          onDragResize={onSideAChange}
+          dragAxis="x"
+          getMmPerPixel={getMmPerPixel}
+          {...edgeProps}
+        />
         <Edge
           keyName="sideB"
           value={sideB}
@@ -286,9 +372,23 @@ const DeckShapeEditor: React.FC<{
           topPct={sideBPos.topPct}
           caption={sideBLinked ? "= left side" : undefined}
           onReset={sideBLinked ? undefined : onSideBReset}
+          onDragResize={onSideBChange}
+          dragAxis="x"
+          getMmPerPixel={getMmPerPixel}
           {...edgeProps}
         />
-        <Edge keyName="width" value={width} label={edgeLabels.width} leftPct={widthPos.leftPct} topPct={widthPos.topPct} vertical {...edgeProps} />
+        <Edge
+          keyName="width"
+          value={width}
+          label={edgeLabels.width}
+          leftPct={widthPos.leftPct}
+          topPct={widthPos.topPct}
+          vertical
+          onDragResize={onWidthChange}
+          dragAxis="y"
+          getMmPerPixel={getMmPerPixel}
+          {...edgeProps}
+        />
         <Edge
           keyName="rake"
           value={rakeAngleDeg({ sideA, sideB, width })}

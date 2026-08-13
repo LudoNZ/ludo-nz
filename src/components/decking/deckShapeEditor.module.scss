@@ -86,6 +86,22 @@
   font-size: 0.95rem;
 }
 
+// drag-resizable value chips — grab and pull to enlarge/shrink instead of
+// (or in addition to, via a plain tap) typing a number. touch-action: none
+// stops the browser's own scroll/zoom gesture handling from fighting the
+// drag on a touch device.
+.draggable {
+  touch-action: none;
+}
+
+.draggableX {
+  cursor: ew-resize;
+}
+
+.draggableY {
+  cursor: ns-resize;
+}
+
 .calculated .dimValue {
   font-weight: 700;
   font-size: 0.95rem;

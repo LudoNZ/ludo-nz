@@ -123,7 +123,10 @@ service cloud.firestore {
         && request.resource.data.width is number
         && request.resource.data.sideA is number
         && request.resource.data.sideB is number
-        && request.resource.data.stock is list;
+        && request.resource.data.stock is list
+        // points is optional (its absence means the classic trapezoid
+        // shape) — once present, at least a list of 3+ corners
+        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3));
     }
 
     // Decking: public decks. No owner at all — anyone can view, create, or
@@ -139,7 +142,8 @@ service cloud.firestore {
         && request.resource.data.width is number
         && request.resource.data.sideA is number
         && request.resource.data.sideB is number
-        && request.resource.data.stock is list;
+        && request.resource.data.stock is list
+        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3));
       allow delete: if false;
     }
 

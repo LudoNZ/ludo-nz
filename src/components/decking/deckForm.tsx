@@ -3,7 +3,9 @@
 import { useState } from "react"
 import Button from "@/components/button/button"
 import { DeckConfig, sideBFromRakeAngle, StockItem } from "./types"
+import { insertMidpointOnLongestEdge, isSimplePolygon } from "./polygon"
 import DeckShapeEditor from "./deckShapeEditor"
+import PolygonShapeEditor from "./polygonShapeEditor"
 import JoistExclusionMap from "./joistExclusionMap"
 import styles from "./deckForm.module.scss"
 
@@ -58,8 +60,31 @@ const DeckForm: React.FC<{
       }),
     }))
 
+  const isPolygon = Boolean(state.points && state.points.length >= 3)
+  const shapeInvalid = isPolygon && !isSimplePolygon(state.points!)
+
+  // Switches the form into polygon mode: the first press seeds points
+  // from the current sideA/sideB/width (so the shape starts as exactly
+  // what's on screen already) before adding the corner just asked for;
+  // every press after that just adds one more. Once in polygon mode the
+  // form stays there — see DeckConfig.points' doc comment.
+  const handleAddCorner = () =>
+    setState((s) => {
+      const base = s.points && s.points.length >= 3
+        ? s.points
+        : [
+            { x: 0, y: 0 },
+            { x: s.sideA, y: 0 },
+            { x: s.sideB, y: s.width },
+            { x: 0, y: s.width },
+          ]
+      return { ...s, points: insertMidpointOnLongestEdge(base) }
+    })
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (shapeInvalid) return // the shape editor already shows why, inline
+
     const stock: StockItem[] = state.stockRows
       .map((r) => ({ length: Math.round(parseFloat(r.lengthText) * 1000), quantity: Math.max(0, Math.round(r.quantity)) }))
       .filter((s) => !isNaN(s.length) && s.length > 0 && s.quantity > 0)
@@ -72,6 +97,7 @@ const DeckForm: React.FC<{
       sideB: state.sideB,
       sideBLinked: state.sideBLinked,
       edgeLabels: state.edgeLabels,
+      points: state.points,
       joistSpacing: state.joistSpacing,
       firstBaySpacing: state.firstBaySpacing,
       boardWidth: state.boardWidth,
@@ -109,24 +135,41 @@ const DeckForm: React.FC<{
 
       <div className={styles.field}>
         <label>Deck shape</label>
-        <span className={styles.hint}>Tap a measurement to edit it · tap the arrow to rotate the boards 90°</span>
-        <DeckShapeEditor
-          width={state.width}
-          sideA={state.sideA}
-          sideB={state.sideB}
-          sideBLinked={state.sideBLinked}
-          boardDirection={state.boardDirection}
-          edgeLabels={state.edgeLabels}
-          onWidthChange={(n) => setState((s) => ({ ...s, width: n }))}
-          onSideAChange={(n) => setState((s) => ({ ...s, sideA: n, sideB: s.sideBLinked ? n : s.sideB }))}
-          onSideBChange={(n) => setState((s) => ({ ...s, sideB: n, sideBLinked: false }))}
-          onSideBReset={() => setState((s) => ({ ...s, sideBLinked: true, sideB: s.sideA }))}
-          onRakeAngleChange={(deg) =>
-            setState((s) => ({ ...s, sideB: sideBFromRakeAngle(s.sideA, s.width, deg), sideBLinked: false }))
-          }
-          onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
-          onLabelChange={(key, label) => setState((s) => ({ ...s, edgeLabels: { ...s.edgeLabels, [key]: label } }))}
-        />
+        {isPolygon ? (
+          <>
+            <span className={styles.hint}>Drag a corner to reshape the deck</span>
+            <PolygonShapeEditor
+              points={state.points!}
+              boardDirection={state.boardDirection}
+              onPointsChange={(points) => setState((s) => ({ ...s, points }))}
+              onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
+            />
+          </>
+        ) : (
+          <>
+            <span className={styles.hint}>Tap a measurement to edit it, or grab and drag it to resize · tap the arrow to rotate the boards 90°</span>
+            <DeckShapeEditor
+              width={state.width}
+              sideA={state.sideA}
+              sideB={state.sideB}
+              sideBLinked={state.sideBLinked}
+              boardDirection={state.boardDirection}
+              edgeLabels={state.edgeLabels}
+              onWidthChange={(n) => setState((s) => ({ ...s, width: n }))}
+              onSideAChange={(n) => setState((s) => ({ ...s, sideA: n, sideB: s.sideBLinked ? n : s.sideB }))}
+              onSideBChange={(n) => setState((s) => ({ ...s, sideB: n, sideBLinked: false }))}
+              onSideBReset={() => setState((s) => ({ ...s, sideBLinked: true, sideB: s.sideA }))}
+              onRakeAngleChange={(deg) =>
+                setState((s) => ({ ...s, sideB: sideBFromRakeAngle(s.sideA, s.width, deg), sideBLinked: false }))
+              }
+              onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
+              onLabelChange={(key, label) => setState((s) => ({ ...s, edgeLabels: { ...s.edgeLabels, [key]: label } }))}
+            />
+            <button type="button" className={styles.addCornerLink} onClick={handleAddCorner}>
+              + Add a corner to make an irregular shape
+            </button>
+          </>
+        )}
       </div>
 
       <div className={styles.row}>
@@ -277,8 +320,9 @@ const DeckForm: React.FC<{
         </div>
       </div>
 
+      {shapeInvalid && <p className={styles.shapeInvalidNote}>⚠ Fix the crossed shape above before saving.</p>}
       <div className={styles.actions}>
-        <Button type="submit" size="large" onClick={() => {}}>
+        <Button type="submit" size="large" onClick={() => {}} disabled={shapeInvalid}>
           {saveLabel}
         </Button>
         {onCancel && (

@@ -3,6 +3,7 @@
 import { useId, useMemo } from "react"
 import { DeckLayout } from "./layout"
 import { DeckConfig, formatLength, rakeAngleDeg } from "./types"
+import { polygonBounds, polygonOutlinePath } from "./polygon"
 import styles from "./deckPlanView.module.scss"
 
 const DeckPlanView: React.FC<{
@@ -25,8 +26,38 @@ const DeckPlanView: React.FC<{
   const completedSet = new Set(completedSegmentIds)
   const { sideA, sideB, width } = config
   const intoRake = config.boardDirection !== "alongRake"
+  // A polygon deck (config.points set) replaces the trapezoid entirely as
+  // the source of shape — see DeckConfig.points' doc comment. Every
+  // trapezoid deck (the overwhelming majority today) renders exactly as
+  // before this existed.
+  const isPolygon = Array.isArray(config.points) && config.points.length >= 3
+  const bounds = isPolygon ? polygonBounds(config.points!) : null
 
-  const { viewBox, padLeft, padTop, fontSize, strokeW, maxLen } = useMemo(() => {
+  const { viewBox, padLeft, padTop, fontSize, strokeW, maxLen, spanMinX, spanMaxX, spanMinY, spanMaxY, outlinePath } = useMemo(() => {
+    if (bounds) {
+      const w = bounds.maxX - bounds.minX
+      const h = bounds.maxY - bounds.minY
+      const scale = Math.max(w, h)
+      const padLeft = w * 0.09
+      const padRight = w * 0.05
+      const padTop = h * 0.35
+      const padBottom = h * 0.55
+      const vbW = w + padLeft + padRight
+      const vbH = h + padTop + padBottom
+      return {
+        viewBox: `${bounds.minX - padLeft} ${bounds.minY - padTop} ${vbW} ${vbH}`,
+        padLeft,
+        padTop,
+        fontSize: scale * 0.035,
+        strokeW: scale * 0.0035,
+        maxLen: w,
+        spanMinX: bounds.minX,
+        spanMaxX: bounds.maxX,
+        spanMinY: bounds.minY,
+        spanMaxY: bounds.maxY,
+        outlinePath: polygonOutlinePath(config.points!),
+      }
+    }
     const maxLen = Math.max(sideA, sideB)
     const scale = Math.max(maxLen, width)
     const padLeft = maxLen * 0.09
@@ -42,8 +73,13 @@ const DeckPlanView: React.FC<{
       fontSize: scale * 0.035,
       strokeW: scale * 0.0035,
       maxLen,
+      spanMinX: 0,
+      spanMaxX: maxLen,
+      spanMinY: 0,
+      spanMaxY: width,
+      outlinePath: `M0,0 L${sideA},0 L${sideB},${width} L0,${width} Z`,
     }
-  }, [sideA, sideB, width])
+  }, [sideA, sideB, width, bounds, config.points])
 
   const hasWarnings = layout.rows.some((r) => r.joins.some((j) => !j.staggered || j.nearEdge))
 
@@ -53,25 +89,24 @@ const DeckPlanView: React.FC<{
         <svg viewBox={viewBox} className={styles.svg} role="img" aria-label={`Plan view of ${config.name}`}>
           <defs>
             <clipPath id={clipId}>
-              <path d={`M0,0 L${sideA},0 L${sideB},${width} L0,${width} Z`} />
+              <path d={outlinePath} />
             </clipPath>
           </defs>
 
-          <path
-            d={`M0,0 L${sideA},0 L${sideB},${width} L0,${width} Z`}
-            className={styles.outline}
-            strokeWidth={strokeW * 1.5}
-          />
-
-          {layout.joistPositions.map((pos) =>
-            intoRake ? (
-              <line key={pos} x1={pos} y1={0} x2={pos} y2={width} className={styles.joist} strokeWidth={strokeW} />
-            ) : (
-              <line key={pos} x1={0} y1={pos} x2={maxLen} y2={pos} className={styles.joist} strokeWidth={strokeW} />
-            )
-          )}
+          <path d={outlinePath} className={styles.outline} strokeWidth={strokeW * 1.5} />
 
           <g clipPath={`url(#${clipId})`}>
+            {/* joist grid: drawn as full-span lines and left to the clip
+                path to trim them exactly to the outline — works for any
+                shape (straight-sided or raked trapezoid, or a general
+                polygon) without computing per-position lengths here */}
+            {layout.joistPositions.map((pos) =>
+              intoRake ? (
+                <line key={pos} x1={pos} y1={spanMinY} x2={pos} y2={spanMaxY} className={styles.joist} strokeWidth={strokeW} />
+              ) : (
+                <line key={pos} x1={spanMinX} y1={pos} x2={spanMaxX} y2={pos} className={styles.joist} strokeWidth={strokeW} />
+              )
+            )}
             {activeRowIndex != null &&
               (() => {
                 const row = layout.rows.find((r) => r.index === activeRowIndex)
@@ -79,8 +114,8 @@ const DeckPlanView: React.FC<{
                 const rowThickness = row.rowEnd - row.rowStart
                 return (
                   <rect
-                    x={intoRake ? 0 : row.rowStart}
-                    y={intoRake ? row.rowStart : 0}
+                    x={intoRake ? row.runStart : row.rowStart}
+                    y={intoRake ? row.rowStart : row.runStart}
                     width={intoRake ? row.targetLength : rowThickness}
                     height={intoRake ? rowThickness : row.targetLength}
                     className={styles.rowHighlight}
@@ -92,8 +127,8 @@ const DeckPlanView: React.FC<{
               const overhang = rowThickness * 0.35
               const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
               const labelFontSize = Math.min(rowThickness * 0.65, fontSize * 0.8)
-              const labelX = intoRake ? maxLen * 0.015 : row.rowStart + rowThickness / 2
-              const labelY = intoRake ? row.rowStart + rowThickness / 2 : labelFontSize * 0.9
+              const labelX = intoRake ? spanMinX + maxLen * 0.015 : row.rowStart + rowThickness / 2
+              const labelY = intoRake ? row.rowStart + rowThickness / 2 : spanMinY + labelFontSize * 0.9
               return (
                 <g key={row.index}>
                   {row.boards.map((b) => {
@@ -194,25 +229,32 @@ const DeckPlanView: React.FC<{
             })}
           </g>
 
-          {/* dimension labels */}
-          <text x={sideA / 2} y={-padTop / 2.2} fontSize={fontSize} className={styles.dimText}>
-            {formatLength(sideA)} ({config.edgeLabels?.sideA || "top edge"})
-          </text>
-          <text x={sideB / 2} y={width + padTop / 2 + fontSize} fontSize={fontSize} className={styles.dimText}>
-            {formatLength(sideB)} ({config.edgeLabels?.sideB || "bottom edge"})
-          </text>
-          <text
-            x={-padLeft / 1.6}
-            y={width / 2}
-            fontSize={fontSize}
-            className={styles.dimText}
-            transform={`rotate(-90 ${-padLeft / 1.6} ${width / 2})`}
-          >
-            {formatLength(width)} ({config.edgeLabels?.width || "width"})
-          </text>
-          <text x={maxLen} y={width + padTop / 2 + fontSize * 2.4} fontSize={fontSize} textAnchor="end" className={styles.dimText}>
-            {config.edgeLabels?.rake || "Angled edge"}: {rakeAngleDeg(config).toFixed(1)}°
-          </text>
+          {/* dimension labels — trapezoid-specific (named sideA/sideB/width/
+              rake edges); a polygon deck's edges have no such fixed
+              4-edge vocabulary, so it skips these rather than showing
+              stale/wrong values from the ignored sideA/sideB/width fields */}
+          {!isPolygon && (
+            <>
+              <text x={sideA / 2} y={-padTop / 2.2} fontSize={fontSize} className={styles.dimText}>
+                {formatLength(sideA)} ({config.edgeLabels?.sideA || "top edge"})
+              </text>
+              <text x={sideB / 2} y={width + padTop / 2 + fontSize} fontSize={fontSize} className={styles.dimText}>
+                {formatLength(sideB)} ({config.edgeLabels?.sideB || "bottom edge"})
+              </text>
+              <text
+                x={-padLeft / 1.6}
+                y={width / 2}
+                fontSize={fontSize}
+                className={styles.dimText}
+                transform={`rotate(-90 ${-padLeft / 1.6} ${width / 2})`}
+              >
+                {formatLength(width)} ({config.edgeLabels?.width || "width"})
+              </text>
+              <text x={maxLen} y={width + padTop / 2 + fontSize * 2.4} fontSize={fontSize} textAnchor="end" className={styles.dimText}>
+                {config.edgeLabels?.rake || "Angled edge"}: {rakeAngleDeg(config).toFixed(1)}°
+              </text>
+            </>
+          )}
         </svg>
       </div>
 

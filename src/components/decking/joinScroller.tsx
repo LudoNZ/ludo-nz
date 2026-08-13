@@ -25,13 +25,22 @@ const JoinScroller = forwardRef<
     /** needed only to preview whether an as-yet-unplaced join would clash —
      * see clashPositions below */
     config: DeckConfig
+    /** mm, the shared board-run axis extent every row's mini-track is drawn
+     * against (so the joist grid lines up vertically down the page) — the
+     * trapezoid's own maxLen, or a polygon deck's bounding-box width/height
+     * along that axis */
     maxLen: number
+    /** mm, where that shared axis actually starts — always 0 for a
+     * trapezoid (its near boundary is always the origin); a polygon deck's
+     * own bounding-box minimum otherwise, since its near boundary might not
+     * be at 0 */
+    axisOrigin: number
     lockedRows: Record<string, LockedRow>
     onToggleJoin: (row: RowPlan, position: number) => void
     onResetRow: (row: RowPlan) => void
     onActiveRowChange?: (index: number | null) => void
   }
->(({ layout, config, maxLen, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }, ref) => {
+>(({ layout, config, maxLen, axisOrigin, lockedRows, onToggleJoin, onResetRow, onActiveRowChange }, ref) => {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
@@ -90,7 +99,7 @@ const JoinScroller = forwardRef<
     const row = layout.rows.find((r) => r.index === activeIndex)
     if (!row) return clashes
     const current = row.joins.map((j) => j.position)
-    const ticks = layout.joistPositions.filter((p) => p > 1e-6 && p < row.targetLength - 1e-6)
+    const ticks = layout.joistPositions.filter((p) => p > row.runStart + 1e-6 && p < row.runStart + row.targetLength - 1e-6)
     for (const p of ticks) {
       if (current.some((c) => Math.abs(c - p) < 1e-6)) continue
       const preview = previewJoinClash(config, activeIndex, current, p)
@@ -110,7 +119,7 @@ const JoinScroller = forwardRef<
       {layout.rows.map((row) => {
         const locked = Boolean(lockedRows[String(row.index)])
         const active = !locked && row.index === activeIndex
-        const ticks = layout.joistPositions.filter((p) => p > 1e-6 && p < row.targetLength - 1e-6)
+        const ticks = layout.joistPositions.filter((p) => p > row.runStart + 1e-6 && p < row.runStart + row.targetLength - 1e-6)
         const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
         return (
           <div
@@ -137,14 +146,14 @@ const JoinScroller = forwardRef<
             </div>
             <div className={styles.track}>
               <svg
-                viewBox={`0 0 ${maxLen} 100`}
+                viewBox={`${axisOrigin} 0 ${maxLen} 100`}
                 preserveAspectRatio="none"
                 className={styles.trackSvg}
                 aria-hidden="true"
               >
-                <rect x={0} y={12} width={row.targetLength} height={76} className={styles.rowExtentSvg} />
+                <rect x={row.runStart} y={12} width={row.targetLength} height={76} className={styles.rowExtentSvg} />
                 {layout.joistPositions
-                  .filter((p) => p > 1e-6 && p < maxLen - 1e-6)
+                  .filter((p) => p > axisOrigin + 1e-6 && p < axisOrigin + maxLen - 1e-6)
                   .map((p) => (
                     <line key={p} x1={p} y1={0} x2={p} y2={100} className={styles.joistLine} strokeWidth={strokeW} />
                   ))}
@@ -187,7 +196,7 @@ const JoinScroller = forwardRef<
                 ticks.map((p) => {
                   const join = row.joins.find((j) => Math.abs(j.position - p) < 1e-6)
                   const clash = !join && clashPositions.has(p)
-                  const left = `${(p / maxLen) * 100}%`
+                  const left = `${((p - axisOrigin) / maxLen) * 100}%`
                   return (
                     <button
                       key={p}
