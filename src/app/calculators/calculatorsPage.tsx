@@ -40,21 +40,56 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
   },
 ]
 
-// Ideas queued up for the same rule-of-thumb, real-materials-list treatment —
-// purely a roadmap placeholder, no functionality behind these yet.
+// Ideas queued up for the same rule-of-thumb, real-materials-list treatment
+// — purely a roadmap placeholder, no functionality behind these yet. The
+// first block roughly follows a house's actual build sequence, and mostly
+// tracks NZS 3604 (the NZ timber-framed buildings standard) section for
+// section, same reference-table-driven spirit as the retaining wall
+// calculator; the rest are more standalone DIY jobs.
 const PLANNED_CALCULATORS: PlannedCalculator[] = [
   {
-    id: "paling-fence",
-    title: "Paling Fence",
+    id: "footings",
+    title: "Footings",
     description:
-      "Post spacing, rail count, and paling coverage for a standard timber paling fence — built on the same post/rail/infill engine as the retaining wall calculator.",
-    tags: ["Posts", "Rails", "Palings"],
+      "Pad and strip footing size and depth from bearing load and ground conditions, NZS 3604 style — plus a concrete volume and bag-count materials list.",
+    tags: ["Footing size", "Depth", "Concrete volume"],
   },
   {
-    id: "concrete-footings",
-    title: "Concrete Footings & Slabs",
-    description: "Volume and bag-count estimate for footings, piles, or a slab pour from your dimensions and mix ratio.",
-    tags: ["Volume", "Bag count"],
+    id: "piles",
+    title: "Piles",
+    description: "Timber pile size and spacing under a floor, from bearer spans and pile height — with a full pile and bearer materials list.",
+    tags: ["Pile spacing", "Pile size", "Bearers"],
+  },
+  {
+    id: "mid-floor-framing",
+    title: "Mid-Floor Framing",
+    description: "Joist and bearer spans, sizing, and blocking for a mid-floor off the NZS 3604 span tables, with a full joist/bearer materials list.",
+    tags: ["Joist spans", "Bearer spans", "Blocking"],
+  },
+  {
+    id: "wall-framing",
+    title: "Wall Framing",
+    description:
+      "Stud spacing and sizing, dwangs, and a prenail-ready materials list for a wall frame — plus a rough erection time estimate, same as the retaining wall labour estimate.",
+    tags: ["Studs", "Dwangs", "Prenail", "Erection time"],
+  },
+  {
+    id: "lintels",
+    title: "Lintels",
+    description: "Header beam sizing over door and window openings from span and roof load, off the NZS 3604 lintel tables.",
+    tags: ["Lintel size", "Opening span"],
+  },
+  {
+    id: "roof-framing",
+    title: "Roof Framing",
+    description: "Rafter and ceiling joist spans and sizing off the NZS 3604 tables, with a full roof framing materials list.",
+    tags: ["Rafters", "Ceiling joists", "Spans"],
+  },
+  {
+    id: "bracing",
+    title: "Bracing",
+    description: "Wall bracing demand vs. bracing-unit capacity, NZS 3604 style — check a floor plan actually stacks up before you frame it.",
+    tags: ["Bracing demand", "BU capacity"],
   },
   {
     id: "stair-stringer",
@@ -69,8 +104,15 @@ const PLANNED_CALCULATORS: PlannedCalculator[] = [
     tags: ["Posts", "Beams", "Rafters"],
   },
   {
-    id: "roofing",
-    title: "Roofing",
+    id: "paling-fence",
+    title: "Paling Fence",
+    description:
+      "Post spacing, rail count, and paling coverage for a standard timber paling fence — built on the same post/rail/infill engine as the retaining wall calculator.",
+    tags: ["Posts", "Rails", "Palings"],
+  },
+  {
+    id: "roof-cladding",
+    title: "Roof Cladding",
     description: "Sheet count, purlin spacing, and flashing lengths for a simple gable or skillion roof.",
     tags: ["Sheet count", "Purlins", "Flashing"],
   },
