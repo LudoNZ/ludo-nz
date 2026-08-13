@@ -115,6 +115,13 @@ const PolygonShapeEditor: React.FC<{
   const bounds = useMemo(() => polygonBounds(points), [points])
   const simple = useMemo(() => isSimplePolygon(points), [points])
   const outlinePath = useMemo(() => polygonOutlinePath(points), [points])
+  // reference point for "outward" — pushes a locked dimension's label
+  // clear of the shape's own fill rather than layering it over the outline
+  const centroid = useMemo(() => {
+    const sx = points.reduce((s, p) => s + p.x, 0)
+    const sy = points.reduce((s, p) => s + p.y, 0)
+    return { x: sx / n, y: sy / n }
+  }, [points, n])
 
   // A closed shape can't have every side length *and* every corner angle
   // independently fixed at once (same reason a triangle's three angles
@@ -301,6 +308,39 @@ const PolygonShapeEditor: React.FC<{
             )
           })}
 
+          {/* a set (locked) side's length is always readable on the plan
+              itself, not just once tapped — offset outward from the
+              midpoint, perpendicular to the edge, so it clears the fill */}
+          {points.map((p, i) => {
+            if (lockedEdgeLengths[String(i)] === undefined) return null
+            const next = points[(i + 1) % n]
+            const midX = (p.x + next.x) / 2
+            const midY = (p.y + next.y) / 2
+            const dx = next.x - p.x
+            const dy = next.y - p.y
+            const len = Math.hypot(dx, dy) || 1
+            let px = -dy / len
+            let py = dx / len
+            if (px * (centroid.x - midX) + py * (centroid.y - midY) > 0) {
+              px = -px
+              py = -py
+            }
+            const offset = strokeW * 11
+            return (
+              <text
+                key={`edge-label-${i}`}
+                x={midX + px * offset}
+                y={midY + py * offset}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={strokeW * 7}
+                className={styles.dimLabel}
+              >
+                {formatLength(edgeLength(points, i))}
+              </text>
+            )
+          })}
+
           {points.map((p, i) => (
             <g key={i}>
               <circle
@@ -326,6 +366,29 @@ const PolygonShapeEditor: React.FC<{
               />
             </g>
           ))}
+
+          {/* a set (locked) corner's angle, same always-visible treatment,
+              offset outward along the centroid→corner direction */}
+          {points.map((p, i) => {
+            if (lockedVertexAngles[String(i)] === undefined) return null
+            const dx = p.x - centroid.x
+            const dy = p.y - centroid.y
+            const len = Math.hypot(dx, dy) || 1
+            const offset = strokeW * 13
+            return (
+              <text
+                key={`angle-label-${i}`}
+                x={p.x + (dx / len) * offset}
+                y={p.y + (dy / len) * offset}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={strokeW * 7}
+                className={styles.dimLabel}
+              >
+                {interiorAngleDeg(points, i).toFixed(1)}°
+              </text>
+            )
+          })}
         </svg>
 
         <button

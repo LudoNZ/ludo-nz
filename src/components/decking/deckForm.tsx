@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import { DeckConfig, sideBFromRakeAngle, StockItem } from "./types"
 import { insertMidpointOnLongestEdge, isSimplePolygon } from "./polygon"
@@ -35,6 +35,23 @@ const DeckForm: React.FC<{
   saveLabel?: string
 }> = ({ initial, onSave, onCancel, saveLabel = "Save" }) => {
   const [state, setState] = useState<FormState>(toFormState(initial))
+
+  // Every field in this form funnels through setState, so rather than
+  // hand-tracking "did this particular field change" at dozens of call
+  // sites, just watch the whole state object: the initial mount's render
+  // doesn't count (nothing's been touched yet), but any state update after
+  // that — no matter which field it came from — means there's now
+  // something unsaved. Once true it stays true for the rest of this form's
+  // life; it only resets by unmounting (closing/reopening the editor).
+  const isFirstRender = useRef(true)
+  const [dirty, setDirty] = useState(false)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setDirty(true)
+  }, [state])
 
   const num = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setState((s) => ({ ...s, [key]: Number(e.target.value) || 0 }))
@@ -123,7 +140,7 @@ const DeckForm: React.FC<{
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit}>
+    <form className={`${styles.form} ${dirty ? styles.formWithStickyActions : ""}`} onSubmit={handleSubmit}>
       <div className={styles.field}>
         <label htmlFor="name">Deck name</label>
         <input
@@ -329,7 +346,7 @@ const DeckForm: React.FC<{
       </div>
 
       {shapeInvalid && <p className={styles.shapeInvalidNote}>⚠ Fix the crossed shape above before saving.</p>}
-      <div className={styles.actions}>
+      <div className={`${styles.actions} ${dirty ? styles.actionsSticky : ""}`}>
         <Button type="submit" size="large" onClick={() => {}} disabled={shapeInvalid}>
           {saveLabel}
         </Button>

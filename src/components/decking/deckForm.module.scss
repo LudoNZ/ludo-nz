@@ -92,6 +92,36 @@
   flex-wrap: wrap;
 }
 
+// once there's an actual unsaved edit, the save/cancel bar lifts off the
+// bottom of the form and follows you down the screen on mobile — this is
+// a long form, and without this you'd have to scroll all the way back
+// down just to save. Desktop shows enough of the form at once that it
+// isn't needed there. Matches cutModePage's own fixed action-bar pattern.
+.actionsSticky {
+  @media (max-width: 640px) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    justify-content: center;
+    background: var(--background);
+    border-top: 1px solid var(--foreground);
+    padding: 0.6rem 1rem;
+    padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+    margin: 0;
+  }
+}
+
+// reserves space for the sticky bar above so it never ends up covering
+// the last field or the bar's own drop shadow-less border overlapping
+// content mid-scroll
+.formWithStickyActions {
+  @media (max-width: 640px) {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 .stockList {
   display: flex;
   flex-direction: column;

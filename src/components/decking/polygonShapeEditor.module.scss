@@ -65,6 +65,21 @@
   fill: #2a78d6;
 }
 
+// a set length/angle's value, drawn right on the plan — same amber as the
+// locked marker it belongs to, with a background-coloured halo (rather than
+// a filled rect) so it stays legible over the outline's fill or the preview
+// lines without needing its own background shape
+.dimLabel {
+  fill: #d68910;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--background);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}
+
 .hitArea {
   fill: transparent;
   cursor: grab;
