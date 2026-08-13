@@ -7,6 +7,7 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
+import BoardStockPanel from "@/components/decking/boardStockPanel"
 import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
@@ -290,6 +291,12 @@ const DeckDetailPage = () => {
                 activeRowIndex={activeJoinRow}
               />
             </div>
+          </section>
+
+          <section>
+            <h2>Board stock</h2>
+            <p className={styles.hint}>Length (m) and how many of that length you have on hand.</p>
+            <BoardStockPanel stock={deck.stock} onChange={(stock) => saveDeckWith({ stock })} />
           </section>
 
           <section>

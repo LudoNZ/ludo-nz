@@ -2,31 +2,18 @@
 
 import { useEffect, useRef, useState } from "react"
 import Button from "@/components/button/button"
-import { DeckConfig, sideBFromRakeAngle, StockItem } from "./types"
+import { DeckConfig, sideBFromRakeAngle } from "./types"
 import { insertMidpointOnLongestEdge, isSimplePolygon } from "./polygon"
 import DeckShapeEditor from "./deckShapeEditor"
 import PolygonShapeEditor from "./polygonShapeEditor"
 import JoistExclusionMap from "./joistExclusionMap"
 import styles from "./deckForm.module.scss"
 
-type StockRow = { key: number; lengthText: string; quantity: number }
-
-type FormState = Omit<DeckConfig, "id" | "updatedAt" | "stock"> & {
-  stockRows: StockRow[]
-}
-
-let stockRowKeySeq = 0
-const nextKey = () => stockRowKeySeq++
-
-const toStockRows = (stock: StockItem[]): StockRow[] =>
-  stock.length
-    ? stock.map((s) => ({ key: nextKey(), lengthText: (s.length / 1000).toString(), quantity: s.quantity }))
-    : [{ key: nextKey(), lengthText: "", quantity: 1 }]
-
-const toFormState = (deck: Omit<DeckConfig, "id" | "updatedAt">): FormState => ({
-  ...deck,
-  stockRows: toStockRows(deck.stock),
-})
+// Board stock on hand lives in its own always-editable section on the
+// deck detail page (boardStockPanel.tsx) now, not here — this form just
+// carries `stock` through unchanged on save, same as any other field it
+// doesn't offer its own control for.
+type FormState = Omit<DeckConfig, "id" | "updatedAt">
 
 const DeckForm: React.FC<{
   initial: Omit<DeckConfig, "id" | "updatedAt">
@@ -34,7 +21,7 @@ const DeckForm: React.FC<{
   onCancel?: () => void
   saveLabel?: string
 }> = ({ initial, onSave, onCancel, saveLabel = "Save" }) => {
-  const [state, setState] = useState<FormState>(toFormState(initial))
+  const [state, setState] = useState<FormState>(initial)
 
   // Every field in this form funnels through setState, so rather than
   // hand-tracking "did this particular field change" at dozens of call
@@ -55,27 +42,6 @@ const DeckForm: React.FC<{
 
   const num = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setState((s) => ({ ...s, [key]: Number(e.target.value) || 0 }))
-
-  const updateRow = (key: number, patch: Partial<StockRow>) =>
-    setState((s) => ({ ...s, stockRows: s.stockRows.map((r) => (r.key === key ? { ...r, ...patch } : r)) }))
-
-  const addRow = () => setState((s) => ({ ...s, stockRows: [...s.stockRows, { key: nextKey(), lengthText: "", quantity: 1 }] }))
-
-  const removeRow = (key: number) =>
-    setState((s) => ({ ...s, stockRows: s.stockRows.filter((r) => r.key !== key) }))
-
-  const sortRows = () =>
-    setState((s) => ({
-      ...s,
-      stockRows: [...s.stockRows].sort((a, b) => {
-        const la = parseFloat(a.lengthText)
-        const lb = parseFloat(b.lengthText)
-        if (isNaN(la) && isNaN(lb)) return 0
-        if (isNaN(la)) return 1 // blanks sort to the end
-        if (isNaN(lb)) return -1
-        return la - lb
-      }),
-    }))
 
   const isPolygon = Boolean(state.points && state.points.length >= 3)
   const shapeInvalid = isPolygon && !isSimplePolygon(state.points!)
@@ -98,45 +64,15 @@ const DeckForm: React.FC<{
       return { ...s, points: insertMidpointOnLongestEdge(base) }
     })
 
+  // `state` is exactly Omit<DeckConfig, "id"|"updatedAt"> now (no more
+  // stockRows override needing translation back), so it can go straight
+  // through — no hand-listed field-by-field spread to keep in sync with
+  // DeckConfig by hand every time a field's added (bitten by that once
+  // already this session — see saveDeckWith in deckDetailPage.tsx).
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (shapeInvalid) return // the shape editor already shows why, inline
-
-    const stock: StockItem[] = state.stockRows
-      .map((r) => ({ length: Math.round(parseFloat(r.lengthText) * 1000), quantity: Math.max(0, Math.round(r.quantity)) }))
-      .filter((s) => !isNaN(s.length) && s.length > 0 && s.quantity > 0)
-      .sort((a, b) => a.length - b.length)
-
-    onSave({
-      name: state.name,
-      width: state.width,
-      sideA: state.sideA,
-      sideB: state.sideB,
-      sideBLinked: state.sideBLinked,
-      edgeLabels: state.edgeLabels,
-      points: state.points,
-      lockedEdgeLengths: state.lockedEdgeLengths,
-      lockedVertexAngles: state.lockedVertexAngles,
-      joistSpacing: state.joistSpacing,
-      firstBaySpacing: state.firstBaySpacing,
-      boardWidth: state.boardWidth,
-      boardGap: state.boardGap,
-      joinExclusions: state.joinExclusions,
-      minStaggerJoists: state.minStaggerJoists,
-      minSameRowJoinJoists: state.minSameRowJoinJoists,
-      minEdgeJoists: state.minEdgeJoists,
-      boardDirection: state.boardDirection,
-      skeletonInterval: state.skeletonInterval,
-      lengthBias: state.lengthBias,
-      layoutSeed: state.layoutSeed,
-      completedSegmentIds: state.completedSegmentIds,
-      lockedRows: state.lockedRows,
-      manualJoins: state.manualJoins,
-      cutLog: state.cutLog,
-      activeCutSegmentId: state.activeCutSegmentId,
-      activeCutAccumulatedMs: state.activeCutAccumulatedMs,
-      stock,
-    })
+    onSave(state)
   }
 
   return (
@@ -297,51 +233,6 @@ const DeckForm: React.FC<{
           <span>Favour shorter</span>
           <span>Neutral</span>
           <span>Favour longer</span>
-        </div>
-      </div>
-
-      <div className={styles.field}>
-        <label>Board stock on hand</label>
-        <span className={styles.hint}>Length (m) and how many of that length you have</span>
-        <div className={styles.stockList}>
-          {state.stockRows.map((row) => (
-            <div key={row.key} className={styles.stockRow}>
-              <input
-                type="number"
-                step="0.1"
-                min={0}
-                placeholder="Length (m)"
-                value={row.lengthText}
-                onChange={(e) => updateRow(row.key, { lengthText: e.target.value })}
-                onBlur={sortRows}
-                aria-label="Board length in metres"
-              />
-              <span className={styles.stockX}>×</span>
-              <input
-                type="number"
-                min={0}
-                value={row.quantity}
-                onChange={(e) => updateRow(row.key, { quantity: Number(e.target.value) || 0 })}
-                aria-label="Quantity"
-              />
-              <button
-                type="button"
-                className={styles.removeRow}
-                onClick={() => removeRow(row.key)}
-                aria-label="Remove this length"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className={styles.stockActions}>
-          <Button size="small" variant="secondary" onClick={addRow}>
-            Add length
-          </Button>
-          <Button size="small" variant="secondary" onClick={sortRows}>
-            Sort by size
-          </Button>
         </div>
       </div>
 
