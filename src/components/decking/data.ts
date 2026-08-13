@@ -1,8 +1,10 @@
 import {
   collection,
+  CollectionReference,
   deleteDoc,
   deleteField,
   doc,
+  DocumentReference,
   onSnapshot,
   orderBy,
   query,
@@ -14,20 +16,37 @@ import { firestore } from "../../../firebase/client"
 import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
 import { CutLogEntry, DeckConfig, DEFAULT_EDGE_LABELS, LockedRow, StockItem } from "./types"
 
-const decksRef = (uid: string) => collection(firestore, "users", uid, "decks")
+/** Where a deck actually lives: private decks are your own, tucked under
+ * your account (users/{uid}/decks) and only ever visible to you; public
+ * decks (publicDecks, top-level) have no owner at all — anyone can see,
+ * create, or edit one, no login required. Every deck loaded from
+ * Firestore carries the location it came from (see StoredDeck) so a
+ * later save/delete/edit writes back to the same place, without having
+ * to re-derive or guess it. */
+export type DeckLocation = { kind: "private"; uid: string } | { kind: "public" }
 
-export const newDeckId = (uid: string) => doc(decksRef(uid)).id
+export interface StoredDeck extends DeckConfig {
+  location: DeckLocation
+}
+
+const decksCollectionRef = (location: DeckLocation): CollectionReference =>
+  location.kind === "private" ? collection(firestore, "users", location.uid, "decks") : collection(firestore, "publicDecks")
+
+const deckDocRef = (location: DeckLocation, deckId: string): DocumentReference =>
+  location.kind === "private" ? doc(firestore, "users", location.uid, "decks", deckId) : doc(firestore, "publicDecks", deckId)
+
+export const newDeckId = (location: DeckLocation) => doc(decksCollectionRef(location)).id
 
 export const subscribeToDecks = (
-  uid: string,
-  onData: (decks: DeckConfig[]) => void,
+  location: DeckLocation,
+  onData: (decks: StoredDeck[]) => void,
   onError?: (err: unknown) => void
 ) => {
-  const q = query(decksRef(uid), orderBy("updatedAt", "desc"))
+  const q = query(decksCollectionRef(location), orderBy("updatedAt", "desc"))
   return onSnapshot(
     q,
     (snap) => {
-      const decks: DeckConfig[] = snap.docs.map((d) => {
+      const decks: StoredDeck[] = snap.docs.map((d) => {
         const data = d.data()
         // migrate pre-inventory decks: an unlimited stockLengths list becomes a
         // generous quantity so an old deck doesn't suddenly run "out of stock"
@@ -36,6 +55,7 @@ export const subscribeToDecks = (
           : (data.stockLengths ?? []).map((length: number) => ({ length, quantity: 99 }))
         return {
           id: d.id,
+          location,
           name: data.name,
           width: data.width,
           sideA: data.sideA,
@@ -89,25 +109,30 @@ export const subscribeToDecks = (
   )
 }
 
-export const saveDeck = async (uid: string, deck: Omit<DeckConfig, "updatedAt">) => {
+export const saveDeck = async (location: DeckLocation, deck: Omit<DeckConfig, "updatedAt">) => {
   const { id, ...rest } = deck
-  await setDoc(doc(firestore, "users", uid, "decks", id), {
+  await setDoc(deckDocRef(location, id), {
     ...rest,
     updatedAt: Timestamp.now(),
   })
 }
 
-export const deleteDeck = async (uid: string, deckId: string) => {
-  await deleteDoc(doc(firestore, "users", uid, "decks", deckId))
+/** No-op (rather than throwing) for a public deck — Firestore's own rules
+ * already refuse the delete, but callers shouldn't need to know that;
+ * they should just not offer delete on a public deck in the first place
+ * (see deckDetailPage's handleDelete). */
+export const deleteDeck = async (location: DeckLocation, deckId: string) => {
+  if (location.kind === "public") return
+  await deleteDoc(deckDocRef(location, deckId))
 }
 
 export const setCompletedSegments = async (
-  uid: string,
+  location: DeckLocation,
   deckId: string,
   completedSegmentIds: string[],
   lockedRows: Record<string, LockedRow>
 ) => {
-  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+  await updateDoc(deckDocRef(location, deckId), {
     completedSegmentIds,
     lockedRows,
     updatedAt: Timestamp.now(),
@@ -119,13 +144,13 @@ export const setCompletedSegments = async (
  * removed). Doesn't touch activeCutSegmentId/activeCutAccumulatedMs — that's
  * reconciled separately via setActiveCut once the new "next" step is known. */
 export const setCompletedSegmentsWithLog = async (
-  uid: string,
+  location: DeckLocation,
   deckId: string,
   completedSegmentIds: string[],
   lockedRows: Record<string, LockedRow>,
   cutLog: CutLogEntry[]
 ) => {
-  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+  await updateDoc(deckDocRef(location, deckId), {
     completedSegmentIds,
     lockedRows,
     cutLog,
@@ -137,16 +162,16 @@ export const setCompletedSegmentsWithLog = async (
  * field path so it only ever touches that single row's entry — safe to
  * call rapidly as someone taps through the join editor without racing
  * against anything else being saved at the same time. */
-export const setManualJoins = async (uid: string, deckId: string, rowIndex: number, positions: number[]) => {
-  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+export const setManualJoins = async (location: DeckLocation, deckId: string, rowIndex: number, positions: number[]) => {
+  await updateDoc(deckDocRef(location, deckId), {
     [`manualJoins.${rowIndex}`]: positions,
     updatedAt: Timestamp.now(),
   })
 }
 
 /** Reverts one row back to the auto-computed layout. */
-export const clearManualJoins = async (uid: string, deckId: string, rowIndex: number) => {
-  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+export const clearManualJoins = async (location: DeckLocation, deckId: string, rowIndex: number) => {
+  await updateDoc(deckDocRef(location, deckId), {
     [`manualJoins.${rowIndex}`]: deleteField(),
     updatedAt: Timestamp.now(),
   })
@@ -156,12 +181,12 @@ export const clearManualJoins = async (uid: string, deckId: string, rowIndex: nu
  * accumulatedMs 0 whenever the "next" step changes, and with the paused
  * elapsed total when Cutting mode is closed. */
 export const setActiveCut = async (
-  uid: string,
+  location: DeckLocation,
   deckId: string,
   activeCutSegmentId: string | null,
   activeCutAccumulatedMs: number
 ) => {
-  await updateDoc(doc(firestore, "users", uid, "decks", deckId), {
+  await updateDoc(deckDocRef(location, deckId), {
     activeCutSegmentId,
     activeCutAccumulatedMs,
     updatedAt: Timestamp.now(),

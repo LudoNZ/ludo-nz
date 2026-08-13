@@ -1,51 +1,62 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import {
+  DeckLocation,
   setActiveCut,
   setCompletedSegmentsWithLog,
+  StoredDeck,
   subscribeToDecks,
 } from "@/components/decking/data"
 import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
 import { getCutOrder, lastCompletedStep, nextCutStep } from "@/components/decking/cuttingOrder"
-import { CutLogEntry, DeckConfig, formatDuration, formatLength } from "@/components/decking/types"
+import { CutLogEntry, formatDuration, formatLength } from "@/components/decking/types"
 import styles from "./cutModePage.module.scss"
 
 const CutModePage = () => {
   const auth = useAuth()
-  const router = useRouter()
   const params = useParams<{ deckId: string }>()
-  const [decks, setDecks] = useState<DeckConfig[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const [publicDecks, setPublicDecks] = useState<StoredDeck[]>([])
+  const [publicLoaded, setPublicLoaded] = useState(false)
+  const [privateDecks, setPrivateDecks] = useState<StoredDeck[]>([])
+  const [privateLoaded, setPrivateLoaded] = useState(false)
   const [, forceTick] = useState(0)
 
   const sessionStartedAtRef = useRef(Date.now())
-  const uidRef = useRef<string | undefined>(undefined)
+  const locationRef = useRef<DeckLocation | undefined>(undefined)
   const deckIdRef = useRef<string | undefined>(undefined)
   const activeIdRef = useRef<string | null>(null)
   const baselineMsRef = useRef(0)
 
   useEffect(() => {
-    if (auth && !auth.authLoading && !auth.currentUser) {
-      router.push("/login")
-    }
-  }, [auth, router])
-
-  useEffect(() => {
-    if (!auth?.currentUser) return
-    const unsubscribe = subscribeToDecks(auth.currentUser.uid, (data) => {
-      setDecks(data)
-      setLoaded(true)
+    const unsubscribe = subscribeToDecks({ kind: "public" }, (data) => {
+      setPublicDecks(data)
+      setPublicLoaded(true)
     })
     return () => unsubscribe()
-  }, [auth?.currentUser])
+  }, [])
 
-  const deck = decks.find((d) => d.id === params.deckId)
+  useEffect(() => {
+    if (!auth || auth.authLoading) return // still resolving — wait rather than flash "not found"
+    if (!auth.currentUser) {
+      setPrivateDecks([])
+      setPrivateLoaded(true)
+      return
+    }
+    const unsubscribe = subscribeToDecks({ kind: "private", uid: auth.currentUser.uid }, (data) => {
+      setPrivateDecks(data)
+      setPrivateLoaded(true)
+    })
+    return () => unsubscribe()
+  }, [auth, auth?.authLoading, auth?.currentUser])
+
+  const loaded = publicLoaded && privateLoaded
+  const deck = [...privateDecks, ...publicDecks].find((d) => d.id === params.deckId)
   const layout = useMemo(() => (deck ? computeDeckLayout(deck) : null), [deck])
   const order = useMemo(() => (layout ? getCutOrder(layout) : []), [layout])
   const next = useMemo(
@@ -65,7 +76,7 @@ const CutModePage = () => {
 
   // keep latest values available to the unmount cleanup without re-registering it
   useEffect(() => {
-    uidRef.current = auth?.currentUser?.uid
+    locationRef.current = deck?.location
     deckIdRef.current = deck?.id
     activeIdRef.current = deck?.activeCutSegmentId ?? null
     baselineMsRef.current = deck?.activeCutAccumulatedMs ?? 0
@@ -74,32 +85,32 @@ const CutModePage = () => {
   // whenever the board being timed should change (advanced, undone, or first
   // load out of sync), reset the local clock and point Firestore at the new one
   useEffect(() => {
-    if (!deck || !auth?.currentUser) return
+    if (!deck) return
     const nextId = next?.segment.id ?? null
     if (nextId === deck.activeCutSegmentId) return
     sessionStartedAtRef.current = Date.now()
-    setActiveCut(auth.currentUser.uid, deck.id, nextId, 0)
-  }, [next?.segment.id, deck?.activeCutSegmentId, deck?.id, auth?.currentUser?.uid])
+    setActiveCut(deck.location, deck.id, nextId, 0)
+  }, [next?.segment.id, deck?.activeCutSegmentId, deck?.id, deck?.location])
 
   // pause the timer (persist elapsed time) when leaving Cutting mode
   useEffect(() => {
     return () => {
-      if (uidRef.current && deckIdRef.current && activeIdRef.current) {
+      if (locationRef.current && deckIdRef.current && activeIdRef.current) {
         const elapsed = baselineMsRef.current + (Date.now() - sessionStartedAtRef.current)
-        setActiveCut(uidRef.current, deckIdRef.current, activeIdRef.current, elapsed)
+        setActiveCut(locationRef.current, deckIdRef.current, activeIdRef.current, elapsed)
       }
     }
   }, [])
 
-  if (!auth?.currentUser) {
+  if (!loaded) {
     return (
       <div className={styles.cutPage}>
-        <p className={styles.loading}>Checking access...</p>
+        <p className={styles.loading}>Loading…</p>
       </div>
     )
   }
 
-  if (loaded && !deck) {
+  if (!deck) {
     return (
       <div className={styles.cutPage}>
         <p className={styles.loading}>Deck not found.</p>
@@ -107,7 +118,7 @@ const CutModePage = () => {
     )
   }
 
-  if (!deck || !layout) {
+  if (!layout) {
     return (
       <div className={styles.cutPage}>
         <p className={styles.loading}>Loading…</p>
@@ -143,7 +154,7 @@ const CutModePage = () => {
 
     const completedSegmentIds = Array.from(set)
     const lockedRows = computeLockedRows(layout, deck.lockedRows, completedSegmentIds)
-    setCompletedSegmentsWithLog(auth.currentUser!.uid, deck.id, completedSegmentIds, lockedRows, cutLog)
+    setCompletedSegmentsWithLog(deck.location, deck.id, completedSegmentIds, lockedRows, cutLog)
   }
 
   const placedCount = order.filter((s) => deck.completedSegmentIds.includes(s.segment.id)).length

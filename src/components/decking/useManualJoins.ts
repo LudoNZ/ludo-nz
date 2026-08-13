@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { clearManualJoins, setManualJoins } from "./data"
+import { clearManualJoins, DeckLocation, setManualJoins } from "./data"
 import { computeDeckLayout, previewBoardReach, RowPlan } from "./layout"
 import { DeckConfig } from "./types"
 
@@ -17,7 +17,7 @@ const arraysEqual = (a: number[] | undefined, b: number[] | undefined) => {
  * confirms the same value, reverted if the write fails. Every consumer of
  * `layout` (plan view, cut list, join scroller) sees the edit immediately
  * since they all read the one layout this returns. */
-export function useManualJoins(deck: DeckConfig | undefined, uid: string | undefined) {
+export function useManualJoins(deck: DeckConfig | undefined, location: DeckLocation | undefined) {
   const [pendingJoins, setPendingJoins] = useState<Record<number, number[] | null>>({})
 
   useEffect(() => {
@@ -52,9 +52,9 @@ export function useManualJoins(deck: DeckConfig | undefined, uid: string | undef
   // effect above for how it's dropped once confirmed), Firestore write in
   // the background, reverted if that write fails
   const commitJoins = (rowIndex: number, positions: number[]) => {
-    if (!deck || !uid) return
+    if (!deck || !location) return
     setPendingJoins((prev) => ({ ...prev, [rowIndex]: positions }))
-    setManualJoins(uid, deck.id, rowIndex, positions).catch(() => {
+    setManualJoins(location, deck.id, rowIndex, positions).catch(() => {
       setPendingJoins((prev) => {
         const copy = { ...prev }
         delete copy[rowIndex]
@@ -73,9 +73,9 @@ export function useManualJoins(deck: DeckConfig | undefined, uid: string | undef
   }
 
   const resetRow = (row: RowPlan) => {
-    if (!deck || !uid) return
+    if (!deck || !location) return
     setPendingJoins((prev) => ({ ...prev, [row.index]: null }))
-    clearManualJoins(uid, deck.id, row.index).catch(() => {
+    clearManualJoins(location, deck.id, row.index).catch(() => {
       setPendingJoins((prev) => {
         const copy = { ...prev }
         delete copy[row.index]

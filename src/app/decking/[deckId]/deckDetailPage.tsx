@@ -11,52 +11,68 @@ import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
 import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
-import { deleteDeck, saveDeck, setCompletedSegments, subscribeToDecks } from "@/components/decking/data"
+import { deleteDeck, saveDeck, setCompletedSegments, StoredDeck, subscribeToDecks } from "@/components/decking/data"
 import { computeLockedRows, optimizeBoardStockLengths } from "@/components/decking/layout"
 import { useManualJoins } from "@/components/decking/useManualJoins"
 import { DeckConfig, formatLength, LockedRow } from "@/components/decking/types"
 import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon, WandIcon } from "@/components/icons/icons"
 import styles from "./deckDetailPage.module.scss"
 
+/** No login required to view or edit a deck here at all — a public deck
+ * (no owner) is fully editable by anyone; a private one only ever shows
+ * up in your own subscription in the first place, so there's no
+ * ownership check to do beyond "which subscription did it come from".
+ * The one exception is delete, which Firestore itself refuses on a
+ * public deck — see handleDelete. */
 const DeckDetailPage = () => {
   const auth = useAuth()
   const router = useRouter()
   const params = useParams<{ deckId: string }>()
-  const [decks, setDecks] = useState<DeckConfig[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const [publicDecks, setPublicDecks] = useState<StoredDeck[]>([])
+  const [publicLoaded, setPublicLoaded] = useState(false)
+  const [privateDecks, setPrivateDecks] = useState<StoredDeck[]>([])
+  const [privateLoaded, setPrivateLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editingJoins, setEditingJoins] = useState(false)
   const [activeJoinRow, setActiveJoinRow] = useState<number | null>(null)
   const joinScrollerRef = useRef<JoinScrollerHandle>(null)
 
   useEffect(() => {
-    if (auth && !auth.authLoading && !auth.currentUser) {
-      router.push("/login")
-    }
-  }, [auth, router])
-
-  useEffect(() => {
-    if (!auth?.currentUser) return
-    const unsubscribe = subscribeToDecks(auth.currentUser.uid, (data) => {
-      setDecks(data)
-      setLoaded(true)
+    const unsubscribe = subscribeToDecks({ kind: "public" }, (data) => {
+      setPublicDecks(data)
+      setPublicLoaded(true)
     })
     return () => unsubscribe()
-  }, [auth?.currentUser])
+  }, [])
 
-  const deck = decks.find((d) => d.id === params.deckId)
-  const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, auth?.currentUser?.uid)
+  useEffect(() => {
+    if (!auth || auth.authLoading) return // still resolving — wait rather than flash "not found"
+    if (!auth.currentUser) {
+      setPrivateDecks([])
+      setPrivateLoaded(true)
+      return
+    }
+    const unsubscribe = subscribeToDecks({ kind: "private", uid: auth.currentUser.uid }, (data) => {
+      setPrivateDecks(data)
+      setPrivateLoaded(true)
+    })
+    return () => unsubscribe()
+  }, [auth, auth?.authLoading, auth?.currentUser])
+
+  const loaded = publicLoaded && privateLoaded
+  const deck = [...privateDecks, ...publicDecks].find((d) => d.id === params.deckId)
+  const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, deck?.location)
   const maxLen = deck ? Math.max(deck.sideA, deck.sideB) : 1
 
-  if (!auth?.currentUser) {
+  if (!loaded) {
     return (
       <div className={styles.detailPage}>
-        <p className={styles.loading}>Checking access...</p>
+        <p className={styles.loading}>Loading…</p>
       </div>
     )
   }
 
-  if (loaded && !deck) {
+  if (!deck) {
     return (
       <div className={styles.detailPage}>
         <p className={styles.loading}>Deck not found.</p>
@@ -64,7 +80,7 @@ const DeckDetailPage = () => {
     )
   }
 
-  if (!deck || !layout || !effectiveConfig) {
+  if (!layout || !effectiveConfig) {
     return (
       <div className={styles.detailPage}>
         <p className={styles.loading}>Loading…</p>
@@ -73,27 +89,29 @@ const DeckDetailPage = () => {
   }
 
   const handleSave = async (updated: Omit<DeckConfig, "id" | "updatedAt">) => {
-    await saveDeck(auth.currentUser!.uid, { id: deck.id, ...updated })
+    await saveDeck(deck.location, { id: deck.id, ...updated })
     setEditing(false)
   }
 
   const handleDelete = async () => {
+    if (deck.location.kind !== "private") return // Firestore refuses this on a public deck anyway
     if (confirm(`Delete "${deck.name}"? This can't be undone.`)) {
-      await deleteDeck(auth.currentUser!.uid, deck.id)
+      await deleteDeck(deck.location, deck.id)
       router.push("/decking")
     }
   }
 
-  // saveDeck wants every field except updatedAt (it stamps its own) — strip
-  // just that one off the live `deck` rather than hand-listing every other
-  // field, so a save-with-overrides action can't silently drop a field a
-  // future DeckConfig addition needs (bitten twice already this session:
-  // the shape editor's sideBLinked, and lengthBias, both needed adding here
-  // by hand before this existed)
+  // saveDeck wants every field except updatedAt (it stamps its own), and
+  // `location` isn't part of DeckConfig at all (it's how StoredDeck tracks
+  // which collection this came from) — strip both off the live `deck`
+  // rather than hand-listing every other field, so a save-with-overrides
+  // action can't silently drop a field a future DeckConfig addition needs
+  // (bitten twice already this session before this existed).
   const saveDeckWith = (overrides: Partial<Omit<DeckConfig, "id" | "updatedAt">>) => {
-    const rest: Partial<DeckConfig> = { ...deck }
+    const { location, ...deckOnly } = deck
+    const rest: Partial<DeckConfig> = { ...deckOnly }
     delete rest.updatedAt
-    return saveDeck(auth.currentUser!.uid, { ...(rest as Omit<DeckConfig, "updatedAt">), ...overrides })
+    return saveDeck(location, { ...(rest as Omit<DeckConfig, "updatedAt">), ...overrides })
   }
 
   const handleShuffle = () => saveDeckWith({ layoutSeed: Math.floor(Math.random() * 2 ** 31) })
@@ -125,19 +143,22 @@ const DeckDetailPage = () => {
     else set.add(id)
     const completedSegmentIds = Array.from(set)
     const lockedRows = computeLockedRows(layout, deck.lockedRows, completedSegmentIds)
-    setCompletedSegments(auth.currentUser!.uid, deck.id, completedSegmentIds, lockedRows)
+    setCompletedSegments(deck.location, deck.id, completedSegmentIds, lockedRows)
   }
 
   const handleClearCompleted = () => {
     if (confirm("Clear all placed marks on this deck? This also unlocks every row for reshuffling.")) {
-      setCompletedSegments(auth.currentUser!.uid, deck.id, [], {})
+      setCompletedSegments(deck.location, deck.id, [], {})
     }
   }
 
   return (
     <div className={styles.detailPage}>
       <div className={styles.headerRow}>
-        <h1>{deck.name}</h1>
+        <h1>
+          {deck.name}
+          {deck.location.kind === "public" && <span className={styles.publicBadge}>Public</span>}
+        </h1>
         <div className={styles.actions}>
           {!editing && (
             <Link href={`/decking/${deck.id}/cut`}>
@@ -183,9 +204,11 @@ const DeckDetailPage = () => {
           >
             {editing ? <CloseIcon /> : <EditIcon />}
           </Button>
-          <Button size="icon" variant="danger" onClick={handleDelete} ariaLabel="Delete deck">
-            <TrashIcon />
-          </Button>
+          {deck.location.kind === "private" && (
+            <Button size="icon" variant="danger" onClick={handleDelete} ariaLabel="Delete deck">
+              <TrashIcon />
+            </Button>
+          )}
         </div>
       </div>
 

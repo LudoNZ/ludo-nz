@@ -5,31 +5,52 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
-import { newDeckId, saveDeck, subscribeToDecks } from "@/components/decking/data"
-import { defaultDeckConfig, DeckConfig, formatLength } from "@/components/decking/types"
+import { DeckLocation, newDeckId, saveDeck, StoredDeck, subscribeToDecks } from "@/components/decking/data"
+import { defaultDeckConfig, formatLength } from "@/components/decking/types"
 import styles from "./deckingPage.module.scss"
 
+const DeckCard: React.FC<{ deck: StoredDeck }> = ({ deck }) => (
+  <Link href={`/decking/${deck.id}`} className={styles.card}>
+    <h3>{deck.name}</h3>
+    <div className={styles.meta}>
+      {formatLength(deck.width)} wide · {formatLength(deck.sideA)} / {formatLength(deck.sideB)}
+    </div>
+  </Link>
+)
+
+/** No login required to use this page at all — public decks (no owner,
+ * anyone can see/create/edit) are always shown; your own private decks
+ * (visible only to you) sit above them once you're signed in. Which one
+ * "Add deck" creates follows the same rule: private while logged in,
+ * public otherwise — see handleAddDeck. */
 const DeckingPage = () => {
   const auth = useAuth()
   const router = useRouter()
-  const [decks, setDecks] = useState<DeckConfig[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const [privateDecks, setPrivateDecks] = useState<StoredDeck[]>([])
+  const [privateLoaded, setPrivateLoaded] = useState(false)
+  const [publicDecks, setPublicDecks] = useState<StoredDeck[]>([])
+  const [publicLoaded, setPublicLoaded] = useState(false)
   const [creating, setCreating] = useState(false)
 
-  // Viewing is public — no redirect to /login just to look around. Only
-  // saving/creating a deck (handleAddDeck below, and every write in
-  // deckDetailPage) actually needs an account, since decks are private,
-  // per-user Firestore data.
+  // public decks are always visible, logged in or not
+  useEffect(() => {
+    const unsubscribe = subscribeToDecks({ kind: "public" }, (data) => {
+      setPublicDecks(data)
+      setPublicLoaded(true)
+    })
+    return () => unsubscribe()
+  }, [])
+
   useEffect(() => {
     if (!auth || auth.authLoading) return // still resolving — wait rather than flash an empty list
     if (!auth.currentUser) {
-      setDecks([])
-      setLoaded(true)
+      setPrivateDecks([])
+      setPrivateLoaded(true)
       return
     }
-    const unsubscribe = subscribeToDecks(auth.currentUser.uid, (data) => {
-      setDecks(data)
-      setLoaded(true)
+    const unsubscribe = subscribeToDecks({ kind: "private", uid: auth.currentUser.uid }, (data) => {
+      setPrivateDecks(data)
+      setPrivateLoaded(true)
     })
     return () => unsubscribe()
   }, [auth, auth?.authLoading, auth?.currentUser])
@@ -43,14 +64,11 @@ const DeckingPage = () => {
   }
 
   const handleAddDeck = async () => {
-    if (!auth.currentUser) {
-      router.push("/login")
-      return
-    }
     setCreating(true)
-    const uid = auth.currentUser.uid
-    const id = newDeckId(uid)
-    await saveDeck(uid, { id, ...defaultDeckConfig(`Deck ${decks.length + 1}`) })
+    const location: DeckLocation = auth.currentUser ? { kind: "private", uid: auth.currentUser.uid } : { kind: "public" }
+    const id = newDeckId(location)
+    const count = privateDecks.length + publicDecks.length
+    await saveDeck(location, { id, ...defaultDeckConfig(`Deck ${count + 1}`) })
     router.push(`/decking/${id}`)
   }
 
@@ -62,27 +80,37 @@ const DeckingPage = () => {
         staggered between rows.
       </p>
 
-      {!auth.currentUser && (
+      {auth.currentUser ? (
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Your decks</h2>
+          {privateLoaded && (
+            <div className={styles.grid}>
+              {privateDecks.map((deck) => (
+                <DeckCard key={deck.id} deck={deck} />
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
         <p className={styles.loginHint}>
-          <Link href="/login">Log in</Link> to save your own decks — you can look around first.
+          <Link href="/login">Log in</Link> for your own private decks — or just add one below, public for now.
         </p>
       )}
 
-      {loaded && (
-        <div className={styles.grid}>
-          {decks.map((deck) => (
-            <Link key={deck.id} href={`/decking/${deck.id}`} className={styles.card}>
-              <h3>{deck.name}</h3>
-              <div className={styles.meta}>
-                {formatLength(deck.width)} wide · {formatLength(deck.sideA)} / {formatLength(deck.sideB)}
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Public decks</h2>
+        <p className={styles.hint}>No login needed — visible and editable by anyone.</p>
+        {publicLoaded && (
+          <div className={styles.grid}>
+            {publicDecks.map((deck) => (
+              <DeckCard key={deck.id} deck={deck} />
+            ))}
+          </div>
+        )}
+      </section>
 
       <Button size="large" onClick={handleAddDeck} disabled={creating}>
-        {creating ? "Creating…" : auth.currentUser ? "Add deck" : "Log in to add a deck"}
+        {creating ? "Creating…" : auth.currentUser ? "Add deck" : "Add a public deck"}
       </Button>
     </div>
   )

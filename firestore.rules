@@ -126,6 +126,23 @@ service cloud.firestore {
         && request.resource.data.stock is list;
     }
 
+    // Decking: public decks. No owner at all — anyone can view, create, or
+    // edit one (shuffle, join edits, mark boards cut), no login required.
+    // Same schema check as the private decks above; update is allowed (a
+    // deck is a living document, not a save-once record like the retaining
+    // wall designs) but delete never is, so a public deck can't be
+    // vandalised away entirely by a random visitor, only edited.
+    match /publicDecks/{deckId} {
+      allow get, list: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['name', 'width', 'sideA', 'sideB', 'joistSpacing', 'boardWidth', 'boardGap', 'stock', 'minStaggerJoists', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.width is number
+        && request.resource.data.sideA is number
+        && request.resource.data.sideB is number
+        && request.resource.data.stock is list;
+      allow delete: if false;
+    }
+
     // Retaining wall calculator: saved custom calc-settings presets.
     // Public for now (no auth) — anyone can create a named preset or list/
     // read every saved one; update/delete are off entirely, so a save is a
