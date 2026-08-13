@@ -575,10 +575,10 @@ const PolygonShapeEditor: React.FC<{
           type="button"
           className={styles.rotateBtn}
           onClick={() => onDirectionChange(intoRake ? "alongRake" : "intoRake")}
-          aria-label={`Boards currently run ${intoRake ? "one way" : "the other way"} across the shape — tap to rotate 90°`}
+          aria-label={`Joists currently run ${intoRake ? "one way" : "the other way"} across the shape — tap to rotate 90°`}
         >
           <RotateIcon className={intoRake ? undefined : styles.rotated} />
-          <span>{intoRake ? "Boards run this way" : "Boards run the other way"}</span>
+          <span>Joist direction</span>
         </button>
       </div>
 
