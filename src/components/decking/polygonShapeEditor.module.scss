@@ -42,6 +42,29 @@
   stroke: #2a78d6;
 }
 
+// a locked angle/length gets a small amber ring so it's visually obvious
+// which measurements are pinned vs. just following the shape
+.vertexLocked {
+  stroke: #d68910;
+  stroke-width: 2px;
+}
+
+.edgeMarker {
+  fill: var(--background);
+  stroke: var(--color-primary);
+  opacity: 0.85;
+}
+
+.edgeMarkerLocked {
+  stroke: #d68910;
+  fill: #d68910;
+}
+
+.edgeMarkerSelected {
+  stroke: #2a78d6;
+  fill: #2a78d6;
+}
+
 .hitArea {
   fill: transparent;
   cursor: grab;
@@ -162,6 +185,26 @@
       box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
     }
   }
+}
+
+.autoNote {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  margin: 0 0 0.4rem;
+}
+
+// matches deckShapeEditor's/joinScroller's own "Reset to auto" styling —
+// same wording, same affordance, for the same reason
+.resetBtn {
+  background: none;
+  border: none;
+  color: #2a78d6;
+  text-decoration: underline;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: block;
 }
 
 .removeBtn {

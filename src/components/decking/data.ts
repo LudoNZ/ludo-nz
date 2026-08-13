@@ -69,6 +69,8 @@ export const subscribeToDecks = (
           // for any deck that's never had a corner added) — undefined here
           // means "trapezoid mode", exactly like a freshly created deck
           points: Array.isArray(data.points) && data.points.length >= 3 ? data.points : undefined,
+          lockedEdgeLengths: (data.lockedEdgeLengths ?? {}) as Record<string, number>,
+          lockedVertexAngles: (data.lockedVertexAngles ?? {}) as Record<string, number>,
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,

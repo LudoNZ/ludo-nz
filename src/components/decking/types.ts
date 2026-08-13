@@ -84,6 +84,18 @@ export interface DeckConfig {
    * completely unchanged unless a corner is deliberately added. See
    * polygon.ts for the geometry this drives once it's set. */
   points?: DeckPoint[]
+  /** Which polygon sides/corners have an explicit length or angle typed
+   * in, rather than just following wherever their vertices happen to be
+   * — keyed by index as a string, same pattern as manualJoins below.
+   * Irrelevant (and always empty) unless points is set. Non-optional with
+   * a {} default rather than undefined — an explicitly-undefined optional
+   * field breaks a Firestore save (see data.ts/saveDeck's stripUndefined),
+   * a plain empty object sidesteps that entirely. See polygon.ts's
+   * solvePolygon for how an edit to one of these recalculates the rest. */
+  lockedEdgeLengths: Record<string, number>
+  /** Interior angle in degrees, same indexing/reasoning as
+   * lockedEdgeLengths — index i is the angle at points[i]. */
+  lockedVertexAngles: Record<string, number>
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults
@@ -163,6 +175,8 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     sideB: 6000,
     sideBLinked: true,
     edgeLabels: { ...DEFAULT_EDGE_LABELS },
+    lockedEdgeLengths: {},
+    lockedVertexAngles: {},
     joistSpacing: 400,
     firstBaySpacing: 400,
     boardWidth: 140,

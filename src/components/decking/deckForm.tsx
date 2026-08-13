@@ -98,6 +98,8 @@ const DeckForm: React.FC<{
       sideBLinked: state.sideBLinked,
       edgeLabels: state.edgeLabels,
       points: state.points,
+      lockedEdgeLengths: state.lockedEdgeLengths,
+      lockedVertexAngles: state.lockedVertexAngles,
       joistSpacing: state.joistSpacing,
       firstBaySpacing: state.firstBaySpacing,
       boardWidth: state.boardWidth,
@@ -137,11 +139,17 @@ const DeckForm: React.FC<{
         <label>Deck shape</label>
         {isPolygon ? (
           <>
-            <span className={styles.hint}>Drag a corner to reshape the deck</span>
+            <span className={styles.hint}>
+              Drag a corner to reshape the deck, or tap a corner or side to type an exact angle or length
+            </span>
             <PolygonShapeEditor
               points={state.points!}
+              lockedEdgeLengths={state.lockedEdgeLengths}
+              lockedVertexAngles={state.lockedVertexAngles}
               boardDirection={state.boardDirection}
-              onPointsChange={(points) => setState((s) => ({ ...s, points }))}
+              onShapeChange={(points, lockedEdgeLengths, lockedVertexAngles) =>
+                setState((s) => ({ ...s, points, lockedEdgeLengths, lockedVertexAngles }))
+              }
               onDirectionChange={(d) => setState((s) => ({ ...s, boardDirection: d }))}
             />
           </>
