@@ -1,0 +1,45 @@
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.stat {
+  strong {
+    display: block;
+    font-size: 1.15rem;
+    color: var(--color-primary);
+  }
+  span {
+    font-size: 0.78rem;
+    opacity: 0.7;
+  }
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  font-size: 0.9rem;
+
+  li {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+  }
+}
+
+.empty {
+  font-size: 0.85rem;
+  opacity: 0.65;
+  margin: 0;
+}

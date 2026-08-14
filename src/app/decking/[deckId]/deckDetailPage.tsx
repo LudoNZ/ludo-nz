@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
@@ -8,12 +8,15 @@ import Button from "@/components/button/button"
 import DeckForm from "@/components/decking/deckForm"
 import DeckPlanView from "@/components/decking/deckPlanView"
 import BoardStockPanel from "@/components/decking/boardStockPanel"
+import StockShareSummary from "@/components/decking/stockShareSummary"
 import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
 import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, StoredDeck, subscribeToDecks } from "@/components/decking/data"
 import { computeLockedRows, optimizeBoardStockLengths } from "@/components/decking/layout"
+import { computeProjectStockAllocation } from "@/components/decking/projectStock"
+import { useProjectsList } from "@/components/decking/useProjectsList"
 import { useManualJoins } from "@/components/decking/useManualJoins"
 import { polygonBounds } from "@/components/decking/polygon"
 import { DeckConfig, formatLength, LockedRow } from "@/components/decking/types"
@@ -61,9 +64,43 @@ const DeckDetailPage = () => {
     return () => unsubscribe()
   }, [auth, auth?.authLoading, auth?.currentUser])
 
-  const loaded = publicLoaded && privateLoaded
+  const { projects, loaded: projectsLoaded } = useProjectsList()
+  const loaded = publicLoaded && privateLoaded && projectsLoaded
   const deck = [...privateDecks, ...publicDecks].find((d) => d.id === params.deckId)
-  const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deck, deck?.location)
+
+  // If this deck is in a project, it plans against its current share of
+  // the shared pool instead of its own (dormant — never written to while
+  // pooled, see data.ts's setDeckProject) `stock`. Substituting it in
+  // here, before useManualJoins, means the layout engine itself needs no
+  // awareness of projects at all — every downstream consumer of `layout`
+  // (plan view, cut list, stock summary) just sees pooled numbers for free.
+  const project = deck?.projectId ? projects.find((p) => p.id === deck.projectId) : undefined
+  const effectiveStockByDeck = useMemo(() => {
+    if (!project) return null
+    const siblings = [...privateDecks, ...publicDecks].filter((d) => d.projectId === project.id)
+    return computeProjectStockAllocation(
+      project.stock,
+      siblings.map((d) => ({ id: d.id, config: d, projectOrder: d.projectOrder }))
+    )
+  }, [project, privateDecks, publicDecks])
+  const effectiveStock = deck ? effectiveStockByDeck?.get(deck.id) : undefined
+  const deckForLayout = useMemo(() => {
+    if (!deck) return undefined
+    if (!project || !effectiveStock) return deck
+    return { ...deck, stock: effectiveStock }
+  }, [deck, project, effectiveStock])
+
+  const { layout, effectiveConfig, toggleJoin, resetRow, placeBoard } = useManualJoins(deckForLayout, deck?.location)
+
+  // projects available for this deck to join — must share its own
+  // location (a private deck can't pool with a public project's stock or
+  // vice versa, and a private project only ever belongs to one account)
+  const eligibleProjects = deck
+    ? projects.filter((p) => {
+        if (p.location.kind !== deck.location.kind) return false
+        return p.location.kind === "public" || (deck.location.kind === "private" && p.location.uid === deck.location.uid)
+      })
+    : []
   // Same axis JoinScroller's track lines up against regardless of board
   // direction — mirrors deck.sideA/sideB exactly for a trapezoid deck (the
   // pre-existing behaviour, unchanged); a polygon deck's own bounding box
@@ -129,14 +166,15 @@ const DeckDetailPage = () => {
   // coming from to the smallest one that's still long enough for it,
   // without moving a single join — see optimizeBoardStockLengths. Walks
   // every locked row's boards together, in row order, against the deck's
-  // real total stock, so it can't over-claim a length beyond what's
-  // actually on hand.
+  // real total stock (or its current share of the project pool, if it's
+  // in one — same substitution as the main layout above), so it can't
+  // over-claim a length beyond what's actually on hand.
   const handleOptimizeStock = () => {
     const lockedEntries = Object.entries(deck.lockedRows).sort(([a], [b]) => Number(a) - Number(b))
     if (!lockedEntries.length) return
     const optimized = optimizeBoardStockLengths(
       lockedEntries.flatMap(([, row]) => row.boards),
-      deck.stock
+      effectiveStock ?? deck.stock
     )
     let i = 0
     const lockedRows: Record<string, LockedRow> = {}
@@ -225,6 +263,7 @@ const DeckDetailPage = () => {
         <section>
           <DeckForm
             initial={deck}
+            projects={eligibleProjects}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
             saveLabel="Save changes"
@@ -295,8 +334,21 @@ const DeckDetailPage = () => {
 
           <section>
             <h2>Board stock</h2>
-            <p className={styles.hint}>Length (m) and how many of that length you have on hand.</p>
-            <BoardStockPanel stock={deck.stock} onChange={(stock) => saveDeckWith({ stock })} />
+            {project ? (
+              <>
+                <p className={styles.hint}>
+                  Shares stock with the &quot;{project.name}&quot; project — edit the shared pool from{" "}
+                  <Link href={`/decking/projects/${project.id}`}>the project page</Link>. This is what&apos;s
+                  currently left for this deck once every other deck in the project has taken its share.
+                </p>
+                <StockShareSummary stock={effectiveStock ?? []} />
+              </>
+            ) : (
+              <>
+                <p className={styles.hint}>Length (m) and how many of that length you have on hand.</p>
+                <BoardStockPanel stock={deck.stock} onChange={(stock) => saveDeckWith({ stock })} />
+              </>
+            )}
           </section>
 
           <section>

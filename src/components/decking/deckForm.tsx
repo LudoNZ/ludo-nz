@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Button from "@/components/button/button"
+import { StoredProject } from "./data"
 import { DeckConfig, sideBFromRakeAngle } from "./types"
 import { insertMidpointOnLongestEdge, isSimplePolygon } from "./polygon"
 import DeckShapeEditor from "./deckShapeEditor"
@@ -17,10 +18,14 @@ type FormState = Omit<DeckConfig, "id" | "updatedAt">
 
 const DeckForm: React.FC<{
   initial: Omit<DeckConfig, "id" | "updatedAt">
+  /** projects this deck is eligible to join — already filtered to its own
+   * location by the caller (a private deck can only pool with a private
+   * project under the same account, a public deck only a public one). */
+  projects: StoredProject[]
   onSave: (deck: Omit<DeckConfig, "id" | "updatedAt">) => void
   onCancel?: () => void
   saveLabel?: string
-}> = ({ initial, onSave, onCancel, saveLabel = "Save" }) => {
+}> = ({ initial, projects, onSave, onCancel, saveLabel = "Save" }) => {
   const [state, setState] = useState<FormState>(initial)
 
   // Every field in this form funnels through setState, so rather than
@@ -87,6 +92,33 @@ const DeckForm: React.FC<{
           required
         />
       </div>
+
+      {projects.length > 0 && (
+        <div className={styles.field}>
+          <label htmlFor="project">Project</label>
+          <span className={styles.hint}>
+            Share this deck&apos;s board stock with a project&apos;s pool instead of tracking its own
+          </span>
+          <select
+            id="project"
+            value={state.projectId ?? ""}
+            onChange={(e) => {
+              const projectId = e.target.value || undefined
+              // joining/switching gets a fresh, later claim-order value
+              // (see projectOrder's doc comment) — freely reorderable
+              // afterwards from the project page
+              setState((s) => ({ ...s, projectId, projectOrder: projectId ? Date.now() : s.projectOrder }))
+            }}
+          >
+            <option value="">None — track its own stock</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className={styles.field}>
         <label>Deck shape</label>

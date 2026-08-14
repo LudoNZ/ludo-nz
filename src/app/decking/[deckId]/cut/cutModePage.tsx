@@ -14,6 +14,8 @@ import {
   subscribeToDecks,
 } from "@/components/decking/data"
 import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
+import { computeProjectStockAllocation } from "@/components/decking/projectStock"
+import { useProjectsList } from "@/components/decking/useProjectsList"
 import { getCutOrder, lastCompletedStep, nextCutStep } from "@/components/decking/cuttingOrder"
 import { CutLogEntry, formatDuration, formatLength } from "@/components/decking/types"
 import styles from "./cutModePage.module.scss"
@@ -55,9 +57,29 @@ const CutModePage = () => {
     return () => unsubscribe()
   }, [auth, auth?.authLoading, auth?.currentUser])
 
-  const loaded = publicLoaded && privateLoaded
+  const { projects, loaded: projectsLoaded } = useProjectsList()
+  const loaded = publicLoaded && privateLoaded && projectsLoaded
   const deck = [...privateDecks, ...publicDecks].find((d) => d.id === params.deckId)
-  const layout = useMemo(() => (deck ? computeDeckLayout(deck) : null), [deck])
+
+  // If this deck is in a project, it plans against its current share of
+  // the shared pool instead of its own (dormant) `stock` — see
+  // deckDetailPage.tsx's identical wiring for the full reasoning.
+  const project = deck?.projectId ? projects.find((p) => p.id === deck.projectId) : undefined
+  const effectiveStockByDeck = useMemo(() => {
+    if (!project) return null
+    const siblings = [...privateDecks, ...publicDecks].filter((d) => d.projectId === project.id)
+    return computeProjectStockAllocation(
+      project.stock,
+      siblings.map((d) => ({ id: d.id, config: d, projectOrder: d.projectOrder }))
+    )
+  }, [project, privateDecks, publicDecks])
+  const deckForLayout = useMemo(() => {
+    if (!deck) return undefined
+    if (!project || !effectiveStockByDeck) return deck
+    return { ...deck, stock: effectiveStockByDeck.get(deck.id) ?? [] }
+  }, [deck, project, effectiveStockByDeck])
+
+  const layout = useMemo(() => (deckForLayout ? computeDeckLayout(deckForLayout) : null), [deckForLayout])
   const order = useMemo(() => (layout ? getCutOrder(layout) : []), [layout])
   const next = useMemo(
     () => nextCutStep(order, deck?.completedSegmentIds ?? []),
