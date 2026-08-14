@@ -13,7 +13,7 @@ import {
   StoredDeck,
   subscribeToDecks,
 } from "@/components/decking/data"
-import { computeDeckLayout, computeLockedRows } from "@/components/decking/layout"
+import { computeDeckLayout, computeLockedRows, displayRowNumber } from "@/components/decking/layout"
 import { computeProjectStockAllocation } from "@/components/decking/projectStock"
 import { useProjectsList } from "@/components/decking/useProjectsList"
 import { getCutOrder, lastCompletedStep, nextCutStep } from "@/components/decking/cuttingOrder"
@@ -227,7 +227,7 @@ const CutModePage = () => {
       {next ? (
         <div className={styles.nextCard}>
           <div className={styles.tag}>
-            Next cut — row #{next.row.index + 1}
+            Next cut — row #{displayRowNumber(next.row.index, layout?.rows.length ?? 0, deck.rowNumberingReversed)}
             {next.row.isSkeleton ? " · skeleton" : ""}
           </div>
           <div className={styles.cutLine}>{formatLength(next.segment.cutLength)}</div>

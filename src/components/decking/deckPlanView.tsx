@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useMemo } from "react"
-import { DeckLayout } from "./layout"
+import { DeckLayout, displayRowNumber } from "./layout"
 import { DeckConfig, formatLength, rakeAngleDeg } from "./types"
 import { polygonBounds, polygonOutlinePath } from "./polygon"
 import styles from "./deckPlanView.module.scss"
@@ -127,8 +127,19 @@ const DeckPlanView: React.FC<{
               const overhang = rowThickness * 0.35
               const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
               const labelFontSize = Math.min(rowThickness * 0.65, fontSize * 0.8)
-              const labelX = intoRake ? spanMinX + maxLen * 0.015 : row.rowStart + rowThickness / 2
-              const labelY = intoRake ? row.rowStart + rowThickness / 2 : spanMinY + labelFontSize * 0.9
+              // Anchored to this row's own start (row.runStart), not the
+              // deck's overall bounding box (spanMinX/spanMinY) — a raked
+              // or tapered edge means the box's corner isn't necessarily
+              // where *this* row actually begins, so a fixed offset from
+              // it could land outside the row (and get cropped by the
+              // outline's own clip-path). The margin is pushed out to
+              // roughly a joist bay's worth (not just a sliver off the
+              // edge) so the number always lands solidly inside the row,
+              // not right on a corner that might still pinch it.
+              const labelMargin = Math.max(maxLen * 0.015, labelFontSize * 0.9, config.joistSpacing * 0.4)
+              const labelX = intoRake ? row.runStart + labelMargin : row.rowStart + rowThickness / 2
+              const labelY = intoRake ? row.rowStart + rowThickness / 2 : row.runStart + labelMargin
+              const rowNumber = displayRowNumber(row.index, layout.rows.length, config.rowNumberingReversed)
               return (
                 <g key={row.index}>
                   {row.boards.map((b) => {
@@ -143,8 +154,8 @@ const DeckPlanView: React.FC<{
                         ? () => onToggleSegment(b.id)
                         : undefined
                     const ariaLabel = onRowClick
-                      ? `Row ${row.index + 1} — tap to focus this row in the join editor`
-                      : `Row ${row.index + 1} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""}${onToggleSegment ? " — tap to toggle" : ""}`
+                      ? `Row ${rowNumber} — tap to focus this row in the join editor`
+                      : `Row ${rowNumber} board, ${formatLength(b.cutLength)}, ${placed ? "placed" : "not placed"}${active ? ", next cut" : ""}${onToggleSegment ? " — tap to toggle" : ""}`
                     return (
                       <g key={b.id}>
                         <rect
@@ -221,7 +232,7 @@ const DeckPlanView: React.FC<{
                       textAnchor={intoRake ? "start" : "middle"}
                       className={styles.rowLabel}
                     >
-                      {row.index + 1}
+                      {rowNumber}
                     </text>
                   )}
                 </g>

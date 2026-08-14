@@ -1,7 +1,7 @@
 "use client"
 
 import Button from "@/components/button/button"
-import { DeckLayout } from "./layout"
+import { DeckLayout, displayRowNumber } from "./layout"
 import { formatLength } from "./types"
 import StockSummary from "./stockSummary"
 import styles from "./cutList.module.scss"
@@ -9,9 +9,11 @@ import styles from "./cutList.module.scss"
 const CutList: React.FC<{
   layout: DeckLayout
   completedSegmentIds: string[]
+  /** which end row 1 counts from — see DeckConfig.rowNumberingReversed */
+  rowNumberingReversed: boolean
   onToggleSegment: (id: string) => void
   onClearCompleted: () => void
-}> = ({ layout, completedSegmentIds, onToggleSegment, onClearCompleted }) => {
+}> = ({ layout, completedSegmentIds, rowNumberingReversed, onToggleSegment, onClearCompleted }) => {
   const completedSet = new Set(completedSegmentIds)
   const placedCount = layout.rows.reduce(
     (sum, r) => sum + r.boards.filter((b) => completedSet.has(b.id)).length,
@@ -118,7 +120,7 @@ const CutList: React.FC<{
         {layout.rows.map((row) => (
           <div key={row.index} className={styles.rowItem}>
             <span className={styles.rowNum}>
-              #{row.index + 1}
+              #{displayRowNumber(row.index, layout.rows.length, rowNumberingReversed)}
               {row.isSkeleton && <span className={styles.skeletonTag}>skel</span>}
               <span className={styles.rowStart}>{formatLength(row.rowStart)}</span>
             </span>

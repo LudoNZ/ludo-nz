@@ -360,6 +360,7 @@ const DeckDetailPage = () => {
             <CutList
               layout={layout}
               completedSegmentIds={deck.completedSegmentIds}
+              rowNumberingReversed={deck.rowNumberingReversed}
               onToggleSegment={handleToggleSegment}
               onClearCompleted={handleClearCompleted}
             />
@@ -367,7 +368,7 @@ const DeckDetailPage = () => {
 
           <section id="cutting-time">
             <h2>Cutting time</h2>
-            <CutTimeline cutLog={deck.cutLog} />
+            <CutTimeline cutLog={deck.cutLog} totalRows={layout.rows.length} rowNumberingReversed={deck.rowNumberingReversed} />
           </section>
         </>
       )}

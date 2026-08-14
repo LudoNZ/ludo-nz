@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import { DeckLayout, previewJoinClash, RowPlan } from "./layout"
+import { DeckLayout, displayRowNumber, previewJoinClash, RowPlan } from "./layout"
 import { DeckConfig, LockedRow, formatLength } from "./types"
 import planStyles from "./deckPlanView.module.scss"
 import styles from "./joinScroller.module.scss"
@@ -121,6 +121,7 @@ const JoinScroller = forwardRef<
         const active = !locked && row.index === activeIndex
         const ticks = layout.joistPositions.filter((p) => p > row.runStart + 1e-6 && p < row.runStart + row.targetLength - 1e-6)
         const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
+        const rowNumber = displayRowNumber(row.index, layout.rows.length, config.rowNumberingReversed)
         return (
           <div
             key={row.index}
@@ -133,7 +134,7 @@ const JoinScroller = forwardRef<
           >
             <div className={styles.rowMeta}>
               <span className={styles.rowLabel}>
-                #{row.index + 1}
+                #{rowNumber}
                 {row.isSkeleton && <span className={styles.tag}>skeleton</span>}
                 {row.manual && <span className={styles.tagManual}>manual</span>}
                 {locked && <span className={styles.tagLocked}>secured</span>}
@@ -204,7 +205,7 @@ const JoinScroller = forwardRef<
                       className={styles.overlayBtn}
                       style={{ left }}
                       onClick={() => onToggleJoin(row, p)}
-                      aria-label={`${join ? "Remove" : "Add"} a join ${formatLength(p)} into row ${row.index + 1}${clash ? " — would clash with the stagger or edge-buffer rule" : ""}`}
+                      aria-label={`${join ? "Remove" : "Add"} a join ${formatLength(p)} into row ${rowNumber}${clash ? " — would clash with the stagger or edge-buffer rule" : ""}`}
                     />
                   )
                 })}

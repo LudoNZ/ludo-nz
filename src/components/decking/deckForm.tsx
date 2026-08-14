@@ -168,6 +168,18 @@ const DeckForm: React.FC<{
       </div>
 
       <div className={styles.field}>
+        <label>Row numbering</label>
+        <span className={styles.hint}>Which end row 1 counts from — flipping this doesn&apos;t change the actual layout, just the numbers shown</span>
+        <Button
+          size="medium"
+          variant="secondary"
+          onClick={() => setState((s) => ({ ...s, rowNumberingReversed: !s.rowNumberingReversed }))}
+        >
+          {state.rowNumberingReversed ? "Row 1 is at the far end" : "Row 1 is at the near end"}
+        </Button>
+      </div>
+
+      <div className={styles.field}>
         <Button size="medium" variant="secondary" onClick={() => setCalcOpen(true)}>
           Calculate quantity order
         </Button>

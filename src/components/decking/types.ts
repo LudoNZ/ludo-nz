@@ -145,6 +145,13 @@ export interface DeckConfig {
   /** no join may fall within this many joist bays of either end of a row */
   minEdgeJoists: number
   boardDirection: BoardDirection
+  /** which end row 1 counts from — false (default) numbers from row.index
+   * 0 as usual; true counts from the other end instead. Purely a display
+   * flip (see layout.ts's displayRowNumber) — row.index itself, and
+   * everything keyed by it (manualJoins, lockedRows, cutLog), is
+   * completely unaffected, so this is safe to toggle at any time even on
+   * a deck that's already partway cut. */
+  rowNumberingReversed: boolean
   /** every Nth row is laid first as a "skeleton" from the longest stock,
    * staggered against the previous skeleton row; the rows in between are
    * filled in afterwards from a randomised mix of what's left */
@@ -215,6 +222,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     minSameRowJoinJoists: 2,
     minEdgeJoists: 3,
     boardDirection: "intoRake",
+    rowNumberingReversed: false,
     skeletonInterval: 4,
     lengthBias: 0,
     layoutSeed: Math.floor(Math.random() * 2 ** 31),

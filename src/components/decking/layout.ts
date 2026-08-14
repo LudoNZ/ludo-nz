@@ -50,6 +50,19 @@ export interface RowPlan {
   joins: JoinMark[]
 }
 
+/** The number shown for a row everywhere in the UI — "row.index + 1" by
+ * default, or counting from the other end if the deck's
+ * rowNumberingReversed toggle is on (see DeckConfig.rowNumberingReversed).
+ * `totalRows` is the actual row count (layout.rows.length), not a
+ * geometric estimate — a tapered/polygon deck can have fewer real rows
+ * than a naive width/pitch calculation would suggest. Purely a display
+ * transform: row.index itself (and everything keyed by it — manualJoins,
+ * lockedRows, cutLog) never changes, so this is safe to flip at any time
+ * without touching anything already saved. */
+export function displayRowNumber(index: number, totalRows: number, reversed: boolean): number {
+  return reversed ? totalRows - index : index + 1
+}
+
 export interface DeckLayout {
   rows: RowPlan[]
   joistPositions: number[]
@@ -547,6 +560,13 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   // unstarted deck can still explore different skeleton patterns.
   let skeletonOffset: number | null = null
   for (const key of Object.keys(lockedRows)) {
+    // row 0 and the last row are always skeleton regardless of the
+    // pattern (see the always-skeleton pass below) — inferring the
+    // offset from one of those would risk mistaking "forced skeleton
+    // because it's an end row" for "this is where the natural pattern
+    // lands", which could quietly shift every other row's classification
+    // once it's locked. Any other locked skeleton row is unambiguous.
+    if (Number(key) === 0 || Number(key) === rowCount - 1) continue
     if (lockedRows[key].isSkeleton) {
       skeletonOffset = Number(key) % skeletonInterval
       break
@@ -628,6 +648,19 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
       isSkeleton: locked ? locked.isSkeleton : slots.length % skeletonInterval === skeletonOffset,
       locked: locked ? { boards: locked.boards, joins: locked.joins } : undefined,
     })
+  }
+
+  // The very first and last row are always skeleton rows too, regardless
+  // of where the interval pattern lands — they're the two rows most
+  // likely to need a full-length board to reach a corner cleanly, so
+  // they get the same "maximise reach" treatment skeleton rows already
+  // have. A row that's already locked (physically cut) keeps whatever
+  // it was classified as at the time — that can never change after the
+  // fact, same reasoning skeletonOffset's own inference above follows.
+  if (slots.length > 0) {
+    if (!slots[0].locked) slots[0].isSkeleton = true
+    const lastIndex = slots.length - 1
+    if (lastIndex !== 0 && !slots[lastIndex].locked) slots[lastIndex].isSkeleton = true
   }
 
   const rowJoins = new Map<number, number[]>() // index -> join positions, filled as each row is planned

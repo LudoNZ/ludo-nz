@@ -98,6 +98,7 @@ export const subscribeToDecks = (
               ),
           minEdgeJoists: data.minEdgeJoists ?? 3,
           boardDirection: data.boardDirection === "alongRake" ? "alongRake" : "intoRake",
+          rowNumberingReversed: Boolean(data.rowNumberingReversed),
           skeletonInterval: data.skeletonInterval || 4,
           lengthBias: data.lengthBias ?? 0,
           layoutSeed: data.layoutSeed ?? 1,
