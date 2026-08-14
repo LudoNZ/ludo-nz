@@ -14,13 +14,13 @@ import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
 import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, StoredDeck, subscribeToDecks } from "@/components/decking/data"
-import { computeLockedRows, optimizeBoardStockLengths } from "@/components/decking/layout"
+import { computeLockedRows } from "@/components/decking/layout"
 import { computeProjectStockAllocation } from "@/components/decking/projectStock"
 import { useProjectsList } from "@/components/decking/useProjectsList"
 import { useManualJoins } from "@/components/decking/useManualJoins"
 import { polygonBounds } from "@/components/decking/polygon"
-import { DeckConfig, formatLength, LockedRow } from "@/components/decking/types"
-import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon, WandIcon } from "@/components/icons/icons"
+import { DeckConfig, formatLength } from "@/components/decking/types"
+import { CloseIcon, EditIcon, ShuffleIcon, TrashIcon } from "@/components/icons/icons"
 import styles from "./deckDetailPage.module.scss"
 
 /** No login required to view or edit a deck here at all — a public deck
@@ -162,28 +162,6 @@ const DeckDetailPage = () => {
 
   const handleShuffle = () => saveDeckWith({ layoutSeed: Math.floor(Math.random() * 2 ** 31) })
 
-  // Re-assigns which stock length each already-*cut* board is recorded as
-  // coming from to the smallest one that's still long enough for it,
-  // without moving a single join — see optimizeBoardStockLengths. Walks
-  // every locked row's boards together, in row order, against the deck's
-  // real total stock (or its current share of the project pool, if it's
-  // in one — same substitution as the main layout above), so it can't
-  // over-claim a length beyond what's actually on hand.
-  const handleOptimizeStock = () => {
-    const lockedEntries = Object.entries(deck.lockedRows).sort(([a], [b]) => Number(a) - Number(b))
-    if (!lockedEntries.length) return
-    const optimized = optimizeBoardStockLengths(
-      lockedEntries.flatMap(([, row]) => row.boards),
-      effectiveStock ?? deck.stock
-    )
-    let i = 0
-    const lockedRows: Record<string, LockedRow> = {}
-    for (const [key, row] of lockedEntries) {
-      lockedRows[key] = { ...row, boards: row.boards.map(() => optimized[i++]) }
-    }
-    return saveDeckWith({ lockedRows })
-  }
-
   const handleToggleSegment = (id: string) => {
     const set = new Set(deck.completedSegmentIds)
     if (set.has(id)) set.delete(id)
@@ -231,16 +209,6 @@ const DeckDetailPage = () => {
           {!editing && (
             <Button size="icon" variant="secondary" onClick={handleShuffle} ariaLabel="Shuffle fill pattern">
               <ShuffleIcon />
-            </Button>
-          )}
-          {!editing && Object.keys(deck.lockedRows).length > 0 && (
-            <Button
-              size="icon"
-              variant="secondary"
-              onClick={handleOptimizeStock}
-              ariaLabel="Optimise stock lengths on already-cut rows"
-            >
-              <WandIcon />
             </Button>
           )}
           <Button

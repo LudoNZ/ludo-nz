@@ -902,34 +902,3 @@ export function computeLockedRows(
   return next
 }
 
-/** Re-assigns which stock length each already-placed board is cut from to
- * the smallest one on hand that's still long enough for it — "the most
- * efficient board that's just longer than the required cut", walked once
- * against the deck's actual total stock so it can't over-claim a length
- * beyond what's really on hand. Every board's start/end/cutLength (and so
- * every join position) is left exactly as it is; this only ever changes
- * which physical board a given, already-decided cut comes from.
- *
- * Meant for correcting locked (already-cut) rows — e.g. ones built before
- * this rule existed, or just to double-check "was this actually the most
- * efficient board for this cut". Deliberately not how the live layout
- * algorithm itself always works: skeleton rows maximise reach on purpose
- * (fewer joins matters more there than the tightest possible fit) and the
- * fill-in rows' length-bias dial deliberately isn't "always shortest".
- * `boards` should be passed in the order they were actually cut (row order
- * is fine) so stock scarcity is honoured the same way it happened in
- * reality; a board already unresolved (stockLength null) stays null if
- * nothing on hand still covers it. */
-export function optimizeBoardStockLengths<T extends { cutLength: number; stockLength: number | null }>(
-  boards: T[],
-  stock: StockItem[]
-): T[] {
-  const inv = new Inventory(stock)
-  return boards.map((b) => {
-    if (b.stockLength === null) return b
-    const best = inv.smallestAtLeast(b.cutLength)
-    if (best === null) return { ...b, stockLength: null }
-    inv.take(best)
-    return { ...b, stockLength: best }
-  })
-}
