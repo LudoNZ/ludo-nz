@@ -1,0 +1,164 @@
+.detailPage {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+
+  .headerRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .publicBadge {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--borderRadius);
+      background-color: rgba(128, 128, 128, 0.18);
+      color: var(--foreground);
+      opacity: 0.85;
+    }
+  }
+
+  .nameInput {
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    font-weight: 700;
+    color: var(--color-primary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0;
+    min-width: 0;
+    flex: 1;
+    font-family: inherit;
+
+    &:focus {
+      outline: none;
+      border-bottom-color: var(--color-primary);
+    }
+  }
+
+  section {
+    margin-bottom: 2.5rem;
+
+    h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .hint {
+    font-size: 0.85rem;
+    opacity: 0.65;
+    margin: -0.5rem 0 0.85rem;
+  }
+}
+
+.deckList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.deckRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  @media (max-width: 480px) {
+    grid-template-columns: auto 1fr;
+
+    .deckShare {
+      grid-column: 2;
+    }
+    .removeBtn {
+      grid-column: 2;
+      justify-self: start;
+    }
+  }
+}
+
+.deckOrder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+
+  button {
+    background: none;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    color: var(--color-primary);
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 0.15rem 0.35rem;
+
+    &:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+  }
+}
+
+.deckName {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  min-width: 0;
+}
+
+.deckShare {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.addRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+
+  select {
+    padding: 0.55rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: max(0.95rem, 16px);
+    font-family: inherit;
+  }
+}
+
+.loading {
+  padding: 3rem 1rem;
+  text-align: center;
+  opacity: 0.7;
+}
