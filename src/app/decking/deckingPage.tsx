@@ -110,6 +110,9 @@ const DeckingPage = () => {
         Lay out decking boards across a deck with a raked end, with joins landing on joists and
         staggered between rows.
       </p>
+      <p className={styles.hint}>
+        <Link href="/decking/board-orders">Board order data →</Link>
+      </p>
 
       {auth.currentUser ? (
         <section className={styles.section}>
