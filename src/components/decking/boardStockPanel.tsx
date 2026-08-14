@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Modal } from "@/app/elements/Modal/modal"
 import Button from "@/components/button/button"
 import { StockItem } from "./types"
@@ -62,6 +62,22 @@ const BoardStockPanel: React.FC<{
   const [rows, setRows] = useState<StockRow[]>(() => toStockRows(stock))
   const [reportOpen, setReportOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // rows is its own editable state, not derived fresh from `stock` every
+  // render — an in-progress, uncommitted edit (typing "4." before it
+  // parses as a valid length) would otherwise get discarded by whatever
+  // re-render happens next. But that means it needs an explicit sync back
+  // whenever `stock` genuinely changes for a reason other than this
+  // component's own last commit — most importantly, this same component
+  // instance getting reused for a *different* deck or project (React
+  // doesn't remount it just because the page's params changed), which
+  // without this would keep showing the previous one's rows. `stock`
+  // itself only changes reference on a real Firestore update (switching
+  // decks, another tab's edit, or the echo of this component's own save)
+  // — never on an unrelated re-render — so this can't fight with typing.
+  useEffect(() => {
+    setRows(toStockRows(stock))
+  }, [stock])
 
   const commit = (nextRows: StockRow[]) => {
     setRows(nextRows)
