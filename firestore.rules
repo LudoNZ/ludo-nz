@@ -126,7 +126,10 @@ service cloud.firestore {
         && request.resource.data.stock is list
         // points is optional (its absence means the classic trapezoid
         // shape) — once present, at least a list of 3+ corners
-        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3));
+        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3))
+        // projectId is optional — absent means this deck isn't pooled
+        // with a project's shared stock (see DeckConfig.projectId)
+        && (!('projectId' in request.resource.data) || request.resource.data.projectId is string);
     }
 
     // Decking: public decks. No owner at all — anyone can view, create, or
@@ -143,7 +146,29 @@ service cloud.firestore {
         && request.resource.data.sideA is number
         && request.resource.data.sideB is number
         && request.resource.data.stock is list
-        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3));
+        && (!('points' in request.resource.data) || (request.resource.data.points is list && request.resource.data.points.size() >= 3))
+        && (!('projectId' in request.resource.data) || request.resource.data.projectId is string);
+      allow delete: if false;
+    }
+
+    // Decking: shared board stockpiles a project's decks can draw from —
+    // see DeckProject's own doc comment. Same private/public split and
+    // schema-check shape as decks above (a project's location works
+    // identically to a deck's); doesn't reference member decks at all,
+    // that link only ever lives on the deck side (projectId/projectOrder).
+    match /users/{userId}/projects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['name', 'stock', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.stock is list;
+    }
+
+    match /publicProjects/{projectId} {
+      allow get, list: if true;
+      allow create, update: if request.resource.data.keys().hasAll(['name', 'stock', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.stock is list;
       allow delete: if false;
     }
 

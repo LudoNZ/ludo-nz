@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
-import { CutLogEntry, DeckConfig, DEFAULT_EDGE_LABELS, LockedRow, StockItem } from "./types"
+import { CutLogEntry, DeckConfig, DeckProject, DEFAULT_EDGE_LABELS, LockedRow, StockItem } from "./types"
 
 /** Where a deck actually lives: private decks are your own, tucked under
  * your account (users/{uid}/decks) and only ever visible to you; public
@@ -71,6 +71,11 @@ export const subscribeToDecks = (
           points: Array.isArray(data.points) && data.points.length >= 3 ? data.points : undefined,
           lockedEdgeLengths: (data.lockedEdgeLengths ?? {}) as Record<string, number>,
           lockedVertexAngles: (data.lockedVertexAngles ?? {}) as Record<string, number>,
+          // absent for every deck saved before Projects existed, and for
+          // any deck that's never joined one — same "absent means it
+          // just doesn't have this" reasoning as points above
+          projectId: data.projectId as string | undefined,
+          projectOrder: data.projectOrder ?? 0,
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,
@@ -213,4 +218,88 @@ export const setActiveCut = async (
     activeCutAccumulatedMs,
     updatedAt: Timestamp.now(),
   })
+}
+
+/** Joins, moves, or removes a deck from a project — a narrow update
+ * rather than a full deck save, since the project page (the only caller)
+ * only ever has a live *subscription* snapshot of the deck it's acting
+ * on, not a form's worth of freshly-edited state; touching just these
+ * two fields can't clobber a concurrent edit to anything else on that
+ * deck. `projectId: null` clears membership (deleteField, so the deck
+ * goes back to "absent" — see DeckConfig.projectId — not an explicit
+ * null) and leaves `stock` on the deck exactly as it was the whole time
+ * it was pooled (see projectStock.ts's own doc comment). */
+export const setDeckProject = async (
+  location: DeckLocation,
+  deckId: string,
+  projectId: string | null,
+  projectOrder: number
+) => {
+  await updateDoc(deckDocRef(location, deckId), {
+    projectId: projectId ?? deleteField(),
+    projectOrder,
+    updatedAt: Timestamp.now(),
+  })
+}
+
+// ---- Projects: a shared board stockpile one or more decks can draw
+// from — see DeckProject's own doc comment. Storage mirrors decks above
+// exactly (same DeckLocation, same private-collection/public-collection
+// split, same stripUndefined-on-save reasoning) since a project's
+// location works identically to a deck's. ----
+
+export interface StoredProject extends DeckProject {
+  location: DeckLocation
+}
+
+const projectsCollectionRef = (location: DeckLocation): CollectionReference =>
+  location.kind === "private" ? collection(firestore, "users", location.uid, "projects") : collection(firestore, "publicProjects")
+
+const projectDocRef = (location: DeckLocation, projectId: string): DocumentReference =>
+  location.kind === "private" ? doc(firestore, "users", location.uid, "projects", projectId) : doc(firestore, "publicProjects", projectId)
+
+export const newProjectId = (location: DeckLocation) => doc(projectsCollectionRef(location)).id
+
+export const subscribeToProjects = (
+  location: DeckLocation,
+  onData: (projects: StoredProject[]) => void,
+  onError?: (err: unknown) => void
+) => {
+  const q = query(projectsCollectionRef(location), orderBy("updatedAt", "desc"))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const projects: StoredProject[] = snap.docs.map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          location,
+          name: data.name,
+          stock: Array.isArray(data.stock) ? (data.stock as StockItem[]) : [],
+          updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+        }
+      })
+      onData(projects)
+    },
+    onError
+  )
+}
+
+export const saveProject = async (location: DeckLocation, project: Omit<DeckProject, "updatedAt">) => {
+  const { id, ...rest } = project
+  await setDoc(projectDocRef(location, id), {
+    ...stripUndefined(rest),
+    updatedAt: Timestamp.now(),
+  })
+}
+
+/** No-op (rather than throwing) for a public project — same reasoning as
+ * deleteDeck: Firestore's own rules already refuse it, callers just
+ * shouldn't offer delete on a public project in the first place. Doesn't
+ * cascade to member decks — a deck left pointing at a since-deleted
+ * project is treated exactly like it was never in one, wherever the pool
+ * is looked up (see projectStock.ts). */
+export const deleteProject = async (location: DeckLocation, projectId: string) => {
+  if (location.kind === "public") return
+  await deleteDoc(projectDocRef(location, projectId))
 }

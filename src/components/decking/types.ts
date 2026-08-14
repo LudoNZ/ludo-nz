@@ -96,6 +96,20 @@ export interface DeckConfig {
   /** Interior angle in degrees, same indexing/reasoning as
    * lockedEdgeLengths — index i is the angle at points[i]. */
   lockedVertexAngles: Record<string, number>
+  /** Which project (if any) this deck's board stock is pooled with —
+   * absent means the deck tracks its own private `stock` above exactly
+   * as it always has. A dangling id (the project got deleted) is treated
+   * identically to absent wherever the pool is looked up — see
+   * projectStock.ts. Optional rather than a default like most fields
+   * below, same reasoning as `points`: "not in a project" is genuinely
+   * different from any concrete value, not just an empty default. */
+  projectId?: string
+  /** Claim order among a project's decks — lower claims stock first when
+   * more than one deck wants the same length (see projectStock.ts).
+   * Meaningless/unused outside a project, but non-optional with a 0
+   * default like lockedEdgeLengths above, so it's never an explicit
+   * `undefined` a Firestore save would need to strip. */
+  projectOrder: number
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults
@@ -177,6 +191,8 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     edgeLabels: { ...DEFAULT_EDGE_LABELS },
     lockedEdgeLengths: {},
     lockedVertexAngles: {},
+    // no `projectId` key at all — matches `points`' "absent" semantics
+    projectOrder: 0,
     joistSpacing: 400,
     firstBaySpacing: 400,
     boardWidth: 140,
@@ -196,6 +212,29 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     cutLog: [],
     activeCutSegmentId: null,
     activeCutAccumulatedMs: 0,
+  }
+}
+
+/** A shared board stockpile that one or more decks can draw from instead
+ * of each tracking its own separate `stock` — see projectStock.ts for how
+ * a member deck's actual share gets computed (earlier decks in claim
+ * order get first pick of a shared length; a deck only sees what's left
+ * once every deck ahead of it in the project has taken its share).
+ * Doesn't itself list its member decks — membership is entirely driven
+ * by each deck's own `projectId`/`projectOrder`, the same way a deck's
+ * location is driven by which collection it lives in rather than a field
+ * on the project. */
+export interface DeckProject {
+  id: string
+  name: string
+  stock: StockItem[]
+  updatedAt: Date
+}
+
+export function defaultDeckProject(name = "New project"): Omit<DeckProject, "id" | "updatedAt"> {
+  return {
+    name,
+    stock: DEFAULT_STOCK.map((s) => ({ ...s })),
   }
 }
 
