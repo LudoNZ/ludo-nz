@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Modal } from "@/app/elements/Modal/modal"
 import Button from "@/components/button/button"
 import { StockItem } from "./types"
 import styles from "./boardStockPanel.module.scss"
@@ -26,6 +27,22 @@ const formatLineal = (mm: number): string => {
   return `${m.toFixed(m % 1 === 0 ? 0 : 1)}m`
 }
 
+/** Plain-text version of the same rows, meant for pasting somewhere else
+ * entirely (a messaging app to a supplier or a builder) rather than
+ * reading on screen — one length per line, plain "3.6m × 20" style (no
+ * markdown/HTML, since a chat app would just show the raw asterisks/etc.
+ * back), a blank line, then the same board-count/lineal totals the panel
+ * already shows. Built off whatever's currently in the rows (including
+ * an uncommitted in-progress edit) so it always matches what's on screen
+ * right now. */
+const buildReport = (rows: StockRow[], title: string): string => {
+  const items = toStockItems(rows)
+  const lines = items.map((s) => `${formatLineal(s.length)} × ${s.quantity}`)
+  const totalBoards = items.reduce((sum, s) => sum + s.quantity, 0)
+  const totalLinealMm = items.reduce((sum, s) => sum + s.length * s.quantity, 0)
+  return [title, "", ...lines, "", `Total: ${totalBoards} boards, ${formatLineal(totalLinealMm)} lineal`].join("\n")
+}
+
 /** Standalone, always-editable inventory of board lengths on hand — split
  * out of the main deck-edit form (deckForm.tsx) so it's adjustable any
  * time you're looking at a deck, not just while also mid-edit on its
@@ -37,8 +54,14 @@ const formatLineal = (mm: number): string => {
 const BoardStockPanel: React.FC<{
   stock: StockItem[]
   onChange: (stock: StockItem[]) => void
-}> = ({ stock, onChange }) => {
+  /** heads the copyable report — e.g. the deck or project's own name.
+   * Defaults to a generic label so the prop can stay optional wherever
+   * that context isn't available. */
+  reportTitle?: string
+}> = ({ stock, onChange, reportTitle = "Board stock" }) => {
   const [rows, setRows] = useState<StockRow[]>(() => toStockRows(stock))
+  const [reportOpen, setReportOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const commit = (nextRows: StockRow[]) => {
     setRows(nextRows)
@@ -74,6 +97,19 @@ const BoardStockPanel: React.FC<{
     const qty = Number(r.quantity) || 0
     return sum + (isNaN(lengthM) ? 0 : lengthM * 1000 * qty)
   }, 0)
+
+  const report = buildReport(rows, reportTitle)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(report)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard API unavailable/blocked (older browser, insecure
+      // context) — the textarea below is still there to select by hand
+    }
+  }
 
   return (
     <div className={styles.panel}>
@@ -123,7 +159,26 @@ const BoardStockPanel: React.FC<{
         <Button size="small" variant="secondary" onClick={sortRows}>
           Sort by size
         </Button>
+        <Button size="small" variant="secondary" onClick={() => setReportOpen(true)}>
+          View report
+        </Button>
       </div>
+
+      <Modal isActive={reportOpen} closeModal={() => setReportOpen(false)}>
+        <div className={styles.reportPanel}>
+          <div className={styles.reportHeader}>
+            <span>Board stock report</span>
+            <button type="button" className={styles.closeBtn} onClick={() => setReportOpen(false)} aria-label="Close">
+              ✕
+            </button>
+          </div>
+          <p className={styles.hint}>Plain text — copy and paste it straight into a message.</p>
+          <textarea className={styles.reportText} readOnly value={report} onFocus={(e) => e.currentTarget.select()} rows={report.split("\n").length} />
+          <Button size="medium" onClick={handleCopy}>
+            {copied ? "Copied ✓" : "Copy to clipboard"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

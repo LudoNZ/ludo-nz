@@ -346,7 +346,11 @@ const DeckDetailPage = () => {
             ) : (
               <>
                 <p className={styles.hint}>Length (m) and how many of that length you have on hand.</p>
-                <BoardStockPanel stock={deck.stock} onChange={(stock) => saveDeckWith({ stock })} />
+                <BoardStockPanel
+                  stock={deck.stock}
+                  onChange={(stock) => saveDeckWith({ stock })}
+                  reportTitle={`Board stock — ${deck.name}`}
+                />
               </>
             )}
           </section>
