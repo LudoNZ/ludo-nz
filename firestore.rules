@@ -216,7 +216,10 @@ service cloud.firestore {
       allow get, list, delete: if true;
       allow create: if request.resource.data.keys().hasAll(['label', 'orderedAt', 'stock', 'createdAt'])
         && request.resource.data.label is string
-        && request.resource.data.stock is list;
+        && request.resource.data.stock is list
+        // orderedLinealMm is optional — absent means it wasn't recorded,
+        // not that nothing was ordered
+        && (!('orderedLinealMm' in request.resource.data) || request.resource.data.orderedLinealMm is number);
       allow update: if false;
     }
 

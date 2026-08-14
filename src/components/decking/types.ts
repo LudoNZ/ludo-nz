@@ -266,6 +266,12 @@ export interface StockOrder {
   /** when the order was placed/received — distinct from createdAt, which
    * is just when this record was added to the dataset */
   orderedAt: Date
+  /** total lineal mm actually requested from the supplier — compare
+   * against the delivered total (sum of `stock`) to see how the pack
+   * compared to what was asked for. Genuinely optional (not a 0
+   * default): an order with this unset just means it wasn't recorded,
+   * not that nothing was ordered. */
+  orderedLinealMm?: number
   stock: StockItem[]
   createdAt: Date
 }
@@ -319,7 +325,11 @@ export function rakeLength(config: Pick<DeckConfig, "sideA" | "sideB" | "width">
 export function formatLength(mm: number): string {
   if (Math.abs(mm) >= 1000) {
     const m = mm / 1000
-    return `${m.toFixed(m % 1 === 0 ? 0 : 2)}m`
+    // as few decimal places as the value actually needs (up to 2) — 3m
+    // stays 3m, 2.60m trims to 2.6m, 2.65m keeps both decimals. Trimming
+    // the string toFixed(2) already produced, rather than testing m*10
+    // for integer-ness, sidesteps float noise (2.6*10 isn't exactly 26).
+    return `${m.toFixed(2).replace(/\.?0+$/, "")}m`
   }
   return `${Math.round(mm)}mm`
 }

@@ -330,6 +330,7 @@ export const subscribeToStockOrders = (onData: (orders: StockOrder[]) => void, o
           id: d.id,
           label: data.label,
           orderedAt: data.orderedAt?.toDate?.() ?? new Date(),
+          orderedLinealMm: typeof data.orderedLinealMm === "number" ? data.orderedLinealMm : undefined,
           stock: Array.isArray(data.stock) ? (data.stock as StockItem[]) : [],
           createdAt: data.createdAt?.toDate?.() ?? new Date(),
         }

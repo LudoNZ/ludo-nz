@@ -5,7 +5,7 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import StockDistributionChart from "@/components/decking/stockDistributionChart"
 import { addStockOrder, deleteStockOrder, StoredDeck, subscribeToDecks, subscribeToStockOrders } from "@/components/decking/data"
-import { StockOrder } from "@/components/decking/types"
+import { formatLength, StockOrder } from "@/components/decking/types"
 import { TrashIcon } from "@/components/icons/icons"
 import styles from "./boardOrdersPage.module.scss"
 
@@ -29,6 +29,7 @@ const BoardOrdersPage = () => {
   const [pickedDeckId, setPickedDeckId] = useState("")
   const [label, setLabel] = useState("")
   const [orderedAt, setOrderedAt] = useState(todayIso)
+  const [orderedAmount, setOrderedAmount] = useState("")
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
@@ -78,14 +79,17 @@ const BoardOrdersPage = () => {
   const handleAdd = async () => {
     if (!pickedDeck || !label.trim()) return
     setAdding(true)
+    const orderedMetres = parseFloat(orderedAmount)
     await addStockOrder({
       label: label.trim(),
       orderedAt: new Date(orderedAt),
+      orderedLinealMm: !isNaN(orderedMetres) && orderedMetres > 0 ? Math.round(orderedMetres * 1000) : undefined,
       stock: pickedDeck.stock,
     })
     setAdding(false)
     setPickedDeckId("")
     setLabel("")
+    setOrderedAmount("")
   }
 
   const handleDelete = (order: StockOrder) => {
@@ -106,7 +110,8 @@ const BoardOrdersPage = () => {
         <h2 className={styles.sectionTitle}>Add an observation</h2>
         <p className={styles.hint}>
           Copies a deck&apos;s current board stock as a one-off snapshot — editing the deck afterwards
-          won&apos;t change this record, and adding it here doesn&apos;t touch the deck at all.
+          won&apos;t change this record, and adding it here doesn&apos;t touch the deck at all. The
+          ordered amount is optional — leave it blank if you didn&apos;t track it.
         </p>
         {loaded && (
           <div className={styles.addForm}>
@@ -120,6 +125,15 @@ const BoardOrdersPage = () => {
             </select>
             <input type="text" placeholder="Label" value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Label" />
             <input type="date" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} aria-label="Order date" />
+            <input
+              type="number"
+              step="0.1"
+              min={0}
+              placeholder="Ordered (m)"
+              value={orderedAmount}
+              onChange={(e) => setOrderedAmount(e.target.value)}
+              aria-label="Ordered amount in metres"
+            />
             <Button size="small" onClick={handleAdd} disabled={!pickedDeck || !label.trim() || adding}>
               {adding ? "Adding…" : "Add"}
             </Button>
@@ -132,20 +146,45 @@ const BoardOrdersPage = () => {
         {!ordersLoaded && <p className={styles.loading}>Loading…</p>}
         {ordersLoaded && orders.length === 0 && <p className={styles.hint}>None recorded yet — add one above.</p>}
         <div className={styles.orderList}>
-          {orders.map((order) => (
-            <div key={order.id} className={styles.orderCard}>
-              <div className={styles.orderHeader}>
-                <div>
-                  <strong>{order.label}</strong>
-                  <span className={styles.date}>{order.orderedAt.toLocaleDateString()}</span>
+          {orders.map((order) => {
+            const deliveredMm = order.stock.reduce((sum, s) => sum + s.length * s.quantity, 0)
+            const deltaMm = order.orderedLinealMm != null ? deliveredMm - order.orderedLinealMm : null
+            return (
+              <div key={order.id} className={styles.orderCard}>
+                <div className={styles.orderHeader}>
+                  <div>
+                    <strong>{order.label}</strong>
+                    <span className={styles.date}>{order.orderedAt.toLocaleDateString()}</span>
+                  </div>
+                  <button type="button" className={styles.deleteBtn} onClick={() => handleDelete(order)} aria-label={`Delete ${order.label}`}>
+                    <TrashIcon />
+                  </button>
                 </div>
-                <button type="button" className={styles.deleteBtn} onClick={() => handleDelete(order)} aria-label={`Delete ${order.label}`}>
-                  <TrashIcon />
-                </button>
+                <div className={styles.orderStats}>
+                  <div className={styles.orderStat}>
+                    <strong>{formatLength(deliveredMm)}</strong>
+                    <span>delivered</span>
+                  </div>
+                  {order.orderedLinealMm != null && (
+                    <div className={styles.orderStat}>
+                      <strong>{formatLength(order.orderedLinealMm)}</strong>
+                      <span>ordered</span>
+                    </div>
+                  )}
+                  {deltaMm != null && (
+                    <div className={styles.orderStat}>
+                      <strong className={deltaMm >= 0 ? styles.over : styles.under}>
+                        {deltaMm >= 0 ? "+" : ""}
+                        {formatLength(deltaMm)}
+                      </strong>
+                      <span>vs ordered</span>
+                    </div>
+                  )}
+                </div>
+                <StockDistributionChart stock={order.stock} />
               </div>
-              <StockDistributionChart stock={order.stock} />
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>
