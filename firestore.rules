@@ -206,6 +206,20 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Decking: "ordered X, this length mix turned up" observations —
+    // feeds the pack-mix prediction "Calculate quantity order" uses.
+    // Same public/create-only shape as the retaining-wall records above
+    // (an immutable snapshot, not a living document), plus delete — a
+    // wrongly-entered data point actively skews every future prediction,
+    // so it needs to be removable, unlike a saved design.
+    match /stockOrders/{id} {
+      allow get, list, delete: if true;
+      allow create: if request.resource.data.keys().hasAll(['label', 'orderedAt', 'stock', 'createdAt'])
+        && request.resource.data.label is string
+        && request.resource.data.stock is list;
+      allow update: if false;
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

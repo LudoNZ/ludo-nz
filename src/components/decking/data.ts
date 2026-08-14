@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
-import { CutLogEntry, DeckConfig, DeckProject, DEFAULT_EDGE_LABELS, LockedRow, StockItem } from "./types"
+import { CutLogEntry, DeckConfig, DeckProject, DEFAULT_EDGE_LABELS, LockedRow, StockItem, StockOrder } from "./types"
 
 /** Where a deck actually lives: private decks are your own, tucked under
  * your account (users/{uid}/decks) and only ever visible to you; public
@@ -76,6 +76,7 @@ export const subscribeToDecks = (
           // just doesn't have this" reasoning as points above
           projectId: data.projectId as string | undefined,
           projectOrder: data.projectOrder ?? 0,
+          edgeExtraBoards: (data.edgeExtraBoards ?? {}) as Record<string, number>,
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,
@@ -302,4 +303,58 @@ export const saveProject = async (location: DeckLocation, project: Omit<DeckProj
 export const deleteProject = async (location: DeckLocation, projectId: string) => {
   if (location.kind === "public") return
   await deleteDoc(projectDocRef(location, projectId))
+}
+
+// ---- Stock orders: a small, growing dataset of "ordered timber, this is
+// the length mix that actually turned up" observations — feeds
+// boardOrderPrediction.ts's blended model, which "Calculate quantity
+// order" (deckForm.tsx) uses to predict a pack mix for a new order.
+// Public and unscoped — not private/public per-account like decks and
+// projects, since this is one shared supplier-order history rather than
+// something that makes sense to fork per user. Mirrors
+// retainingWallDesigns' public/create-only pattern (these are immutable
+// facts, not living documents you keep tweaking) plus delete, since a
+// wrongly-entered data point actively skews every future prediction and
+// should be removable by whoever's curating the dataset. ----
+
+const stockOrdersCollectionRef = (): CollectionReference => collection(firestore, "stockOrders")
+
+export const subscribeToStockOrders = (onData: (orders: StockOrder[]) => void, onError?: (err: unknown) => void) => {
+  const q = query(stockOrdersCollectionRef(), orderBy("orderedAt", "desc"))
+  return onSnapshot(
+    q,
+    (snap) => {
+      const orders: StockOrder[] = snap.docs.map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          label: data.label,
+          orderedAt: data.orderedAt?.toDate?.() ?? new Date(),
+          stock: Array.isArray(data.stock) ? (data.stock as StockItem[]) : [],
+          createdAt: data.createdAt?.toDate?.() ?? new Date(),
+        }
+      })
+      onData(orders)
+    },
+    onError
+  )
+}
+
+/** Adds one observation — a one-way, read-only snapshot copy of whatever
+ * `stock` is passed in (typically an existing deck's, via the
+ * board-orders page's "add from a deck" picker) with its own id, date,
+ * and label. Never references or links back to where it came from, so
+ * decks stay completely unaware this dataset exists at all. */
+export const addStockOrder = async (order: Omit<StockOrder, "id" | "createdAt">): Promise<string> => {
+  const ref = doc(stockOrdersCollectionRef())
+  await setDoc(ref, {
+    ...stripUndefined(order),
+    orderedAt: Timestamp.fromDate(order.orderedAt),
+    createdAt: Timestamp.now(),
+  })
+  return ref.id
+}
+
+export const deleteStockOrder = async (orderId: string) => {
+  await deleteDoc(doc(stockOrdersCollectionRef(), orderId))
 }

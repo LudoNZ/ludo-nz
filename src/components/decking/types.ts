@@ -110,6 +110,17 @@ export interface DeckConfig {
    * default like lockedEdgeLengths above, so it's never an explicit
    * `undefined` a Firestore save would need to strip. */
   projectOrder: number
+  /** Extra board rows to run along an edge, on top of the field boards —
+   * one covers a plain perimeter/frame board, two or three a dressed/
+   * skirted edge; 0 (the default, on every edge) means neither. Keyed by
+   * `"sideA"|"sideB"|"width"|"rake"` for a trapezoid deck (matching
+   * EdgeLabels' own keys) or by point index as a string for a polygon
+   * deck (matching lockedEdgeLengths' indexing) — same dual-keying
+   * decking already has for edge-level settings. Only ever read by
+   * deckCoverage.ts's order-quantity estimate; computeDeckLayout and the
+   * real cut-planner don't know this exists, so an all-empty map (every
+   * deck before this field existed) is completely unaffected. */
+  edgeExtraBoards: Record<string, number>
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults
@@ -193,6 +204,7 @@ export function defaultDeckConfig(name = "New deck"): Omit<DeckConfig, "id" | "u
     lockedVertexAngles: {},
     // no `projectId` key at all — matches `points`' "absent" semantics
     projectOrder: 0,
+    edgeExtraBoards: {},
     joistSpacing: 400,
     firstBaySpacing: 400,
     boardWidth: 140,
@@ -236,6 +248,26 @@ export function defaultDeckProject(name = "New project"): Omit<DeckProject, "id"
     name,
     stock: DEFAULT_STOCK.map((s) => ({ ...s })),
   }
+}
+
+/** One observed "ordered timber, this is the length mix that actually
+ * turned up" data point — feeds boardOrderPrediction.ts's blended model,
+ * which "Calculate quantity order" (deckForm.tsx) uses to predict a pack
+ * mix for a new order. An immutable historical record rather than a
+ * living document like a deck/project — it's a snapshot copy of a deck's
+ * `stock` at the moment it was added (see data.ts's addStockOrder), never
+ * linked back to the deck it came from, so decks stay completely
+ * unaware this dataset exists at all. */
+export interface StockOrder {
+  id: string
+  /** free text, e.g. "Unit 7" — defaults to the source deck's name but
+   * editable, since this is just a label for humans browsing the list */
+  label: string
+  /** when the order was placed/received — distinct from createdAt, which
+   * is just when this record was added to the dataset */
+  orderedAt: Date
+  stock: StockItem[]
+  createdAt: Date
 }
 
 /** Board-run length at a given position across the width (linear interpolation
