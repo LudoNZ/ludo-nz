@@ -3,7 +3,7 @@
 import { useId, useMemo } from "react"
 import { DeckLayout, displayRowNumber } from "./layout"
 import { DeckConfig, formatLength, rakeAngleDeg } from "./types"
-import { polygonBounds, polygonOutlinePath } from "./polygon"
+import { polygonBounds, polygonOutlinePath, polygonSpanAtX, polygonSpanAtY } from "./polygon"
 import styles from "./deckPlanView.module.scss"
 
 const DeckPlanView: React.FC<{
@@ -127,18 +127,42 @@ const DeckPlanView: React.FC<{
               const overhang = rowThickness * 0.35
               const joinThickness = strokeW * (row.isSkeleton ? 4.5 : 3)
               const labelFontSize = Math.min(rowThickness * 0.65, fontSize * 0.8)
-              // Anchored to this row's own start (row.runStart), not the
-              // deck's overall bounding box (spanMinX/spanMinY) — a raked
-              // or tapered edge means the box's corner isn't necessarily
-              // where *this* row actually begins, so a fixed offset from
-              // it could land outside the row (and get cropped by the
-              // outline's own clip-path). The margin is pushed out to
-              // roughly a joist bay's worth (not just a sliver off the
-              // edge) so the number always lands solidly inside the row,
-              // not right on a corner that might still pinch it.
-              const labelMargin = Math.max(maxLen * 0.015, labelFontSize * 0.9, config.joistSpacing * 0.4)
-              const labelX = intoRake ? row.runStart + labelMargin : row.rowStart + rowThickness / 2
-              const labelY = intoRake ? row.rowStart + rowThickness / 2 : row.runStart + labelMargin
+              const rowCenter = row.rowStart + rowThickness / 2
+              // How far in from the row's start to push the label — roughly
+              // a joist bay's worth rather than a thin sliver off the edge,
+              // so it lands solidly inside a real bay rather than right on
+              // a corner that might still pinch it (capped below to fit
+              // whatever room a given row actually has).
+              const marginTarget = Math.max(maxLen * 0.015, labelFontSize * 0.9, config.joistSpacing * 0.4)
+              let labelX: number
+              let labelY: number
+              if (isPolygon) {
+                // row.runStart is a *union across the row's whole band*
+                // (rowStart to rowEnd) — a deliberate over-cover so boards
+                // fully span the row even where one edge of the band is
+                // narrower than the other (see polygon.ts). That makes it
+                // the wrong reference for a single point like this label:
+                // querying fresh at the label's own exact coordinate is
+                // what actually guarantees the point lands inside the
+                // shape when the boundary slants a lot within the row's
+                // band (e.g. right where the rake angle changes) — a
+                // trapezoid's near edge is always straight, so it never
+                // needs this, row.runStart there is exactly right already.
+                if (intoRake) {
+                  const span = polygonSpanAtY(config.points!, rowCenter) ?? { xMin: row.runStart, xMax: row.runStart + row.targetLength }
+                  const margin = Math.min(marginTarget, (span.xMax - span.xMin) * 0.4)
+                  labelX = span.xMin + margin
+                  labelY = rowCenter
+                } else {
+                  const span = polygonSpanAtX(config.points!, rowCenter) ?? { yMin: row.runStart, yMax: row.runStart + row.targetLength }
+                  const margin = Math.min(marginTarget, (span.yMax - span.yMin) * 0.4)
+                  labelX = rowCenter
+                  labelY = span.yMin + margin
+                }
+              } else {
+                labelX = intoRake ? row.runStart + marginTarget : rowCenter
+                labelY = intoRake ? rowCenter : row.runStart + marginTarget
+              }
               const rowNumber = displayRowNumber(row.index, layout.rows.length, config.rowNumberingReversed)
               return (
                 <g key={row.index}>
