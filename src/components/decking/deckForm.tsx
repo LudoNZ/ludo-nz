@@ -8,6 +8,7 @@ import { insertMidpointOnLongestEdge, isSimplePolygon } from "./polygon"
 import DeckShapeEditor from "./deckShapeEditor"
 import PolygonShapeEditor from "./polygonShapeEditor"
 import JoistExclusionMap from "./joistExclusionMap"
+import CalculateQuantityModal from "./calculateQuantityModal"
 import styles from "./deckForm.module.scss"
 
 // Board stock on hand lives in its own always-editable section on the
@@ -50,6 +51,7 @@ const DeckForm: React.FC<{
 
   const isPolygon = Boolean(state.points && state.points.length >= 3)
   const shapeInvalid = isPolygon && !isSimplePolygon(state.points!)
+  const [calcOpen, setCalcOpen] = useState(false)
 
   // Switches the form into polygon mode: the first press seeds points
   // from the current sideA/sideB/width (so the shape starts as exactly
@@ -164,6 +166,27 @@ const DeckForm: React.FC<{
           </>
         )}
       </div>
+
+      <div className={styles.field}>
+        <Button size="medium" variant="secondary" onClick={() => setCalcOpen(true)}>
+          Calculate quantity order
+        </Button>
+        <span className={styles.hint}>
+          Works out how much decking this shape needs and predicts the board mix you&apos;d likely
+          get for that order, learned from past orders
+        </span>
+      </div>
+
+      <CalculateQuantityModal
+        config={state}
+        isActive={calcOpen}
+        onClose={() => setCalcOpen(false)}
+        onEdgeExtraBoardsChange={(edgeExtraBoards) => setState((s) => ({ ...s, edgeExtraBoards }))}
+        onApplyStock={(stock) => {
+          setState((s) => ({ ...s, stock }))
+          setCalcOpen(false)
+        }}
+      />
 
       <div className={styles.row}>
         <div className={styles.field}>

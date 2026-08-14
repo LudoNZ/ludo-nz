@@ -17,10 +17,19 @@
 import { polygonBounds, polygonSpanAtX, polygonSpanAtY } from "./polygon"
 import { DeckConfig, lengthAt, rakeLength, widthAt } from "./types"
 
+/** Only the fields these functions actually read — a Pick rather than
+ * the full DeckConfig, same convention lengthAt/widthAt/rakeLength
+ * already use, so a caller mid-editing a deck (missing id/updatedAt,
+ * e.g. deckForm.tsx's own form state) can pass its state straight in. */
+type CoverageConfig = Pick<
+  DeckConfig,
+  "width" | "sideA" | "sideB" | "boardWidth" | "boardGap" | "points" | "boardDirection" | "edgeExtraBoards"
+>
+
 /** Total lineal mm of field board needed to cover the deck's area —
  * every row's full span, summed. See this module's own doc comment for
  * why this doesn't need to know anything about available stock. */
-export function computeFieldCoverageLinealMm(config: DeckConfig): number {
+export function computeFieldCoverageLinealMm(config: CoverageConfig): number {
   const { width, sideA, sideB, boardWidth, boardGap, points } = config
   const pitch = boardWidth + boardGap
   if (pitch <= 0) return 0
@@ -83,7 +92,7 @@ export function computeFieldCoverageLinealMm(config: DeckConfig): number {
  * Trapezoid edge lengths come straight off sideA/sideB/width/rakeLength;
  * polygon edge lengths from consecutive points, same indexing
  * lockedEdgeLengths already uses. */
-export function computeEdgeExtraLinealMm(config: DeckConfig): number {
+export function computeEdgeExtraLinealMm(config: CoverageConfig): number {
   const { points, edgeExtraBoards } = config
   const isPolygon = Array.isArray(points) && points.length >= 3
   let totalMm = 0
@@ -115,6 +124,6 @@ export function computeEdgeExtraLinealMm(config: DeckConfig): number {
 /** The full target quantity "Calculate quantity order" predicts against —
  * field coverage plus every edge's extra boards. No wastage margin baked
  * in: this is exactly what the shape needs, not a padded estimate. */
-export function computeTotalOrderLinealMm(config: DeckConfig): number {
+export function computeTotalOrderLinealMm(config: CoverageConfig): number {
   return computeFieldCoverageLinealMm(config) + computeEdgeExtraLinealMm(config)
 }
