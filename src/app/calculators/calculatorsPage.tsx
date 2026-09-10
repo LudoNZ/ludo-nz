@@ -43,6 +43,14 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     tags: ["Joist spans", "Hangers", "Blocking", "Flooring"],
     link: "/mid-floor-framing",
   },
+  {
+    id: "tension",
+    title: "Tightline Tension",
+    description:
+      "How hard a mid-span load actually pulls on two anchors — tarp ridge line, highline, tow strap. Live to-scale diagram, sag angle, and an infinite-tension warning as the line flattens out.",
+    tags: ["Sag angle", "Anchor tension", "Live diagram"],
+    link: "/tension",
+  },
 ]
 
 // Ideas queued up for the same rule-of-thumb, real-materials-list treatment

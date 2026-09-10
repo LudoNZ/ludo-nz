@@ -27,19 +27,30 @@
   opacity: 0.7;
 }
 
-.blockingLine {
-  stroke: #2a78d6;
-  stroke-dasharray: 3 2;
+// same colour family as a joist (it's timber too) rather than a
+// contrasting one — drawn *before* the joists, so each joist's own solid
+// fill+border visibly crosses over it at every intersection, reading as
+// "the joist runs through this" without needing a separate marker
+.blocking {
+  fill: #c9924f;
+  stroke: #8b5a2b;
+  opacity: 0.85;
 }
 
 .hangerMark {
   fill: #4a2f14;
 }
 
+// translucent so the framing underneath still reads through — this is a
+// framing plan first, flooring second
+.flooring {
+  fill: #f0e2bd;
+  opacity: 0.4;
+}
+
 .sheetLine {
-  stroke: var(--foreground);
-  opacity: 0.2;
-  stroke-dasharray: 2 2;
+  stroke: #2a78d6;
+  stroke-dasharray: 4 3;
 }
 
 .dimText {
@@ -80,15 +91,21 @@
 }
 
 .blockingSwatch {
-  background-color: #2a78d6;
+  background-color: #c9924f;
+  border: 1px solid #8b5a2b;
+  opacity: 0.85;
 }
 
 .hangerSwatch {
   background-color: #4a2f14;
 }
 
+.flooringSwatch {
+  background-color: #f0e2bd;
+  opacity: 0.6;
+}
+
 .sheetSwatch {
   background-color: transparent;
-  border: 1px dashed var(--foreground);
-  opacity: 0.5;
+  border: 1px dashed #2a78d6;
 }
