@@ -1,0 +1,109 @@
+.diagramRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.anchorLine {
+  stroke: var(--foreground);
+  opacity: 0.25;
+  stroke-dasharray: 4 3;
+}
+
+// rope colour tracks the multiplication-factor warning level, same
+// green/yellow/red thresholds as the results panel
+.ropeOk {
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+}
+
+.ropeCaution {
+  stroke: var(--color-secondary);
+  stroke-linecap: round;
+}
+
+.ropeDanger {
+  stroke: var(--color-danger);
+  stroke-linecap: round;
+}
+
+.angleArc {
+  fill: none;
+  stroke: var(--foreground);
+  opacity: 0.55;
+}
+
+.angleText {
+  fill: var(--foreground);
+  opacity: 0.75;
+}
+
+.tensionText {
+  fill: var(--foreground);
+  font-weight: 700;
+}
+
+.anchorDot {
+  fill: var(--foreground);
+}
+
+.loadLine {
+  stroke: var(--foreground);
+  opacity: 0.6;
+}
+
+.loadDot {
+  fill: #555;
+  stroke: var(--foreground);
+  stroke-width: 0.5;
+}
+
+.dangerText {
+  fill: var(--color-danger);
+  font-weight: 700;
+}
+
+.dimText {
+  fill: var(--foreground);
+  opacity: 0.7;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.okSwatch {
+  background-color: var(--color-primary);
+}
+
+.cautionSwatch {
+  background-color: var(--color-secondary);
+}
+
+.dangerSwatch {
+  background-color: var(--color-danger);
+}
