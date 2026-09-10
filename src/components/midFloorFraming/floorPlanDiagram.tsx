@@ -6,13 +6,23 @@ import { FloorSettings } from "./floorSettings"
 import styles from "./floorPlanDiagram.module.scss"
 
 const JOIST_THICKNESS_M = 0.045
+// Nogging/blocking pieces sit at the same framing depth as the joists but
+// are drawn a touch thinner — enough to still read as a solid timber
+// member (same colour family as a joist, not the old thin dashed line),
+// while staying visibly narrower than a joist so the joist's own border
+// clearly shows crossing through it, rather than the two blurring together.
+const BLOCKING_THICKNESS_M = JOIST_THICKNESS_M * 0.65
 
 /** Top-down plan of a single-span mid-floor: joists running the full span,
  * evenly spaced across the width, hanger marks at both ends when hung,
- * blocking rows crossing every joist, and a faint flooring-sheet grid
+ * full-width blocking rows crossing every joist, and a flooring-sheet
  * overlay — schematic, not a literal cutting layout the way the decking
  * calculator's diagram is (no attempt to plan actual sheet joins/offsets,
- * just "this is roughly how many sheets and where the lines fall"). */
+ * just "this is roughly how many sheets and where the lines fall").
+ * Sheets are drawn with their long edge running across the joists
+ * (perpendicular to them, the way flooring is actually laid — each sheet
+ * bridging several joists rather than running alongside just one) and
+ * covering the full floor area, not just outlined as a grid. */
 const FloorPlanDiagram: React.FC<{ spec: FloorSpec; settings: FloorSettings }> = ({ spec, settings }) => {
   const geometry = useMemo(() => {
     const scale = Math.max(spec.spanM, spec.widthM, 1)
@@ -27,10 +37,15 @@ const FloorPlanDiagram: React.FC<{ spec: FloorSpec; settings: FloorSettings }> =
   const { fontSize, strokeW, viewBox } = geometry
 
   const joistXs = Array.from({ length: spec.joistCount }, (_, i) => i * spec.actualSpacingM)
+  // Full-width rows (0 to widthM below), not partial — every joist gets
+  // crossed by every blocking row.
   const blockingYs = Array.from({ length: spec.blockingRowCount }, (_, i) => (spec.spanM * (i + 1)) / (spec.blockingRowCount + 1))
 
-  const sheetCols = Math.max(1, Math.ceil(spec.widthM / settings.flooringSheetWidthM))
-  const sheetRows = Math.max(1, Math.ceil(spec.spanM / settings.flooringSheetLengthM))
+  // Sheet length (the long edge) runs across the width — perpendicular to
+  // the joists, which run the span — so each sheet bridges several joists;
+  // sheet width stacks the other way, along the span.
+  const sheetCols = Math.max(1, Math.ceil(spec.widthM / settings.flooringSheetLengthM))
+  const sheetRows = Math.max(1, Math.ceil(spec.spanM / settings.flooringSheetWidthM))
 
   return (
     <div className={styles.diagramRoot}>
@@ -38,17 +53,20 @@ const FloorPlanDiagram: React.FC<{ spec: FloorSpec; settings: FloorSettings }> =
         {/* floor outline */}
         <rect x={0} y={0} width={spec.widthM} height={spec.spanM} className={styles.floorOutline} strokeWidth={strokeW * 0.6} />
 
-        {/* flooring sheet grid — schematic only, not a real cutting layout */}
-        {Array.from({ length: sheetCols + 1 }, (_, i) => i * settings.flooringSheetWidthM)
-          .filter((x) => x > 0 && x < spec.widthM)
-          .map((x) => (
-            <line key={`sv-${x}`} x1={x} y1={0} x2={x} y2={spec.spanM} className={styles.sheetLine} strokeWidth={strokeW * 0.25} />
-          ))}
-        {Array.from({ length: sheetRows + 1 }, (_, i) => i * settings.flooringSheetLengthM)
-          .filter((y) => y > 0 && y < spec.spanM)
-          .map((y) => (
-            <line key={`sh-${y}`} x1={0} y1={y} x2={spec.widthM} y2={y} className={styles.sheetLine} strokeWidth={strokeW * 0.25} />
-          ))}
+        {/* blocking rows first, so each joist (drawn next) visibly crosses
+            over/through them via its own border — same colour family as a
+            joist rather than a contrasting one, "it's timber too" */}
+        {blockingYs.map((y) => (
+          <rect
+            key={`blocking-${y}`}
+            x={0}
+            y={y - BLOCKING_THICKNESS_M / 2}
+            width={spec.widthM}
+            height={BLOCKING_THICKNESS_M}
+            className={styles.blocking}
+            strokeWidth={strokeW * 0.3}
+          />
+        ))}
 
         {/* joists, full span length, evenly spaced across the width */}
         {joistXs.map((x) => (
@@ -63,18 +81,20 @@ const FloorPlanDiagram: React.FC<{ spec: FloorSpec; settings: FloorSettings }> =
           />
         ))}
 
-        {/* blocking rows, crossing every joist */}
-        {blockingYs.map((y) => (
-          <line
-            key={`blocking-${y}`}
-            x1={0}
-            y1={y}
-            x2={spec.widthM}
-            y2={y}
-            className={styles.blockingLine}
-            strokeWidth={strokeW * 0.8}
-          />
-        ))}
+        {/* flooring — a translucent sheet covering the entire area (so the
+            framing underneath still reads through), with the individual
+            sheets' joint lines on top */}
+        <rect x={0} y={0} width={spec.widthM} height={spec.spanM} className={styles.flooring} />
+        {Array.from({ length: sheetCols + 1 }, (_, i) => i * settings.flooringSheetLengthM)
+          .filter((x) => x > 0 && x < spec.widthM)
+          .map((x) => (
+            <line key={`sv-${x}`} x1={x} y1={0} x2={x} y2={spec.spanM} className={styles.sheetLine} strokeWidth={strokeW * 0.35} />
+          ))}
+        {Array.from({ length: sheetRows + 1 }, (_, i) => i * settings.flooringSheetWidthM)
+          .filter((y) => y > 0 && y < spec.spanM)
+          .map((y) => (
+            <line key={`sh-${y}`} x1={0} y1={y} x2={spec.widthM} y2={y} className={styles.sheetLine} strokeWidth={strokeW * 0.35} />
+          ))}
 
         {/* hanger marks at both ends of every joist, only when hung */}
         {spec.supportMethod === "hangers" &&
@@ -134,7 +154,10 @@ const FloorPlanDiagram: React.FC<{ spec: FloorSpec; settings: FloorSettings }> =
           </span>
         )}
         <span>
-          <span className={`${styles.swatch} ${styles.sheetSwatch}`} /> Flooring sheet lines (schematic)
+          <span className={`${styles.swatch} ${styles.flooringSwatch}`} /> Flooring
+        </span>
+        <span>
+          <span className={`${styles.swatch} ${styles.sheetSwatch}`} /> Sheet joint (schematic)
         </span>
       </div>
     </div>
