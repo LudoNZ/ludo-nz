@@ -1,0 +1,67 @@
+.seedCard {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h2 {
+    font-size: 1.1rem;
+    color: var(--color-primary);
+    margin-bottom: 0.4rem;
+  }
+
+  p {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    opacity: 0.85;
+    margin-bottom: 0.75rem;
+  }
+
+  code {
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background-color: rgba(27, 177, 47, 0.12);
+    font-family: inherit;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+
+  button {
+    padding: 0.45rem 0.9rem;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background: none;
+    color: var(--color-primary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background-color: var(--color-primary);
+      color: var(--background);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+}
+
+.muted {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.error {
+  font-size: 0.8rem;
+  color: var(--color-danger);
+}

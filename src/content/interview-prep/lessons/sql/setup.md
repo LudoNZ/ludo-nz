@@ -78,6 +78,22 @@ psql -d qa_practice -v ON_ERROR_STOP=1 -f interview-prep/db/seed.sql
 psql -d qa_practice
 ```
 
+**On an Android tablet (Termux)**, where Docker isn't available. Install Termux from F-Droid or its GitHub releases (the Play Store build is outdated), then:
+
+```bash
+pkg update && pkg install postgresql
+initdb $PREFIX/var/lib/postgresql
+pg_ctl -D $PREFIX/var/lib/postgresql start
+createdb qa_practice
+```
+
+Get the seed with the **Practice database** buttons at the top of this page, either way:
+
+- **Download seed.sql**, then let Termux read your Downloads folder once with `termux-setup-storage`, and run `psql -d qa_practice -v ON_ERROR_STOP=1 -f ~/storage/downloads/seed.sql`.
+- **Copy seed SQL**, then in Termux run `cat > seed.sql`, long-press to paste, press Ctrl+D (Ctrl is on Termux's extra-keys row), and run `psql -d qa_practice -v ON_ERROR_STOP=1 -f seed.sql`. Saving to a file first is more reliable than pasting about 90 KB straight into `psql`.
+
+After a tablet restart, start the server again with `pg_ctl -D $PREFIX/var/lib/postgresql start`.
+
 Then check the data loaded. This query counts the rows in every table:
 
 ```sql

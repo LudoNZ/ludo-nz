@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import LessonView from "./lessonView"
+import SeedCard from "./seedCard"
 import type { ProgressStore } from "./progressStore"
 import { useStoredState } from "./useStoredState"
 import {
@@ -27,7 +28,12 @@ const formatDay = (d: Date) => d.toLocaleDateString("en-NZ", { weekday: "short",
  * per-module confidence kept in a ProgressStore (Firestore, per user, on the
  * real page), a readiness summary, and a day-by-day plan once an interview
  * date is set in the outline. */
-const CourseView: React.FC<{ course: Course; store: ProgressStore }> = ({ course, store }) => {
+const CourseView: React.FC<{
+  course: Course
+  store: ProgressStore
+  /** Supplies the practice database SQL for the copy/download card; omitted, the card isn't shown. */
+  loadSeedSql?: () => Promise<string>
+}> = ({ course, store, loadSeedSql }) => {
   const [done, setDone] = useState<Done>({})
   const [confidence, setConfidence] = useState<Confidence>({})
   const [progressLoaded, setProgressLoaded] = useState(false)
@@ -196,6 +202,8 @@ const CourseView: React.FC<{ course: Course; store: ProgressStore }> = ({ course
           )}
         </div>
       </section>
+
+      {loadSeedSql && <SeedCard loadSeedSql={loadSeedSql} />}
 
       <section className={styles.plan} aria-label="Study plan">
         <h2>Day-by-day plan</h2>

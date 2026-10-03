@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth"
-import { getCourse } from "@/components/interviewPrep/actions"
+import { getCourse, getSeedSql } from "@/components/interviewPrep/actions"
 import CourseView from "@/components/interviewPrep/courseView"
 import { firestoreProgressStore } from "@/components/interviewPrep/progressData"
 import type { Course } from "@/components/interviewPrep/types"
@@ -21,6 +21,8 @@ const InterviewPrepPage = () => {
   // one store per signed-in user; a new instance each render would make the
   // course view resubscribe to Firestore on every render
   const store = useMemo(() => (uid ? firestoreProgressStore(uid) : null), [uid])
+  // stable identity: the seed card fetches once on mount
+  const loadSeedSql = useCallback(() => user!.getIdToken().then(getSeedSql), [user])
 
   useEffect(() => {
     if (auth && !auth.authLoading && !auth.currentUser) router.push("/login")
@@ -56,7 +58,7 @@ const InterviewPrepPage = () => {
       </div>
     )
   }
-  return <CourseView course={course} store={store} />
+  return <CourseView course={course} store={store} loadSeedSql={loadSeedSql} />
 }
 
 
