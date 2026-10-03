@@ -1,0 +1,25 @@
+.reveal {
+  margin: 0.6rem 0 0.2rem;
+}
+
+.revealButton {
+  padding: 0.35rem 0.8rem;
+  border: 2px dashed var(--color-secondary);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &[aria-expanded="true"] {
+    border-style: solid;
+  }
+}
+
+.revealBody {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.9rem 0.1rem;
+  border-left: 3px solid var(--color-secondary);
+}

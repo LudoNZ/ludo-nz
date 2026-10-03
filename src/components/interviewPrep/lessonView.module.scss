@@ -1,0 +1,67 @@
+.lessonView {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 0 0.5rem;
+
+  h3 {
+    font-size: 1.05rem;
+    color: var(--color-primary);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid rgba(27, 177, 47, 0.35);
+  }
+}
+
+.exercises {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.exercise {
+  padding: 0.8rem 1rem;
+  border: 1px solid rgba(27, 177, 47, 0.35);
+  border-radius: var(--borderRadius);
+}
+
+.exerciseHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.4rem;
+
+  h4 {
+    font-size: 0.98rem;
+  }
+}
+
+.grade {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--color-primary);
+
+  &[data-grade="3"] {
+    color: var(--color-secondary);
+  }
+}
+
+.sayItAloud {
+  padding: 0.9rem 1rem;
+  border: 2px solid var(--color-secondary);
+  border-radius: var(--borderRadius);
+
+  h3 {
+    color: var(--color-secondary);
+    border-bottom-color: rgba(177, 174, 27, 0.4);
+  }
+}
+
+.sayHint {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-bottom: 0.5rem;
+}

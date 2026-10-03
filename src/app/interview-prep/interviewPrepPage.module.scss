@@ -1,0 +1,13 @@
+// shell shown while checking access and loading — the course itself is
+// styled by components/interviewPrep/courseView.module.scss
+.interviewPrepPage {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.muted {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  line-height: 1.5;
+}

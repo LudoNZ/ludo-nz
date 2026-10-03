@@ -1,0 +1,77 @@
+.markdown {
+  font-size: 0.95rem;
+  line-height: 1.65;
+
+  p,
+  ul,
+  ol,
+  blockquote {
+    margin-bottom: 0.8rem;
+  }
+
+  ul,
+  ol {
+    padding-left: 1.4rem;
+  }
+
+  li + li {
+    margin-top: 0.25rem;
+  }
+
+  h4,
+  h5,
+  h6 {
+    margin: 1.1rem 0 0.5rem;
+    color: var(--color-primary);
+    font-size: 1rem;
+  }
+
+  blockquote {
+    padding: 0.6rem 0.9rem;
+    border-left: 4px solid var(--color-secondary);
+    background-color: rgba(177, 174, 27, 0.08);
+    border-radius: 0 var(--borderRadius) var(--borderRadius) 0;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  :not(pre) > code {
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    background-color: rgba(27, 177, 47, 0.12);
+    font-family: inherit;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+
+  strong {
+    color: var(--color-primary);
+  }
+}
+
+.tableWrap {
+  margin-bottom: 0.9rem;
+  overflow-x: auto;
+
+  table {
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    min-width: 100%;
+  }
+
+  th,
+  td {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid rgba(27, 177, 47, 0.35);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background-color: rgba(27, 177, 47, 0.12);
+  }
+}

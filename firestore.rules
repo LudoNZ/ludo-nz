@@ -114,6 +114,18 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Per-user interview prep progress: one doc ("progress") holding a
+    // lesson id -> done map and a module id -> confidence (1-5) map.
+    match /users/{userId}/interviewPrep/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && docId == 'progress'
+        && request.resource.data.keys().hasOnly(['done', 'confidence', 'updatedAt'])
+        && (!('done' in request.resource.data) || request.resource.data.done is map)
+        && (!('confidence' in request.resource.data) || request.resource.data.confidence is map);
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
     // Per-user decking layout tool
     match /users/{userId}/decks/{deckId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
