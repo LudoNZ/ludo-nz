@@ -20,18 +20,50 @@ export const calculateResults = (elevations: Elevation[], settings: Weatherboard
   return byElevation
 }
 
+/** Short code per wall — elevation initial plus its position, "N1", "E2"
+ * — so a board can be named "N1-3a" (North wall 1, course 3, first board
+ * from the left) on the drawing and the cut list alike. Elevations that
+ * share an initial get their tab number added ("N1" vs "N5·1"). */
+export const wallCodes = (elevations: Elevation[]): Map<string, string> => {
+  const initials = elevations.map((e) => (e.name.trim()[0] ?? "?").toUpperCase())
+  const codes = new Map<string, string>()
+  elevations.forEach((e, ei) => {
+    const prefix = initials.indexOf(initials[ei]) === ei ? initials[ei] : `${initials[ei]}${ei + 1}·`
+    e.walls.forEach((w, wi) => codes.set(w.id, `${prefix}${wi + 1}`))
+  })
+  return codes
+}
+
+const letters = (i: number): string => (i < 26 ? String.fromCharCode(97 + i) : letters(Math.floor(i / 26) - 1) + letters(i % 26))
+
+/** "3a": course 3, first board from the left. */
+export const boardLabel = (courseIndex: number, pieceIndex: number) => `${courseIndex}${letters(pieceIndex)}`
+
+export const boardId = (wallCode: string, courseIndex: number, pieceIndex: number) =>
+  `${wallCode}-${boardLabel(courseIndex, pieceIndex)}`
+
+/** board id → which numbered stock board (#1, #2, …) it's cut from */
+export const stockBoardOf = (plan: CuttingPlan): Map<string, number> => {
+  const map = new Map<string, number>()
+  plan.boards.forEach((b, i) => b.pieces.forEach((p) => map.set(p.label, i + 1)))
+  return map
+}
+
 export const planBoards = (
   elevations: Elevation[],
   results: Map<string, WallResult[]>,
   settings: WeatherboardSettings,
 ): CuttingPlan => {
+  // each piece is labelled with its board id, which the cut list shows
+  const codes = wallCodes(elevations)
   const pieces: Piece[] = []
   for (const e of elevations) {
     for (const r of results.get(e.id) ?? []) {
+      const code = codes.get(r.wall.id) ?? "?"
       for (const c of r.courses) {
-        for (const p of c.pieces) {
-          pieces.push({ length: Math.ceil(p.cutLength - 1e-6), label: `${e.name} · ${r.wall.name} · course ${c.index}` })
-        }
+        c.pieces.forEach((p, i) =>
+          pieces.push({ length: Math.ceil(p.cutLength - 1e-6), label: boardId(code, c.index, i) }),
+        )
       }
     }
   }

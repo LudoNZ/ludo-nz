@@ -277,3 +277,12 @@
 .tagPinned {
   color: var(--color-primary);
 }
+
+// a value that follows another dimension — editing it moves the group
+.linkHint {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  max-width: 14rem;
+  line-height: 1.3;
+}

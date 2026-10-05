@@ -6,16 +6,34 @@ import ElevationDiagram from "./elevationDiagram"
 import WallEditor from "./wallEditor"
 import NumField from "./numField"
 import { TRIM_LABELS } from "./trims"
-import { calculateResults, planBoards, planTrims, withDefaults } from "./takeoff"
+import { boardId, calculateResults, planBoards, planTrims, stockBoardOf, wallCodes, withDefaults } from "./takeoff"
 import { calculateWall } from "./weatherboardCalc"
 import QuickAddWall from "./quickAddWall"
-import { buildQuickWall, defaultQuickForm, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
+import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
+import { applyQuickForm, detachQuick, formFromWall } from "./quickEdit"
+import DimensionPopover from "./dimensionPopover"
+import LinkPicker from "./linkPicker"
+import {
+  MeasureGroup,
+  allMeasures,
+  anchorCounts,
+  applyLinks,
+  defaultLinksFor,
+  describe,
+  editMeasure,
+  linkMap,
+  linkMeasure,
+  measureKey,
+  rootOf,
+  syncWallEdit,
+  unlinkMeasure,
+} from "./measures"
 import { DEFAULT_PROJECT, ELEVATION_NAMES, STOCK_LENGTHS_MM, newBlankProject, newElevation, newId } from "./data"
 import { Elevation, Opening, Wall, WeatherboardProject, WeatherboardSettings } from "./types"
 import styles from "./weatherboardEditor.module.scss"
 
 const NEW_WALL_TAB = "__new__"
-const DRAFT_WALL_ID = "__draft__"
+const SETTINGS_TAB = "__settings__"
 
 export const formatM = (mm: number, decimals = 1) => `${(mm / 1000).toFixed(decimals)} m`
 const m = formatM
@@ -40,7 +58,10 @@ const WeatherboardEditor: React.FC<{
 
   const { elevations } = project
   const settings = useMemo(() => withDefaults(project.settings), [project.settings])
-  const activeElevation = elevations.find((e) => e.id === activeElevationId) ?? elevations[0] ?? null
+  const settingsOpen = activeElevationId === SETTINGS_TAB
+  const activeElevation = settingsOpen
+    ? null
+    : (elevations.find((e) => e.id === activeElevationId) ?? elevations[0] ?? null)
 
   const openTab = activeElevation ? wallTabs[activeElevation.id] : undefined
   const activeWall =
@@ -48,12 +69,50 @@ const WeatherboardEditor: React.FC<{
       ? (activeElevation.walls.find((w) => w.id === openTab) ?? activeElevation.walls[0] ?? null)
       : null
   const activeWallId = activeWall?.id ?? null
-  const quickForm =
-    activeElevation && !activeWall
-      ? (quickForms[activeElevation.id] ?? defaultQuickForm(`Wall ${activeElevation.walls.length + 1}`))
-      : null
-  // what the "+ Add wall" form would add, previewed dashed on the elevation
-  const draftWall = useMemo(() => (quickForm ? buildQuickWall(quickForm, DRAFT_WALL_ID) : null), [quickForm])
+  // dimensions and the links between them, project-wide
+  const measures = useMemo(() => allMeasures(project), [project])
+  const measureByKey = useMemo(() => new Map(measures.map((m) => [m.key, m])), [measures])
+  const links = useMemo(() => linkMap(project), [project])
+  const anchors = useMemo(() => anchorCounts(links), [links])
+  const describeKey = (key: string) => describe(measureByKey.get(key))
+
+  // a dimension clicked on the elevation, and the link picker when open
+  const [editing, setEditing] = useState<{ key: string; at: DOMRect } | null>(null)
+  const [picking, setPicking] = useState<{
+    title: string
+    targetKey: string | null
+    group: MeasureGroup
+    onPick: (anchorKey: string) => void
+  } | null>(null)
+
+  // The "+ Add wall" form starts out linked the logical way (width to the
+  // opposite elevation's matching wall, heights to the project's first
+  // wall), and every linked field shows its anchor's current value.
+  const rawQuickForm = useMemo(
+    () =>
+      activeElevation && !activeWall
+        ? (quickForms[activeElevation.id] ?? {
+            ...defaultQuickForm(`Wall ${activeElevation.walls.length + 1}`),
+            links: Object.fromEntries(
+              Object.entries(defaultLinksFor(project, activeElevation.id)).filter(([, v]) => v),
+            ) as QuickWallForm["links"],
+          })
+        : null,
+    [activeElevation, activeWall, quickForms, project],
+  )
+  const quickForm = useMemo(() => {
+    if (!rawQuickForm) return null
+    const v = (key: string | undefined) => (key ? measureByKey.get(key)?.value : undefined)
+    return {
+      ...rawQuickForm,
+      widthMm: v(rawQuickForm.links.width) ?? rawQuickForm.widthMm,
+      heightMm: v(rawQuickForm.links.height) ?? rawQuickForm.heightMm,
+      ridgeMm: (rawQuickForm.shape === "gable" ? v(rawQuickForm.links.ridge) : undefined) ?? rawQuickForm.ridgeMm,
+    }
+  }, [rawQuickForm, measureByKey])
+  // the quick form shown: the draft on "+ Add wall", or read back off a
+  // wall that's still edited through it
+  const slotForm = activeWall ? (activeWall.quick ? formFromWall(activeWall) : null) : quickForm
 
   const selectWall = (elevationId: string, wallId: string) => setWallTabs((t) => ({ ...t, [elevationId]: wallId }))
 
@@ -76,17 +135,11 @@ const WeatherboardEditor: React.FC<{
   const spareBoards = longest > 0 ? Math.ceil((plan.totalStockMm * settings.sparePercent) / 100 / longest) : 0
 
   // identical boards (same stock length, same pieces) grouped into one line
-  const boardGroups = useMemo(() => {
-    const groups = new Map<string, { stockLength: number; lengths: number[]; offcut: number; count: number }>()
-    for (const b of plan.boards) {
-      const lengths = b.pieces.map((p) => p.length).sort((a, c) => c - a)
-      const key = `${b.stockLength}:${lengths.join(",")}`
-      const g = groups.get(key)
-      if (g) g.count++
-      else groups.set(key, { stockLength: b.stockLength, lengths, offcut: b.offcut, count: 1 })
-    }
-    return [...groups.values()]
-  }, [plan.boards])
+  // board ids ("N1-3a") shared by the drawing, cut list and schedule,
+  // and which numbered stock board each one comes off
+  const codes = useMemo(() => wallCodes(elevations), [elevations])
+  const boardSource = useMemo(() => stockBoardOf(plan), [plan])
+  const [showLengths, setShowLengths] = useState(false)
 
   // --- state updates -------------------------------------------------------
 
@@ -97,49 +150,83 @@ const WeatherboardEditor: React.FC<{
     setProject((p) => ({ ...p, elevations: p.elevations.map((e) => (e.id === id ? fn(e) : e)) }))
 
   /** A wall whose length or edges change re-spreads its auto-placed
-   * windows to suit; pinned ones never move. */
+   * windows to suit (pinned ones never move); any of its linked
+   * dimensions that changed carry the change to their anchor, and so to
+   * everything else linked to it. */
   const updateWall = (elevationId: string, wall: Wall) =>
-    updateElevation(elevationId, (e) => ({
-      ...e,
-      walls: e.walls.map((w) => {
-        if (w.id !== wall.id) return w
-        const reshaped =
-          w.lengthMm !== wall.lengthMm ||
-          JSON.stringify([w.top, w.bottom]) !== JSON.stringify([wall.top, wall.bottom])
-        return reshaped ? relayoutAutoOpenings(wall) : wall
-      }),
-    }))
+    setProject((p) => {
+      const before = p.elevations.find((e) => e.id === elevationId)?.walls.find((w) => w.id === wall.id)
+      if (!before) return p
+      const reshaped =
+        before.lengthMm !== wall.lengthMm ||
+        JSON.stringify([before.top, before.bottom, before.corners]) !== JSON.stringify([wall.top, wall.bottom, wall.corners])
+      const after = reshaped ? relayoutAutoOpenings(wall) : wall
+      const next = {
+        ...p,
+        elevations: p.elevations.map((e) =>
+          e.id === elevationId ? { ...e, walls: e.walls.map((w) => (w.id === wall.id ? after : w)) } : e,
+        ),
+      }
+      return syncWallEdit(next, before, after)
+    })
 
-  const addQuickWall = (elevationId: string, form: QuickWallForm) => {
-    const wall = buildQuickWall(form, newId())
-    updateElevation(elevationId, (e) => ({ ...e, walls: [...e.walls, wall] }))
-    // the next "+ Add wall" starts fresh as Wall n+1
+  /** A quick-form change: the first one on "+ Add wall" creates the wall
+   * (its tab takes over, and a fresh "+ Add wall" appears); later ones on
+   * the wall's own tab rebuild it in place. */
+  const changeQuick = (elevationId: string, form: QuickWallForm, wallId: string | null) => {
+    const id = wallId ?? newId()
+    setProject((p) => applyQuickForm(p, elevationId, form, id))
+    if (!wallId) {
+      setQuickForms((all) => {
+        const rest = { ...all }
+        delete rest[elevationId]
+        return rest
+      })
+      selectWall(elevationId, id)
+    }
+  }
+
+  /** Removing a wall puts its tab back to a blank "+ Add wall". A
+   * quick-form wall goes without asking — it's one change to make again;
+   * one that's been through the full editor asks first. */
+  const removeWall = (elevationId: string, wallId: string) => {
+    const e = elevations.find((x) => x.id === elevationId)
+    const w = e?.walls.find((x) => x.id === wallId)
+    if (!e || !w) return
+    if (!w.quick && !window.confirm(`Remove ${w.name || "this wall"}?`)) return
+    // applyLinks hands an anchor's role to one of its dependents if it goes
+    setProject((p) =>
+      applyLinks({
+        ...p,
+        elevations: p.elevations.map((el) => (el.id === elevationId ? { ...el, walls: el.walls.filter((x) => x.id !== wallId) } : el)),
+      }),
+    )
     setQuickForms((all) => {
       const rest = { ...all }
       delete rest[elevationId]
       return rest
     })
-    selectWall(elevationId, wall.id)
+    selectWall(elevationId, NEW_WALL_TAB)
   }
 
-  const removeWall = (elevationId: string, wallId: string) => {
-    const e = elevations.find((x) => x.id === elevationId)
-    const w = e?.walls.find((x) => x.id === wallId)
-    if (!e || !w || !window.confirm(`Remove ${w.name || "this wall"}?`)) return
-    const i = e.walls.indexOf(w)
-    const next = e.walls[i - 1] ?? e.walls[i + 1]
-    updateElevation(elevationId, (el) => ({ ...el, walls: el.walls.filter((x) => x.id !== wallId) }))
-    selectWall(elevationId, next ? next.id : NEW_WALL_TAB)
-  }
-
+  /** The copy keeps the original's links (so it moves with the same
+   * anchors), re-keyed onto its own new break point ids. */
   const duplicateWall = (elevationId: string, w: Wall) => {
+    const breakIds = new Map(w.top.breaks.map((b) => [b.id, newId()]))
+    const copyLinks = Object.fromEntries(
+      Object.entries(w.links ?? {}).map(([kind, anchor]) => [
+        kind.startsWith("break:") ? `break:${breakIds.get(kind.slice(6)) ?? kind.slice(6)}` : kind,
+        anchor,
+      ]),
+    )
     const copy: Wall = {
       ...w,
       id: newId(),
       name: `${w.name} (copy)`,
-      top: { ...w.top, breaks: w.top.breaks.map((b) => ({ ...b, id: newId() })) },
+      top: { ...w.top, breaks: w.top.breaks.map((b) => ({ ...b, id: breakIds.get(b.id) as string })) },
       bottom: { ...w.bottom, breaks: w.bottom.breaks.map((b) => ({ ...b, id: newId() })) },
       openings: (w.openings ?? []).map((o) => ({ ...o, id: newId() })),
+      links: copyLinks,
     }
     updateElevation(elevationId, (e) => {
       const walls = [...e.walls]
@@ -170,7 +257,7 @@ const WeatherboardEditor: React.FC<{
   const removeElevation = (id: string) => {
     const e = elevations.find((x) => x.id === id)
     if (!e || !window.confirm(`Remove the ${e.name} elevation and its ${e.walls.length} wall(s)?`)) return
-    setProject((p) => ({ ...p, elevations: p.elevations.filter((x) => x.id !== id) }))
+    setProject((p) => applyLinks({ ...p, elevations: p.elevations.filter((x) => x.id !== id) }))
     setActiveElevationId(null)
   }
 
@@ -206,81 +293,16 @@ const WeatherboardEditor: React.FC<{
         well).
       </p>
 
-      <section className={styles.card}>
-        <h2>Settings</h2>
-        <div className={styles.settingsGrid}>
-          <label>
-            Course spacing (cover)
-            <span className={styles.unitInput}>
-              <NumField value={settings.coverMm} min={10} onChange={(v) => setSettings({ coverMm: v })} />
-              mm
-            </span>
-            <span className={styles.hint}>Vertical centres — each wall can override it</span>
-          </label>
-          <label>
-            Stud centres
-            <span className={styles.unitInput}>
-              <NumField value={settings.studSpacingMm} min={100} step={50} onChange={(v) => setSettings({ studSpacingMm: v })} />
-              mm
-            </span>
-            <span className={styles.hint}>Joins land on these, measured from each wall&apos;s left end</span>
-          </label>
-          <label>
-            Cut allowance
-            <span className={styles.unitInput}>
-              <NumField value={settings.cutAllowanceMm} min={0} onChange={(v) => setSettings({ cutAllowanceMm: v })} />
-              mm/piece
-            </span>
-            <span className={styles.hint}>Extra per piece for trimming ends — 0 if boards come square</span>
-          </label>
-          <label>
-            Spare
-            <span className={styles.unitInput}>
-              <NumField value={settings.sparePercent} min={0} onChange={(v) => setSettings({ sparePercent: v })} />%
-            </span>
-            <span className={styles.hint}>Added for splits and miscuts</span>
-          </label>
-          <label>
-            Facing width
-            <span className={styles.unitInput}>
-              <NumField value={settings.facingWidthMm} min={0} onChange={(v) => setSettings({ facingWidthMm: v })} />
-              mm
-            </span>
-            <span className={styles.hint}>Corner and opening facings — sized for the trim count only</span>
-          </label>
-          <label>
-            Flashing lap
-            <span className={styles.unitInput}>
-              <NumField value={settings.flashingLapMm} min={0} onChange={(v) => setSettings({ flashingLapMm: v })} />
-              mm/side
-            </span>
-            <span className={styles.hint}>How far head flashings run past the facings</span>
-          </label>
-        </div>
-        {(
-          [
-            ["stockLengthsMm", "Board lengths available"],
-            ["trimLengthsMm", "Facing & scriber lengths"],
-          ] as const
-        ).map(([key, label]) => (
-          <div key={key} className={styles.stockRow}>
-            <span className={styles.stockLabel}>{label}</span>
-            {STOCK_LENGTHS_MM.map((l) => (
-              <button
-                key={l}
-                type="button"
-                className={`${styles.chip} ${settings[key].includes(l) ? styles.chipOn : ""}`}
-                aria-pressed={settings[key].includes(l)}
-                onClick={() => toggleLength(key, l)}
-              >
-                {(l / 1000).toFixed(1)} m
-              </button>
-            ))}
-          </div>
-        ))}
-      </section>
-
       <div className={styles.tabs} role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={settingsOpen}
+          className={`${styles.tab} ${settingsOpen ? styles.tabActive : ""}`}
+          onClick={() => setActiveElevationId(SETTINGS_TAB)}
+        >
+          Settings
+        </button>
         {elevations.map((e) => (
           <button
             key={e.id}
@@ -299,7 +321,80 @@ const WeatherboardEditor: React.FC<{
         </button>
       </div>
 
-      {activeElevation ? (
+      {settingsOpen ? (
+        <section className={styles.settingsPanel}>
+          <div className={styles.settingsGrid}>
+            <label>
+              Course spacing (cover)
+              <span className={styles.unitInput}>
+                <NumField value={settings.coverMm} min={10} onChange={(v) => setSettings({ coverMm: v })} />
+                mm
+              </span>
+              <span className={styles.hint}>Vertical centres — each wall can override it</span>
+            </label>
+            <label>
+              Stud centres
+              <span className={styles.unitInput}>
+                <NumField value={settings.studSpacingMm} min={100} step={50} onChange={(v) => setSettings({ studSpacingMm: v })} />
+                mm
+              </span>
+              <span className={styles.hint}>Joins land on these, measured from each wall&apos;s left end</span>
+            </label>
+            <label>
+              Cut allowance
+              <span className={styles.unitInput}>
+                <NumField value={settings.cutAllowanceMm} min={0} onChange={(v) => setSettings({ cutAllowanceMm: v })} />
+                mm/piece
+              </span>
+              <span className={styles.hint}>Extra per piece for trimming ends — 0 if boards come square</span>
+            </label>
+            <label>
+              Spare
+              <span className={styles.unitInput}>
+                <NumField value={settings.sparePercent} min={0} onChange={(v) => setSettings({ sparePercent: v })} />%
+              </span>
+              <span className={styles.hint}>Added for splits and miscuts</span>
+            </label>
+            <label>
+              Facing width
+              <span className={styles.unitInput}>
+                <NumField value={settings.facingWidthMm} min={0} onChange={(v) => setSettings({ facingWidthMm: v })} />
+                mm
+              </span>
+              <span className={styles.hint}>Corner and opening facings — sized for the trim count only</span>
+            </label>
+            <label>
+              Flashing lap
+              <span className={styles.unitInput}>
+                <NumField value={settings.flashingLapMm} min={0} onChange={(v) => setSettings({ flashingLapMm: v })} />
+                mm/side
+              </span>
+              <span className={styles.hint}>How far head flashings run past the facings</span>
+            </label>
+          </div>
+          {(
+            [
+              ["stockLengthsMm", "Board lengths available"],
+              ["trimLengthsMm", "Facing & scriber lengths"],
+            ] as const
+          ).map(([key, label]) => (
+            <div key={key} className={styles.stockRow}>
+              <span className={styles.stockLabel}>{label}</span>
+              {STOCK_LENGTHS_MM.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  className={`${styles.chip} ${settings[key].includes(l) ? styles.chipOn : ""}`}
+                  aria-pressed={settings[key].includes(l)}
+                  onClick={() => toggleLength(key, l)}
+                >
+                  {(l / 1000).toFixed(1)} m
+                </button>
+              ))}
+            </div>
+          ))}
+        </section>
+      ) : activeElevation ? (
         <section className={styles.elevation}>
           <div className={styles.elevationHeader}>
             <input
@@ -314,9 +409,12 @@ const WeatherboardEditor: React.FC<{
           </div>
 
           <div className={styles.diagramCard}>
+            <label className={styles.lengthToggle}>
+              <input type="checkbox" checked={showLengths} onChange={(e) => setShowLengths(e.target.checked)} />
+              Show board lengths <span className={styles.hint}>— length and the stock board (#) it&apos;s cut from</span>
+            </label>
             <ElevationDiagram
-              results={draftWall ? [...activeResults, calculateWall(draftWall, settings)] : activeResults}
-              draftWallId={draftWall ? DRAFT_WALL_ID : null}
+              results={activeResults}
               settings={settings}
               activeWallId={activeWallId}
               selectedOpeningId={selectedOpeningId}
@@ -326,6 +424,20 @@ const WeatherboardEditor: React.FC<{
                 setSelectedOpeningId(openingId)
               }}
               onOpeningChange={(wallId, o) => updateOpening(activeElevation.id, wallId, o)}
+              links={links}
+              anchors={anchors}
+              onEditMeasure={(key, at) => setEditing({ key, at })}
+              wallCodes={codes}
+              stockBoardOf={boardSource}
+              showLengths={showLengths}
+              onCornerMove={(wallId, cornerId, x) => {
+                const w = activeElevation.walls.find((wall) => wall.id === wallId)
+                if (w)
+                  updateWall(activeElevation.id, {
+                    ...w,
+                    corners: (w.corners ?? []).map((c) => (c.id === cornerId ? { ...c, x } : c)),
+                  })
+              }}
             />
             <p className={styles.legend}>
               <span className={styles.legendJoin} /> board join (on a stud) <span className={styles.legendCourse} /> course
@@ -358,7 +470,35 @@ const WeatherboardEditor: React.FC<{
             </button>
           </div>
 
-          {activeWall ? (
+          {/* One quick form in one fixed spot (same key) whether it's the
+              "+ Add wall" draft or the wall it just created, so the field
+              being typed in keeps focus as the wall is added. */}
+          {slotForm && (
+            <QuickAddWall
+              key={`quick-${activeElevation.id}`}
+              form={slotForm}
+              onChange={(f) => changeQuick(activeElevation.id, f, activeWall?.id ?? null)}
+              wall={activeWall ?? undefined}
+              onCornersChange={activeWall ? (corners) => updateWall(activeElevation.id, { ...activeWall, corners }) : undefined}
+              onRemove={activeWall ? () => removeWall(activeElevation.id, activeWall.id) : undefined}
+              onMoreOptions={activeWall ? () => updateWall(activeElevation.id, detachQuick(activeWall)) : undefined}
+              describeLink={describeKey}
+              onPickLink={(field: QuickLinkField) =>
+                setPicking({
+                  title: `Link ${slotForm.name || "the new wall"}'s ${field} to…`,
+                  targetKey: null,
+                  group: field === "width" ? "width" : "height",
+                  onPick: (anchorKey) =>
+                    changeQuick(
+                      activeElevation.id,
+                      { ...slotForm, links: { ...slotForm.links, [field]: rootOf(anchorKey, links) } },
+                      activeWall?.id ?? null,
+                    ),
+                })
+              }
+            />
+          )}
+          {activeWall && !activeWall.quick && (
             <WallEditor
               key={activeWall.id}
               wall={activeWall}
@@ -369,15 +509,11 @@ const WeatherboardEditor: React.FC<{
               onChange={(wall) => updateWall(activeElevation.id, wall)}
               onRemove={() => removeWall(activeElevation.id, activeWall.id)}
               onDuplicate={() => duplicateWall(activeElevation.id, activeWall)}
+              linkHint={(kind) => {
+                const anchor = links.get(measureKey(activeWall.id, kind))
+                return anchor ? describeKey(anchor) : null
+              }}
             />
-          ) : (
-            quickForm && (
-              <QuickAddWall
-                form={quickForm}
-                onChange={(f) => setQuickForms((all) => ({ ...all, [activeElevation.id]: f }))}
-                onAdd={() => addQuickWall(activeElevation.id, quickForm)}
-              />
-            )
           )}
         </section>
       ) : (
@@ -470,22 +606,33 @@ const WeatherboardEditor: React.FC<{
 
           <details className={styles.details}>
             <summary>Cutting plan — {plan.boards.length} boards</summary>
+            <p className={styles.hint}>
+              Each stock board, numbered, and the boards cut from it — ids match the labels on the elevations
+              (N1-3a = North wall 1, course 3, first board from the left).
+            </p>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Qty</th>
-                  <th>Board</th>
-                  <th>Cut into (mm)</th>
+                  <th>#</th>
+                  <th>Stock</th>
+                  <th>Cut into</th>
                   <th>Offcut</th>
                 </tr>
               </thead>
               <tbody>
-                {boardGroups.map((g, i) => (
+                {plan.boards.map((b, i) => (
                   <tr key={i}>
-                    <td>{g.count} ×</td>
-                    <td>{(g.stockLength / 1000).toFixed(1)} m</td>
-                    <td>{g.lengths.join(" + ")}</td>
-                    <td>{g.offcut} mm</td>
+                    <td>{i + 1}</td>
+                    <td>{(b.stockLength / 1000).toFixed(1)} m</td>
+                    <td>
+                      {b.pieces.map((p, j) => (
+                        <span key={p.label} className={styles.cutPiece}>
+                          {j > 0 && " + "}
+                          <strong>{p.label}</strong> {p.length}
+                        </span>
+                      ))}
+                    </td>
+                    <td>{b.offcut} mm</td>
                   </tr>
                 ))}
               </tbody>
@@ -500,14 +647,14 @@ const WeatherboardEditor: React.FC<{
                 {(results.get(e.id) ?? []).map((r) => (
                   <div key={r.wall.id}>
                     <h4>
-                      {r.wall.name} — {r.courses.length} courses at {r.coverMm} mm
+                      {codes.get(r.wall.id)} · {r.wall.name} — {r.courses.length} courses at {r.coverMm} mm
                     </h4>
                     <table className={styles.table}>
                       <thead>
                         <tr>
                           <th>Course</th>
                           <th>From</th>
-                          <th>Pieces, left to right (mm)</th>
+                          <th>Boards, left to right (id length #stock)</th>
                           <th>Joins at (mm)</th>
                         </tr>
                       </thead>
@@ -516,7 +663,17 @@ const WeatherboardEditor: React.FC<{
                           <tr key={c.index}>
                             <td>{c.index}</td>
                             <td>{Math.round(c.bottom)}</td>
-                            <td>{c.pieces.map((p) => Math.ceil(p.cutLength - 1e-6)).join(" + ") || "—"}</td>
+                            <td>
+                              {c.pieces.length
+                                ? c.pieces
+                                    .map((p, i) => {
+                                      const id = boardId(codes.get(r.wall.id) ?? "?", c.index, i)
+                                      const stock = boardSource.get(id)
+                                      return `${id} ${Math.ceil(p.cutLength - 1e-6)}${stock ? ` #${stock}` : ""}`
+                                    })
+                                    .join(" + ")
+                                : "—"}
+                            </td>
                             <td>{c.joins.map((j) => Math.round(j)).join(", ") || "—"}</td>
                           </tr>
                         ))}
@@ -538,6 +695,53 @@ const WeatherboardEditor: React.FC<{
           Clear all
         </button>
       </div>
+
+      {editing &&
+        measureByKey.get(editing.key) &&
+        (() => {
+          const m = measureByKey.get(editing.key)!
+          const anchorKey = links.get(m.key)
+          const root = rootOf(m.key, links)
+          // everything else in its linked group: the anchor's dependents,
+          // which (for a linked dimension) include this one but not the anchor
+          const groupSize = [...links.values()].filter((a) => a === root).length
+          return (
+            <DimensionPopover
+              key={editing.key}
+              measure={m}
+              anchor={anchorKey ? (measureByKey.get(anchorKey) ?? null) : null}
+              dependents={anchors.get(m.key) ?? 0}
+              groupSize={groupSize}
+              at={editing.at}
+              onClose={() => setEditing(null)}
+              onCommit={(v) => setProject((p) => editMeasure(p, m.key, v))}
+              onUnlink={() => setProject((p) => unlinkMeasure(p, m.key))}
+              onLink={() => {
+                setEditing(null)
+                setPicking({
+                  title: `Link ${describe(m)} to…`,
+                  targetKey: m.key,
+                  group: m.group,
+                  onPick: (a) => setProject((p) => linkMeasure(p, m.key, a)),
+                })
+              }}
+            />
+          )
+        })()}
+      {picking && (
+        <LinkPicker
+          title={picking.title}
+          measures={measures}
+          links={links}
+          targetKey={picking.targetKey}
+          group={picking.group}
+          onClose={() => setPicking(null)}
+          onPick={(a) => {
+            picking.onPick(a)
+            setPicking(null)
+          }}
+        />
+      )}
 
       <p className={styles.disclaimer}>
         Pieces run to the long point of every rake cut, and under the corner and jamb facings to the wall end or

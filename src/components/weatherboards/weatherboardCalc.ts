@@ -10,7 +10,7 @@
  * notched, so they stay full length. Runs longer than the longest board are split at
  * stud positions, staggered off the joins in the course below. */
 
-import { Opening, Wall, WallEdge, WeatherboardSettings } from "./types"
+import { Opening, Wall, WallCorner, WallEdge, WeatherboardSettings } from "./types"
 
 /** A band has to overlap the wall by more than this to need a board —
  * keeps floating-point slivers at a peak or a sill from spawning pieces. */
@@ -232,6 +232,16 @@ const subtractOpenings = (runs: Run[], openings: Opening[], lo: number, hi: numb
   return out.filter((r) => r.end - r.start > SLIVER_MM)
 }
 
+/** Splits runs wherever a corner falls inside them — boards stop at a corner. */
+const splitAtCorners = (runs: Run[], corners: WallCorner[]): Run[] => {
+  const xs = corners.map((c) => c.x).sort((a, b) => a - b)
+  return runs.flatMap((r) => {
+    const cuts = xs.filter((x) => x > r.start + SLIVER_MM && x < r.end - SLIVER_MM)
+    const pts = [r.start, ...cuts, r.end]
+    return pts.slice(1).map((end, i) => ({ start: pts[i], end }))
+  })
+}
+
 export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult => {
   const coverMm = Math.max(10, wall.coverMm ?? s.coverMm)
   const L = Math.max(0, wall.lengthMm)
@@ -242,8 +252,13 @@ export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult =
   const minY = Math.min(...bottom.map((p) => p.y))
   const maxY = Math.max(...top.map((p) => p.y))
 
+  // each stretch between corners is framed (and so joined) from its own start
+  const corners = (wall.corners ?? []).filter((c) => c.x > 0 && c.x < L)
+  const bounds = [0, ...corners.map((c) => c.x).sort((a, b) => a - b), L]
   const studs: number[] = []
-  if (s.studSpacingMm > 0) for (let x = s.studSpacingMm; x < L - 1e-6; x += s.studSpacingMm) studs.push(x)
+  if (s.studSpacingMm > 0)
+    for (let i = 1; i < bounds.length; i++)
+      for (let x = bounds[i - 1] + s.studSpacingMm; x < bounds[i] - 1e-6; x += s.studSpacingMm) studs.push(x)
 
   const courses: Course[] = []
   if (L > 0 && maxY > minY && s.stockLengthsMm.length > 0) {
@@ -252,7 +267,7 @@ export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult =
     for (let i = 0; i < count; i++) {
       const lo = minY + i * coverMm
       const hi = lo + coverMm
-      const runs = subtractOpenings(runsInBand(top, bottom, L, lo, hi), openings, lo, hi)
+      const runs = splitAtCorners(subtractOpenings(runsInBand(top, bottom, L, lo, hi), openings, lo, hi), corners)
       const pieces = runs.flatMap((r) => splitRun(r, studs, below, s))
       const joins: number[] = []
       for (const r of runs) {

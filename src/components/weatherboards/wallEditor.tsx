@@ -4,6 +4,7 @@ import { Opening, Wall, WallEdge, WallEnd } from "./types"
 import { WallResult, edgePoints } from "./weatherboardCalc"
 import { WALL_END_LABELS, WALL_SHAPE_LABELS, WallShape, applyShape, newId, newOpening } from "./data"
 import { setWindowCount } from "./quickWall"
+import CornersEditor from "./cornersEditor"
 import NumField from "./numField"
 import styles from "./wallEditor.module.scss"
 
@@ -26,7 +27,13 @@ const EdgeEditor: React.FC<{
   edge: WallEdge
   lengthMm: number
   onChange: (edge: WallEdge) => void
-}> = ({ label, hint, edge, lengthMm, onChange }) => {
+  /** "🔗 North · Living · Left height" for a linked value (top edge only) */
+  linkHint?: (kind: string) => string | null
+}> = ({ label, hint, edge, lengthMm, onChange, linkHint }) => {
+  const linked = (kind: string) => {
+    const h = linkHint?.(kind)
+    return h ? <span className={styles.linkHint}>🔗 {h}</span> : null
+  }
   const sorted = [...edge.breaks].sort((a, b) => a.x - b.x)
 
   const addBreak = () => {
@@ -49,6 +56,7 @@ const EdgeEditor: React.FC<{
             <NumField value={edge.left} onChange={(v) => onChange({ ...edge, left: v })} ariaLabel={`${label} left height`} />
             mm
           </span>
+          {linked("heightL")}
         </label>
         <label>
           Right end
@@ -56,6 +64,7 @@ const EdgeEditor: React.FC<{
             <NumField value={edge.right} onChange={(v) => onChange({ ...edge, right: v })} ariaLabel={`${label} right height`} />
             mm
           </span>
+          {linked("heightR")}
         </label>
       </div>
       {sorted.length > 0 && (
@@ -90,6 +99,7 @@ const EdgeEditor: React.FC<{
                 ×
               </button>
               {(b.x <= 0 || b.x >= lengthMm) && <span className={styles.warn}>outside the wall — ignored</span>}
+              {linked(`break:${b.id}`)}
             </div>
           ))}
         </div>
@@ -202,7 +212,9 @@ const WallEditor: React.FC<{
   onChange: (wall: Wall) => void
   onRemove: () => void
   onDuplicate: () => void
-}> = ({ wall, result, projectCoverMm, selectedOpeningId, onSelectOpening, onChange, onRemove, onDuplicate }) => {
+  /** what a linked dimension of this wall takes its value from */
+  linkHint?: (kind: string) => string | null
+}> = ({ wall, result, projectCoverMm, selectedOpeningId, onSelectOpening, onChange, onRemove, onDuplicate, linkHint }) => {
   const pieces = result.courses.reduce((s, c) => s + c.pieces.length, 0)
   const joins = result.courses.reduce((s, c) => s + c.joins.length, 0)
 
@@ -233,6 +245,7 @@ const WallEditor: React.FC<{
             <NumField value={wall.lengthMm} min={0} step={100} onChange={(v) => onChange({ ...wall, lengthMm: v })} />
             mm
           </span>
+          {linkHint?.("width") && <span className={styles.linkHint}>🔗 {linkHint("width")}</span>}
         </label>
         <label>
           Cover
@@ -280,6 +293,7 @@ const WallEditor: React.FC<{
           edge={wall.top}
           lengthMm={wall.lengthMm}
           onChange={(top) => onChange({ ...wall, top })}
+          linkHint={linkHint}
         />
         <EdgeEditor
           label="Bottom edge"
@@ -289,6 +303,11 @@ const WallEditor: React.FC<{
           onChange={(bottom) => onChange({ ...wall, bottom })}
         />
       </div>
+
+      <fieldset className={styles.edge}>
+        <legend>Corners</legend>
+        <CornersEditor wall={wall} onChange={(corners) => onChange({ ...wall, corners })} />
+      </fieldset>
 
       <OpeningsEditor
         wall={wall}

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Opening, WeatherboardSettings } from "./types"
 import { WallResult, calculateWall, edgePoints } from "./weatherboardCalc"
+import { measureKey } from "./measures"
+import { boardId, boardLabel } from "./takeoff"
 import styles from "./elevationDiagram.module.scss"
 
 /** Gap between walls laid side by side, in wall millimetres. */
@@ -63,15 +65,33 @@ const dragOpening = (d: Drag, dx: number, dy: number): Opening => {
  * by eye against the drawings. */
 const ElevationDiagram: React.FC<{
   results: WallResult[]
-  /** A wall being set up on "+ Add wall": drawn dashed, not interactive. */
-  draftWallId?: string | null
   settings: WeatherboardSettings
   activeWallId?: string | null
   selectedOpeningId?: string | null
   onSelectWall?: (wallId: string) => void
   onSelectOpening?: (wallId: string, openingId: string) => void
   onOpeningChange?: (wallId: string, opening: Opening) => void
-}> = ({ results, draftWallId, settings, activeWallId, selectedOpeningId, onSelectWall, onSelectOpening, onOpeningChange }) => {
+  /** dependent measure key → anchor key, for the 🔗 / ⚓ markers */
+  links?: Map<string, string>
+  anchors?: Map<string, number>
+  /** Clicking a dimension: its measure key and where it sits on screen. */
+  onEditMeasure?: (key: string, at: DOMRect) => void
+  /** A corner dragged sideways to `x` (mm from the wall's left end). */
+  onCornerMove?: (wallId: string, cornerId: string, x: number) => void
+  /** "N1"-style code per wall, for board ids matching the cut list */
+  wallCodes?: Map<string, string>
+  /** board id → numbered stock board it's cut from */
+  stockBoardOf?: Map<string, number>
+  /** show each board's length (and stock board) beside its label */
+  showLengths?: boolean
+}> = ({
+  links,
+  anchors,
+  onEditMeasure,
+  onCornerMove,
+  wallCodes,
+  stockBoardOf,
+  showLengths, results, settings, activeWallId, selectedOpeningId, onSelectWall, onSelectOpening, onOpeningChange }) => {
   const fw = settings.facingWidthMm
   const lap = settings.flashingLapMm
   const svgRef = useRef<SVGSVGElement>(null)
@@ -82,18 +102,23 @@ const ElevationDiagram: React.FC<{
   const [preview, setPreview] = useState<{ wallId: string; opening: Opening } | null>(null)
   const previewRef = useRef(preview)
   previewRef.current = preview
+  // same idea for a corner being dragged sideways
+  const cornerDragRef = useRef<{ wallId: string; cornerId: string; startX: number; origX: number; wallLength: number } | null>(null)
+  const [cornerPreview, setCornerPreview] = useState<{ wallId: string; cornerId: string; x: number } | null>(null)
+  const cornerPreviewRef = useRef(cornerPreview)
+  cornerPreviewRef.current = cornerPreview
 
   const shown = useMemo(() => {
-    if (!preview) return results
-    return results.map((r) =>
-      r.wall.id !== preview.wallId
-        ? r
-        : calculateWall(
-            { ...r.wall, openings: (r.wall.openings ?? []).map((o) => (o.id === preview.opening.id ? preview.opening : o)) },
-            settings,
-          ),
-    )
-  }, [results, preview, settings])
+    if (!preview && !cornerPreview) return results
+    return results.map((r) => {
+      let wall = r.wall
+      if (preview?.wallId === wall.id)
+        wall = { ...wall, openings: (wall.openings ?? []).map((o) => (o.id === preview.opening.id ? preview.opening : o)) }
+      if (cornerPreview?.wallId === wall.id)
+        wall = { ...wall, corners: (wall.corners ?? []).map((c) => (c.id === cornerPreview.cornerId ? { ...c, x: cornerPreview.x } : c)) }
+      return wall === r.wall ? r : calculateWall(wall, settings)
+    })
+  }, [results, preview, cornerPreview, settings])
 
   // Touch browsers start scrolling the page a few pixels into a drag and
   // cancel the pointer — and iOS ignores touch-action on SVG shapes — so
@@ -118,22 +143,35 @@ const ElevationDiagram: React.FC<{
 
   const minY = Math.min(...drawable.map((r) => r.minY))
   const maxY = Math.max(...drawable.map((r) => r.maxY))
-  const totalW = drawable.reduce((s, r) => s + r.wall.lengthMm, 0) + WALL_GAP_MM * (drawable.length - 1)
+  const sumL = drawable.reduce((s, r) => s + r.wall.lengthMm, 0)
   const H = maxY - minY
-  const font = Math.max(totalW, H * 2) / 45
+  const font = Math.max(sumL + WALL_GAP_MM * (drawable.length - 1), H * 2) / 45
+  // walls sit far enough apart for a height dimension on each side
+  const gap = Math.max(WALL_GAP_MM, font * 3.4)
+  const totalW = sumL + gap * (drawable.length - 1)
   const pad = font * 1.5
-  const vbX = -pad
+  const side = font * 1.8 // room for the outermost height dimensions
+  const vbX = -pad - side
   const vbY = -maxY - pad
-  const vbW = totalW + pad * 2
-  const vbH = H + pad * 2 + font * 2.6
+  const vbW = totalW + (pad + side) * 2
+  const vbH = H + pad * 2 + font * 4.6
   const stroke = font / 12
   const handle = font * 0.7
+  const dimY = -minY + font * 0.8 // width dimension line, under every wall
 
   const offsets: number[] = []
   drawable.reduce((x, r) => {
     offsets.push(x)
-    return x + r.wall.lengthMm + WALL_GAP_MM
+    return x + r.wall.lengthMm + gap
   }, 0)
+
+  const dimText = (wallId: string, kind: string, value: number) => {
+    const key = measureKey(wallId, kind)
+    const mark = links?.has(key) ? " 🔗" : anchors?.has(key) ? " ⚓" : ""
+    return { key, text: `${Math.round(value)}${mark}`, linked: !!links?.has(key), anchor: !!anchors?.has(key) }
+  }
+  const dimClass = (d: { linked: boolean; anchor: boolean }, editable: boolean) =>
+    `${styles.dimLabel} ${d.linked ? styles.dimLinked : d.anchor ? styles.dimAnchor : ""} ${editable ? styles.dimEditable : ""}`
 
   // client px → wall mm (SVG y runs down, wall heights run up)
   const toWorld = (clientX: number, clientY: number) => {
@@ -162,7 +200,29 @@ const ElevationDiagram: React.FC<{
     dragRef.current = { wallId: r.wall.id, mode, startX: w.x, startY: w.y, orig: o, wallLength: r.wall.lengthMm }
   }
 
+  const startCornerDrag = (e: React.PointerEvent, r: WallResult, cornerId: string, x: number) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (!onCornerMove) return
+    const w = toWorld(e.clientX, e.clientY)
+    if (!w) return
+    try {
+      svgRef.current?.setPointerCapture(e.pointerId)
+    } catch {
+      // pointer already gone — the drag still works while it stays over the svg
+    }
+    cornerDragRef.current = { wallId: r.wall.id, cornerId, startX: w.x, origX: x, wallLength: r.wall.lengthMm }
+  }
+
   const onPointerMove = (e: React.PointerEvent) => {
+    const cd = cornerDragRef.current
+    if (cd) {
+      const w = toWorld(e.clientX, e.clientY)
+      if (!w) return
+      const x = Math.max(SNAP_MM * 10, Math.min(cd.wallLength - SNAP_MM * 10, snap(cd.origX + w.x - cd.startX)))
+      if (cornerPreviewRef.current?.x !== x) setCornerPreview({ wallId: cd.wallId, cornerId: cd.cornerId, x })
+      return
+    }
     const d = dragRef.current
     if (!d) return
     const w = toWorld(e.clientX, e.clientY)
@@ -174,6 +234,14 @@ const ElevationDiagram: React.FC<{
   }
 
   const endDrag = () => {
+    const cd = cornerDragRef.current
+    if (cd) {
+      cornerDragRef.current = null
+      const p = cornerPreviewRef.current
+      if (p) onCornerMove?.(p.wallId, p.cornerId, p.x)
+      setCornerPreview(null)
+      return
+    }
     const d = dragRef.current
     dragRef.current = null
     const p = previewRef.current
@@ -191,7 +259,7 @@ const ElevationDiagram: React.FC<{
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onLostPointerCapture={() => dragRef.current && endDrag()}
+      onLostPointerCapture={() => (dragRef.current || cornerDragRef.current) && endDrag()}
     >
       {drawable.map((r, wi) => {
         const x0 = offsets[wi]
@@ -204,7 +272,7 @@ const ElevationDiagram: React.FC<{
         return (
           <g
             key={r.wall.id}
-            className={r.wall.id === draftWallId ? styles.draft : r.wall.id === activeWallId ? styles.active : undefined}
+            className={r.wall.id === activeWallId ? styles.active : undefined}
           >
             <defs>
               <clipPath id={clipId}>
@@ -213,8 +281,8 @@ const ElevationDiagram: React.FC<{
             </defs>
             <polygon
               points={outline}
-              className={`${styles.wall} ${onSelectWall && r.wall.id !== draftWallId ? styles.clickable : ""}`}
-              onClick={() => r.wall.id !== draftWallId && onSelectWall?.(r.wall.id)}
+              className={`${styles.wall} ${onSelectWall ? styles.clickable : ""}`}
+              onClick={() => onSelectWall?.(r.wall.id)}
             />
             <g clipPath={`url(#${clipId})`}>
               {r.studs.map((x) => (
@@ -251,8 +319,96 @@ const ElevationDiagram: React.FC<{
                   />
                 )
               })}
+              {/* row numbers at the start of each course, and every board's
+                  label ("3a") — with its length and stock board on request */}
+              {(() => {
+                const ts = Math.min(font * 0.55, r.coverMm * 0.62)
+                const charW = ts * 0.58
+                const code = wallCodes?.get(r.wall.id) ?? ""
+                return r.courses.map((c) => {
+                  const y = -(c.bottom + c.top) / 2
+                  const rowX = x0 + (c.runs[0]?.start ?? 0) + ts * 0.25
+                  const rowEnd = rowX + String(c.index).length * charW + ts * 0.3
+                  return (
+                    <g key={`l${c.index}`} className={styles.boardLabels}>
+                      <text x={rowX} y={y} fontSize={ts} dominantBaseline="central" className={styles.rowLabel}>
+                        {c.index}
+                      </text>
+                      {c.pieces.map((p, i) => {
+                        const label = boardLabel(c.index, i)
+                        const len = Math.ceil(p.cutLength - 1e-6)
+                        const stock = stockBoardOf?.get(boardId(code, c.index, i))
+                        const long = `${label} ${len}${stock ? ` #${stock}` : ""}`
+                        // centred on the board, clear of the row number for the first one
+                        const mid = (p.start + p.end) / 2
+                        const room = i === 0 ? Math.min(p.end - p.start, 2 * (mid - (rowEnd - x0))) : p.end - p.start
+                        const fits = (t: string) => t.length * charW + ts * 0.4 < room
+                        const text = showLengths && fits(long) ? long : fits(label) ? label : null
+                        if (!text) return null
+                        return (
+                          <text
+                            key={i}
+                            x={x0 + mid}
+                            y={y}
+                            fontSize={ts}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            className={styles.boardLabel}
+                          >
+                            {text}
+                          </text>
+                        )
+                      })}
+                    </g>
+                  )
+                })
+              })()}
+              {(r.wall.corners ?? [])
+                .filter((c) => c.x > 0 && c.x < L)
+                .map((c) =>
+                  c.type === "external" ? (
+                    <rect key={c.id} x={x0 + c.x - fw} y={-r.maxY} width={fw * 2} height={r.maxY - r.minY} className={styles.facing} />
+                  ) : (
+                    <rect
+                      key={c.id}
+                      x={x0 + c.x - Math.max(fw / 4, stroke * 2)}
+                      y={-r.maxY}
+                      width={Math.max(fw / 2, stroke * 4)}
+                      height={r.maxY - r.minY}
+                      className={styles.scriber}
+                    />
+                  ),
+                )}
             </g>
             <polygon points={outline} className={styles.outline} strokeWidth={stroke * 2} />
+            {/* corner grab strips — under the openings so those still win */}
+            {(r.wall.corners ?? [])
+              .filter((c) => c.x > 0 && c.x < L)
+              .map((c) => (
+                <g key={c.id}>
+                  <line
+                    x1={x0 + c.x}
+                    x2={x0 + c.x}
+                    y1={-r.maxY - font * 0.3}
+                    y2={-r.minY}
+                    className={c.type === "external" ? styles.cornerExternal : styles.cornerInternal}
+                    strokeWidth={stroke * 2}
+                    strokeDasharray={`${font * 0.3} ${font * 0.2}`}
+                  />
+                  <text x={x0 + c.x} y={-r.maxY - font * 0.45} fontSize={font * 0.6} textAnchor="middle" className={styles.cornerLabel}>
+                    {c.type === "external" ? "ext" : "int"} {Math.round(c.x)}
+                  </text>
+                  <rect
+                    x={x0 + c.x - font * 0.4}
+                    y={-r.maxY}
+                    width={font * 0.8}
+                    height={r.maxY - r.minY}
+                    className={styles.cornerGrab}
+                    data-draggable
+                    onPointerDown={(e) => startCornerDrag(e, r, c.id, c.x)}
+                  />
+                </g>
+              ))}
 
             {(r.wall.openings ?? []).map((o) => {
               const selected = o.id === selectedOpeningId
@@ -282,8 +438,8 @@ const ElevationDiagram: React.FC<{
                     height={o.height}
                     className={`${styles.opening} ${selected ? styles.openingSelected : ""}`}
                     strokeWidth={stroke * 2}
-                    data-draggable={r.wall.id === draftWallId ? undefined : true}
-                    onPointerDown={(e) => r.wall.id !== draftWallId && startDrag(e, r, o, "move")}
+                    data-draggable
+                    onPointerDown={(e) => startDrag(e, r, o, "move")}
                   />
                   {selected && (
                     <>
@@ -316,11 +472,93 @@ const ElevationDiagram: React.FC<{
               )
             })}
 
-            <text x={x0 + L / 2} y={-minY + font * 1.3} fontSize={font} className={styles.label} textAnchor="middle">
+            {(() => {
+              const editable = !!onEditMeasure
+              const click = (key: string) => (e: React.MouseEvent<SVGTextElement>) => {
+                if (!editable) return
+                e.stopPropagation()
+                onEditMeasure?.(key, e.currentTarget.getBoundingClientRect())
+              }
+              const tick = font * 0.3
+              const w = dimText(r.wall.id, "width", L)
+              const hl = dimText(r.wall.id, "heightL", r.wall.top.left)
+              const hr = dimText(r.wall.id, "heightR", r.wall.top.right)
+              const lx = x0 - font * 0.55
+              const rx = x0 + L + font * 0.55
+              const bl = bottom[0].y
+              const br = bottom[bottom.length - 1].y
+              return (
+                <g className={styles.dims} strokeWidth={stroke}>
+                  {/* width, under the wall */}
+                  <line x1={x0} x2={x0} y1={-bl + tick} y2={dimY + tick} className={styles.dimExt} />
+                  <line x1={x0 + L} x2={x0 + L} y1={-br + tick} y2={dimY + tick} className={styles.dimExt} />
+                  <line x1={x0} x2={x0 + L} y1={dimY} y2={dimY} className={styles.dimLine} />
+                  <text
+                    x={x0 + L / 2}
+                    y={dimY + font * 1.05}
+                    fontSize={font * 0.8}
+                    textAnchor="middle"
+                    className={dimClass(w, editable)}
+                    onClick={click(w.key)}
+                  >
+                    {w.text}
+                  </text>
+                  {/* height at each end, datum to top */}
+                  {(
+                    [
+                      [hl, lx, bl, r.wall.top.left, -1],
+                      [hr, rx, br, r.wall.top.right, 1],
+                    ] as const
+                  ).map(([d, x, y0, y1, dir]) => (
+                    <g key={d.key}>
+                      <line x1={x} x2={x} y1={-y0} y2={-y1} className={styles.dimLine} />
+                      <line x1={x - tick} x2={x + tick} y1={-y1} y2={-y1} className={styles.dimLine} />
+                      <line x1={x - tick} x2={x + tick} y1={-y0} y2={-y0} className={styles.dimLine} />
+                      <text
+                        x={x + dir * font * 0.45}
+                        y={-(y0 + y1) / 2}
+                        fontSize={font * 0.8}
+                        textAnchor="middle"
+                        transform={`rotate(-90 ${x + dir * font * 0.45} ${-(y0 + y1) / 2})`}
+                        dominantBaseline={dir < 0 ? "auto" : "hanging"}
+                        className={dimClass(d, editable)}
+                        onClick={click(d.key)}
+                      >
+                        {d.text}
+                      </text>
+                    </g>
+                  ))}
+                  {/* each top break point: ridge, or where a rake starts */}
+                  {r.wall.top.breaks
+                    .filter((b) => b.x > 0 && b.x < L)
+                    .map((b) => {
+                      const d = dimText(r.wall.id, `break:${b.id}`, b.y)
+                      return (
+                        <g key={b.id}>
+                          <circle cx={x0 + b.x} cy={-b.y} r={font * 0.14} className={styles.dimPoint} />
+                          <text
+                            x={x0 + b.x}
+                            y={-b.y - font * 0.4}
+                            fontSize={font * 0.8}
+                            textAnchor="middle"
+                            className={dimClass(d, editable)}
+                            onClick={click(d.key)}
+                          >
+                            {d.text}
+                          </text>
+                        </g>
+                      )
+                    })}
+                </g>
+              )
+            })()}
+
+            <text x={x0 + L / 2} y={dimY + font * 2.3} fontSize={font} className={styles.label} textAnchor="middle">
+              {wallCodes?.get(r.wall.id) ? `${wallCodes.get(r.wall.id)} · ` : ""}
               {r.wall.name || "Wall"}
             </text>
-            <text x={x0 + L / 2} y={-minY + font * 2.4} fontSize={font * 0.8} className={styles.dim} textAnchor="middle">
-              {(L / 1000).toFixed(2)} m · {r.courses.length} courses
+            <text x={x0 + L / 2} y={dimY + font * 3.3} fontSize={font * 0.75} className={styles.dim} textAnchor="middle">
+              {r.courses.length} courses
             </text>
           </g>
         )

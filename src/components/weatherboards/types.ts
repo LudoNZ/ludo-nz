@@ -42,10 +42,40 @@ export interface Wall {
   top: WallEdge
   bottom: WallEdge
   openings: Opening[]
+  /** Corners part way along the wall, where it steps in or out on plan. */
+  corners?: WallCorner[]
   leftEnd: WallEnd
   rightEnd: WallEnd
   /** Overrides the project course spacing for this wall only. */
   coverMm: number | null
+  /** This wall's linked dimensions: measure kind ("width", "heightL",
+   * "heightR", "break:<id>") → the anchor measure key it takes its value
+   * from (see measures.ts). Absent or empty means nothing is linked. */
+  links?: Record<string, string>
+  /** Set while the wall is still edited through the quick form: what the
+   * form needs beyond the wall's own dimensions. Cleared by "More
+   * options", after which the wall uses the full editor. */
+  quick?: QuickMeta
+}
+
+/** A corner part way along a wall. Boards can't wrap it, so courses
+ * split there; an external corner takes a facing on each side, an
+ * internal one a scriber. */
+export interface WallCorner {
+  id: string
+  x: number
+  type: "internal" | "external"
+}
+
+export type QuickShape = "rectangle" | "gable" | "skillion" | "partRake"
+
+export interface QuickMeta {
+  shape: QuickShape
+  windowWidthMm: number
+  windowHeightMm: number
+  headMm: number
+  /** set once a measurement has been changed — the shape picker hides */
+  shapeLocked?: boolean
 }
 
 export interface Elevation {

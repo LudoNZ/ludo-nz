@@ -7,10 +7,10 @@
  * into the space left around it. */
 
 import { newId } from "./data"
-import { Opening, Wall, WallEdge } from "./types"
+import { Opening, QuickShape, Wall, WallEdge } from "./types"
 import { edgePoints } from "./weatherboardCalc"
 
-export type QuickShape = "rectangle" | "gable" | "skillion" | "partRake"
+export type { QuickShape }
 
 export const QUICK_SHAPE_LABELS: Record<QuickShape, string> = {
   rectangle: "Rectangle",
@@ -35,7 +35,15 @@ export interface QuickWallForm {
   windowHeightMm: number
   /** window head height above datum */
   headMm: number
+  /** Dimensions this wall will be linked to (anchor measure keys); a
+   * linked field shows — and the wall is built with — the anchor's value. */
+  links: QuickLinks
+  /** a measurement has been changed — the shape is settled, picker hidden */
+  shapeLocked: boolean
 }
+
+export type QuickLinkField = "width" | "height" | "ridge"
+export type QuickLinks = Partial<Record<QuickLinkField, string>>
 
 const PITCH_DEG = 25
 const rise = (run: number, deg = PITCH_DEG) => Math.round((run * Math.tan((deg * Math.PI) / 180)) / 10) * 10
@@ -64,6 +72,8 @@ export const defaultQuickForm = (name: string): QuickWallForm =>
       windowWidthMm: 1200,
       windowHeightMm: 1200,
       headMm: 2100,
+      links: {},
+      shapeLocked: false,
     },
     "rectangle",
   )
@@ -168,9 +178,11 @@ export const layoutOpenings = (wall: Wall, count: number, template: WindowTempla
   const w = Math.max(100, size.width)
 
   // free stretches of wall between the ends and the pinned openings
-  const blocked = pinned
-    .map((o) => [o.x - EDGE_GAP_MM, o.x + o.width + EDGE_GAP_MM] as const)
-    .sort((a, b) => a[0] - b[0])
+  // windows keep clear of pinned windows and of corners
+  const blocked = [
+    ...pinned.map((o) => [o.x - EDGE_GAP_MM, o.x + o.width + EDGE_GAP_MM] as const),
+    ...(wall.corners ?? []).map((c) => [c.x - EDGE_GAP_MM, c.x + EDGE_GAP_MM] as const),
+  ].sort((a, b) => a[0] - b[0])
   const free: [number, number][] = []
   let cursor = EDGE_GAP_MM
   for (const [a, b] of blocked) {

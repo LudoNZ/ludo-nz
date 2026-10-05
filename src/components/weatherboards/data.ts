@@ -100,6 +100,7 @@ export const DEFAULT_PROJECT: WeatherboardProject = {
           leftEnd: "externalFacing",
           rightEnd: "internalScriber",
           coverMm: null,
+          links: { heightR: "n1|heightL" },
         },
         {
           id: "n2",
@@ -111,6 +112,7 @@ export const DEFAULT_PROJECT: WeatherboardProject = {
           leftEnd: "none",
           rightEnd: "externalFacing",
           coverMm: null,
+          links: { heightL: "n1|heightL", heightR: "n1|heightL" },
         },
       ],
     },
@@ -128,6 +130,7 @@ export const DEFAULT_PROJECT: WeatherboardProject = {
           leftEnd: "externalFacing",
           rightEnd: "externalFacing",
           coverMm: null,
+          links: { heightL: "n1|heightL", heightR: "n1|heightL" },
         },
       ],
     },

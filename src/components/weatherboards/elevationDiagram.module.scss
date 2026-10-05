@@ -112,16 +112,92 @@
   pointer-events: none;
 }
 
-// the wall being set up on "+ Add wall" — a dashed preview, not yet real
-.draft {
-  opacity: 0.75;
+// dimensions: thin lines, clickable values. Linked values (🔗) take the
+// primary colour; anchors (⚓) — what links pull from — are bold.
+.dims {
+  stroke: var(--foreground);
+}
 
-  .outline {
-    stroke: var(--color-primary);
-    stroke-dasharray: 60 40;
-  }
+.dimLine,
+.dimExt {
+  stroke: var(--foreground);
+  opacity: 0.55;
+}
 
-  .opening {
-    cursor: default;
+.dimExt {
+  opacity: 0.3;
+}
+
+.dimPoint {
+  fill: var(--foreground);
+  opacity: 0.6;
+  stroke: none;
+}
+
+.dimLabel {
+  fill: var(--foreground);
+  stroke: none;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+}
+
+.dimEditable {
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
   }
+}
+
+.dimLinked {
+  fill: var(--color-primary);
+}
+
+.dimAnchor {
+  font-weight: 700;
+}
+
+// corners part way along a wall, and the strip that drags them sideways
+.cornerExternal,
+.cornerInternal {
+  stroke: var(--foreground);
+  opacity: 0.7;
+}
+
+.cornerInternal {
+  stroke: var(--color-secondary);
+  opacity: 1;
+}
+
+.cornerLabel {
+  fill: var(--foreground);
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+.cornerGrab {
+  fill: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+
+  &:hover {
+    fill: rgba(27, 177, 47, 0.12);
+  }
+}
+
+// row numbers and board labels — they sit on the boards but never get
+// in the way of grabbing an opening or a corner
+.boardLabels {
+  pointer-events: none;
+}
+
+.rowLabel {
+  fill: var(--color-primary);
+  font-weight: 700;
+}
+
+.boardLabel {
+  fill: var(--foreground);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
