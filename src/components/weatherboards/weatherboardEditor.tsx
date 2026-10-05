@@ -36,6 +36,7 @@ import { Elevation, Opening, Wall, WeatherboardProject, WeatherboardSettings } f
 import styles from "./weatherboardEditor.module.scss"
 
 const NEW_WALL_TAB = "__new__"
+const VIEW_ALL_TAB = "__all__"
 const SETTINGS_TAB = "__settings__"
 
 export const formatM = (mm: number, decimals = 1) => `${(mm / 1000).toFixed(decimals)} m`
@@ -67,8 +68,12 @@ const WeatherboardEditor: React.FC<{
     : (elevations.find((e) => e.id === activeElevationId) ?? elevations[0] ?? null)
 
   const openTab = activeElevation ? wallTabs[activeElevation.id] : undefined
+  // "View all" shows every wall of the elevation at once; otherwise the
+  // drawing shows just the open wall (or nothing yet on "+ Add wall")
+  const viewAll = openTab === VIEW_ALL_TAB && !!activeElevation?.walls.length
+  const addingWall = openTab === NEW_WALL_TAB || (!!activeElevation && activeElevation.walls.length === 0)
   const activeWall =
-    activeElevation && openTab !== NEW_WALL_TAB
+    activeElevation && !addingWall && !viewAll
       ? (activeElevation.walls.find((w) => w.id === openTab) ?? activeElevation.walls[0] ?? null)
       : null
   const activeWallId = activeWall?.id ?? null
@@ -93,7 +98,7 @@ const WeatherboardEditor: React.FC<{
   // wall), and every linked field shows its anchor's current value.
   const rawQuickForm = useMemo(
     () =>
-      activeElevation && !activeWall
+      activeElevation && addingWall
         ? (quickForms[activeElevation.id] ?? {
             ...defaultQuickForm(`Wall ${activeElevation.walls.length + 1}`),
             links: Object.fromEntries(
@@ -101,7 +106,7 @@ const WeatherboardEditor: React.FC<{
             ) as QuickWallForm["links"],
           })
         : null,
-    [activeElevation, activeWall, quickForms, project],
+    [activeElevation, addingWall, quickForms, project],
   )
   const quickForm = useMemo(() => {
     if (!rawQuickForm) return null
@@ -537,7 +542,7 @@ const WeatherboardEditor: React.FC<{
               </p>
             )}
             <ElevationDiagram
-              results={activeResults}
+              results={viewAll ? activeResults : activeResults.filter((r) => r.wall.id === activeWallId)}
               settings={settings}
               activeWallId={activeWallId}
               selectedOpeningId={selectedOpeningId}
@@ -588,13 +593,25 @@ const WeatherboardEditor: React.FC<{
             <button
               type="button"
               role="tab"
-              aria-selected={!activeWall}
-              className={`${styles.wallTab} ${styles.wallTabNew} ${!activeWall ? styles.wallTabActive : ""}`}
+              aria-selected={addingWall}
+              className={`${styles.wallTab} ${styles.wallTabNew} ${addingWall ? styles.wallTabActive : ""}`}
               onClick={() => selectWall(activeElevation.id, NEW_WALL_TAB)}
             >
               + Add wall
             </button>
+            {activeElevation.walls.length > 0 && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={viewAll}
+                className={`${styles.wallTab} ${styles.wallTabAll} ${viewAll ? styles.wallTabActive : ""}`}
+                onClick={() => selectWall(activeElevation.id, VIEW_ALL_TAB)}
+              >
+                View all
+              </button>
+            )}
           </div>
+          {viewAll && <p className={styles.viewAllHint}>Every wall on this elevation — tap one to open it.</p>}
 
           {/* One quick form in one fixed spot (same key) whether it's the
               "+ Add wall" draft or the wall it just created, so the field
