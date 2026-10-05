@@ -8,6 +8,8 @@ import NumField from "./numField"
 import { TRIM_LABELS } from "./trims"
 import { boardId, calculateResults, planBoards, planTrims, stockBoardOf, wallCodes, withDefaults } from "./takeoff"
 import { calculateWall } from "./weatherboardCalc"
+import { setBoardSkipped, skipTotals } from "./skips"
+import JoinerySkipModal from "./joinerySkipModal"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
 import { applyQuickForm, detachQuick, formFromWall } from "./quickEdit"
@@ -140,6 +142,59 @@ const WeatherboardEditor: React.FC<{
   const codes = useMemo(() => wallCodes(elevations), [elevations])
   const boardSource = useMemo(() => stockBoardOf(plan), [plan])
   const [showLengths, setShowLengths] = useState(false)
+  // "Skip boards" mode: tap boards on the elevation to leave them out
+  const [skipMode, setSkipMode] = useState(false)
+  const skipped = useMemo(() => skipTotals([...results.values()].flat()), [results])
+  const skippedHere = activeElevation ? skipTotals(results.get(activeElevation.id) ?? []) : { boards: 0, mm: 0 }
+
+  /** One board tapped (or painted over) in skip mode. Works off the
+   * latest project so a fast drag across many boards never loses one. */
+  const skipBoard = (wallId: string, courseIndex: number, pieceIndex: number, skip: boolean) =>
+    setProject((p) => ({
+      ...p,
+      elevations: p.elevations.map((e) => ({
+        ...e,
+        walls: e.walls.map((w) =>
+          w.id === wallId
+            ? setBoardSkipped(w, calculateWall(w, withDefaults(p.settings)), courseIndex, pieceIndex, skip)
+            : w,
+        ),
+      })),
+    }))
+
+  // a window or door tapped in skip mode, and its trims dialog
+  const [joinery, setJoinery] = useState<{ wallId: string; openingId: string } | null>(null)
+  const setJoinerySkip = (wallId: string, openingId: string, skipParts: Opening["skipParts"]) =>
+    setProject((p) => ({
+      ...p,
+      elevations: p.elevations.map((e) => ({
+        ...e,
+        walls: e.walls.map((w) =>
+          w.id !== wallId
+            ? w
+            : {
+                ...w,
+                openings: (w.openings ?? []).map((o) => {
+                  if (o.id !== openingId) return o
+                  const { skipParts: _old, ...rest } = o
+                  void _old
+                  return skipParts ? { ...rest, skipParts } : rest
+                }),
+              },
+        ),
+      })),
+    }))
+
+  const clearSkips = (elevationId: string) =>
+    updateElevation(elevationId, (e) => ({
+      ...e,
+      walls: e.walls.map((w) => {
+        if (!w.skips) return w
+        const { skips: _gone, ...rest } = w
+        void _gone
+        return rest
+      }),
+    }))
 
   // --- state updates -------------------------------------------------------
 
@@ -409,10 +464,35 @@ const WeatherboardEditor: React.FC<{
           </div>
 
           <div className={styles.diagramCard}>
-            <label className={styles.lengthToggle}>
-              <input type="checkbox" checked={showLengths} onChange={(e) => setShowLengths(e.target.checked)} />
-              Show board lengths <span className={styles.hint}>— length and the stock board (#) it&apos;s cut from</span>
-            </label>
+            <div className={styles.diagramToolbar}>
+              <label className={styles.lengthToggle}>
+                <input type="checkbox" checked={showLengths} onChange={(e) => setShowLengths(e.target.checked)} />
+                Show board lengths <span className={styles.hint}>— length and the stock board (#) it&apos;s cut from</span>
+              </label>
+              <button
+                type="button"
+                aria-pressed={skipMode}
+                className={`${styles.skipToggle} ${skipMode ? styles.skipToggleOn : ""}`}
+                onClick={() => setSkipMode((v) => !v)}
+              >
+                {skipMode ? "✓ Done skipping" : "Skip boards…"}
+              </button>
+            </div>
+            {skipMode && (
+              <p className={styles.skipBanner}>
+                <strong>Skip boards:</strong> tap a board to leave it out of the order — tap again to count it. Drag across
+                to do a whole zone at once. Tap a window or door to skip its facings, scribers or head flashing.
+                {skippedHere.boards > 0 && (
+                  <>
+                    {" "}
+                    {skippedHere.boards} skipped on this elevation ·{" "}
+                    <button type="button" className={styles.linkButton} onClick={() => clearSkips(activeElevation.id)}>
+                      Count them all again
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
             <ElevationDiagram
               results={activeResults}
               settings={settings}
@@ -430,6 +510,9 @@ const WeatherboardEditor: React.FC<{
               wallCodes={codes}
               stockBoardOf={boardSource}
               showLengths={showLengths}
+              skipMode={skipMode}
+              onSkip={skipBoard}
+              onJoineryTap={(wallId, openingId) => setJoinery({ wallId, openingId })}
               onCornerMove={(wallId, cornerId, x) => {
                 const w = activeElevation.walls.find((wall) => wall.id === wallId)
                 if (w)
@@ -559,6 +642,9 @@ const WeatherboardEditor: React.FC<{
                 { label: "Lineal metres cut", value: m(plan.totalCutMm, 2) },
                 { label: "Pieces", value: String(plan.boards.reduce((s, b) => s + b.pieces.length, 0)) },
                 { label: "Offcut waste", value: `${wastePct.toFixed(1)}%` },
+                ...(skipped.boards
+                  ? [{ label: "Skipped (not counted)", value: `${skipped.boards} boards · ${m(skipped.mm, 1)}` }]
+                  : []),
               ]}
             />
           </div>
@@ -668,6 +754,7 @@ const WeatherboardEditor: React.FC<{
                                 ? c.pieces
                                     .map((p, i) => {
                                       const id = boardId(codes.get(r.wall.id) ?? "?", c.index, i)
+                                      if (p.skipped) return `${id} skipped`
                                       const stock = boardSource.get(id)
                                       return `${id} ${Math.ceil(p.cutLength - 1e-6)}${stock ? ` #${stock}` : ""}`
                                     })
@@ -725,6 +812,24 @@ const WeatherboardEditor: React.FC<{
                   onPick: (a) => setProject((p) => linkMeasure(p, m.key, a)),
                 })
               }}
+            />
+          )
+        })()}
+      {joinery &&
+        (() => {
+          const wall = elevations.flatMap((e) => e.walls).find((w) => w.id === joinery.wallId)
+          const i = wall?.openings?.findIndex((o) => o.id === joinery.openingId) ?? -1
+          const opening = wall && i >= 0 ? wall.openings[i] : null
+          if (!wall || !opening) return null
+          // a unit whose sill sits at the bottom edge is a door, else a window
+          const kind = opening.sill <= Math.min(wall.bottom.left, wall.bottom.right) + 100 ? "Door" : "Window"
+          return (
+            <JoinerySkipModal
+              title={`${codes.get(wall.id) ?? ""} · ${wall.name} — ${kind} ${i + 1}`}
+              opening={opening}
+              settings={settings}
+              onChange={(parts) => setJoinerySkip(wall.id, opening.id, parts)}
+              onClose={() => setJoinery(null)}
             />
           )
         })()}

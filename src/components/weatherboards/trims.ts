@@ -10,7 +10,7 @@
  *   against each jamb facing, and a head flashing past both facings
  * Sill trims are left to the joinery. */
 
-import { Wall, WallEnd, WeatherboardSettings } from "./types"
+import { JoineryPart, Opening, Wall, WallEnd, WeatherboardSettings } from "./types"
 import { edgePoints } from "./weatherboardCalc"
 
 export type TrimKind = "facing" | "scriber" | "flashing"
@@ -27,6 +27,26 @@ export const TRIM_LABELS: Record<TrimKind, string> = {
   flashing: "Head flashings",
 }
 
+export const JOINERY_PART_KINDS: Record<JoineryPart, TrimKind> = {
+  facings: "facing",
+  scribers: "scriber",
+  flashing: "flashing",
+}
+
+/** Every trim piece one opening brings, by part — skipped parts included
+ * (see `calculateTrims` for what's actually ordered). */
+export const openingTrims = (o: Opening, s: WeatherboardSettings): Record<JoineryPart, number[]> => {
+  const fw = Math.max(0, s.facingWidthMm ?? 0)
+  const lap = Math.max(0, s.flashingLapMm ?? 0)
+  if (o.width <= 0 || o.height <= 0) return { facings: [], scribers: [], flashing: [] }
+  const jamb = Math.ceil(o.height + fw)
+  return {
+    facings: [jamb, jamb, Math.ceil(o.width + fw * 2)],
+    scribers: [jamb, jamb],
+    flashing: [Math.ceil(o.width + fw * 2 + lap * 2)],
+  }
+}
+
 const heightAt = (pts: { x: number; y: number }[], x: number) => {
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1]
@@ -39,8 +59,6 @@ const heightAt = (pts: { x: number; y: number }[], x: number) => {
 export const calculateTrims = (wall: Wall, s: WeatherboardSettings, prefix: string): TrimPiece[] => {
   const L = wall.lengthMm
   if (L <= 0) return []
-  const fw = Math.max(0, s.facingWidthMm ?? 0)
-  const lap = Math.max(0, s.flashingLapMm ?? 0)
   const top = edgePoints(wall.top, L)
   const bottom = edgePoints(wall.bottom, L)
   const out: TrimPiece[] = []
@@ -65,17 +83,15 @@ export const calculateTrims = (wall: Wall, s: WeatherboardSettings, prefix: stri
     else out.push({ kind: "scriber", length: h, label })
   }
 
+  // each opening's facings, scribers and head flashing — less any part
+  // marked skipped for that unit
   ;(wall.openings ?? []).forEach((o, i) => {
-    if (o.width <= 0 || o.height <= 0) return
     const label = `${prefix} · opening ${i + 1}`
-    out.push(
-      { kind: "facing", length: Math.ceil(o.height + fw), label: `${label} jamb` },
-      { kind: "facing", length: Math.ceil(o.height + fw), label: `${label} jamb` },
-      { kind: "facing", length: Math.ceil(o.width + fw * 2), label: `${label} head` },
-      { kind: "scriber", length: Math.ceil(o.height + fw), label: `${label} jamb` },
-      { kind: "scriber", length: Math.ceil(o.height + fw), label: `${label} jamb` },
-      { kind: "flashing", length: Math.ceil(o.width + fw * 2 + lap * 2), label },
-    )
+    const parts = openingTrims(o, s)
+    for (const part of Object.keys(parts) as JoineryPart[]) {
+      if (o.skipParts?.[part]) continue
+      for (const length of parts[part]) out.push({ kind: JOINERY_PART_KINDS[part], length, label })
+    }
   })
 
   return out

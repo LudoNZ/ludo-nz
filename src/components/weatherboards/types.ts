@@ -28,7 +28,14 @@ export interface Opening {
   /** Placed by the automatic window layout and free to be re-spaced;
    * cleared the moment it's dragged or its numbers are edited. */
   auto?: boolean
+  /** Trim parts of this unit left out of the order (skip mode). */
+  skipParts?: Partial<Record<JoineryPart, boolean>>
 }
+
+/** The trim parts a window or door brings: facings (two jambs and a
+ * head), scribers (the mouldings against the jamb facings) and the head
+ * flashing. */
+export type JoineryPart = "facings" | "scribers" | "flashing"
 
 /** What finishes each end of a wall. External corners get a facing on
  * each wall (fixed over the board ends) unless they're box corners or mitred;
@@ -44,6 +51,12 @@ export interface Wall {
   openings: Opening[]
   /** Corners part way along the wall, where it steps in or out on plan. */
   corners?: WallCorner[]
+  /** Boards left out of the order (existing cladding, someone else's
+   * job…): each is a point on the wall, mm from its left end and above
+   * datum, and whichever board covers that point isn't counted. Points
+   * rather than board ids, so a skip stays on the same patch of wall
+   * when other dimensions change. */
+  skips?: SkipPoint[]
   leftEnd: WallEnd
   rightEnd: WallEnd
   /** Overrides the project course spacing for this wall only. */
@@ -65,6 +78,11 @@ export interface WallCorner {
   id: string
   x: number
   type: "internal" | "external"
+}
+
+export interface SkipPoint {
+  x: number
+  y: number
 }
 
 export type QuickShape = "rectangle" | "gable" | "skillion" | "partRake"

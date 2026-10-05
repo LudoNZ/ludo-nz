@@ -33,6 +33,8 @@ export interface CoursePiece {
   end: number
   /** start→end length plus the cut allowance — what comes off a stock board. */
   cutLength: number
+  /** marked "don't count" (wall.skips) — still laid out, left out of the order */
+  skipped?: boolean
 }
 
 export interface Course {
@@ -247,6 +249,7 @@ export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult =
   const L = Math.max(0, wall.lengthMm)
   // projects saved before openings existed have none
   const openings = wall.openings ?? []
+  const skips = wall.skips ?? []
   const top = edgePoints(wall.top, L)
   const bottom = edgePoints(wall.bottom, L)
   const minY = Math.min(...bottom.map((p) => p.y))
@@ -269,6 +272,8 @@ export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult =
       const hi = lo + coverMm
       const runs = splitAtCorners(subtractOpenings(runsInBand(top, bottom, L, lo, hi), openings, lo, hi), corners)
       const pieces = runs.flatMap((r) => splitRun(r, studs, below, s))
+      for (const p of pieces)
+        if (skips.some((k) => k.y >= lo && k.y < hi && k.x >= p.start && k.x <= p.end)) p.skipped = true
       const joins: number[] = []
       for (const r of runs) {
         for (const p of pieces) if (p.end < r.end - 1e-6 && p.end > r.start) joins.push(p.end)

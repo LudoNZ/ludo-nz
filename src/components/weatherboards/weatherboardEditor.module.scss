@@ -429,3 +429,41 @@
     color: var(--color-primary);
   }
 }
+
+.diagramToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+
+  .lengthToggle {
+    margin-bottom: 0;
+  }
+}
+
+.skipToggle {
+  padding: 0.35rem 0.85rem;
+  border: 2px solid var(--color-danger);
+  border-radius: 999px;
+  background: none;
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.skipToggleOn {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.skipBanner {
+  margin-bottom: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--color-danger);
+  background: rgba(177, 27, 27, 0.07);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}

@@ -111,7 +111,7 @@ const EdgeEditor: React.FC<{
   )
 }
 
-const OPENING_FIELDS: { key: keyof Omit<Opening, "id" | "auto">; label: string; min?: number }[] = [
+const OPENING_FIELDS: { key: keyof Omit<Opening, "id" | "auto" | "skipParts">; label: string; min?: number }[] = [
   { key: "x", label: "From left" },
   { key: "sill", label: "Sill height" },
   { key: "width", label: "Width", min: 1 },

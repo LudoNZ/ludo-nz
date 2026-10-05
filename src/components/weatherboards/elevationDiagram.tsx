@@ -84,6 +84,11 @@ const ElevationDiagram: React.FC<{
   stockBoardOf?: Map<string, number>
   /** show each board's length (and stock board) beside its label */
   showLengths?: boolean
+  /** "Skip boards" mode: tap (or drag across) boards to leave them out */
+  skipMode?: boolean
+  onSkip?: (wallId: string, courseIndex: number, pieceIndex: number, skip: boolean) => void
+  /** skip mode: a window or door tapped — choose which of its trims to skip */
+  onJoineryTap?: (wallId: string, openingId: string) => void
 }> = ({
   links,
   anchors,
@@ -91,7 +96,7 @@ const ElevationDiagram: React.FC<{
   onCornerMove,
   wallCodes,
   stockBoardOf,
-  showLengths, results, settings, activeWallId, selectedOpeningId, onSelectWall, onSelectOpening, onOpeningChange }) => {
+  showLengths, skipMode, onSkip, onJoineryTap, results, settings, activeWallId, selectedOpeningId, onSelectWall, onSelectOpening, onOpeningChange }) => {
   const fw = settings.facingWidthMm
   const lap = settings.flashingLapMm
   const svgRef = useRef<SVGSVGElement>(null)
@@ -102,6 +107,10 @@ const ElevationDiagram: React.FC<{
   const [preview, setPreview] = useState<{ wallId: string; opening: Opening } | null>(null)
   const previewRef = useRef(preview)
   previewRef.current = preview
+  // skip-mode painting: whether this stroke skips or counts boards, and
+  // which boards it has already done
+  const paintRef = useRef<{ skip: boolean; done: Set<string>; last: { x: number; y: number } } | null>(null)
+
   // same idea for a corner being dragged sideways
   const cornerDragRef = useRef<{ wallId: string; cornerId: string; startX: number; origX: number; wallLength: number } | null>(null)
   const [cornerPreview, setCornerPreview] = useState<{ wallId: string; cornerId: string; x: number } | null>(null)
@@ -128,7 +137,7 @@ const ElevationDiagram: React.FC<{
     const svg = svgRef.current
     if (!svg) return
     const block = (e: TouchEvent) => {
-      if (dragRef.current || (e.target as Element | null)?.closest?.("[data-draggable]")) e.preventDefault()
+      if (dragRef.current || paintRef.current || (e.target as Element | null)?.closest?.("[data-draggable]")) e.preventDefault()
     }
     svg.addEventListener("touchstart", block, { passive: false })
     svg.addEventListener("touchmove", block, { passive: false })
@@ -182,6 +191,36 @@ const ElevationDiagram: React.FC<{
     return { x: p.x, y: -p.y }
   }
 
+  /** The board under a screen point, worked out from the drawing's own
+   * geometry (not the DOM), so painting keeps up however fast the pointer
+   * moves: "wallId|course|piece", or null between boards. */
+  const boardAt = (clientX: number, clientY: number): string | null => {
+    const w = toWorld(clientX, clientY)
+    if (!w) return null
+    for (let i = 0; i < drawable.length; i++) {
+      const r = drawable[i]
+      const x = w.x - offsets[i]
+      if (x < 0 || x > r.wall.lengthMm) continue
+      const c = r.courses.find((cc) => w.y >= cc.bottom && w.y < cc.top)
+      const pi = c ? c.pieces.findIndex((p) => x >= p.start && x <= p.end) : -1
+      return c && pi >= 0 ? `${r.wall.id}|${c.index}|${pi}` : null
+    }
+    return null
+  }
+
+  const startPaint = (e: React.PointerEvent, key: string, skippedNow: boolean) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const [wallId, ci, pi] = key.split("|")
+    paintRef.current = { skip: !skippedNow, done: new Set([key]), last: { x: e.clientX, y: e.clientY } }
+    try {
+      svgRef.current?.setPointerCapture(e.pointerId)
+    } catch {
+      // pointer already gone — painting still works while it stays over the svg
+    }
+    onSkip?.(wallId, Number(ci), Number(pi), !skippedNow)
+  }
+
   const startDrag = (e: React.PointerEvent, r: WallResult, o: Opening, mode: DragMode) => {
     e.stopPropagation()
     // no text selection or native drag kicking in mid-move
@@ -215,6 +254,23 @@ const ElevationDiagram: React.FC<{
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
+    const paint = paintRef.current
+    if (paint) {
+      // walk the path since the last event in small steps, so a quick
+      // swipe still catches every board it crosses
+      const { x: x1, y: y1 } = paint.last
+      const steps = Math.max(1, Math.ceil(Math.hypot(e.clientX - x1, e.clientY - y1) / 3))
+      for (let i = 1; i <= steps; i++) {
+        const key = boardAt(x1 + ((e.clientX - x1) * i) / steps, y1 + ((e.clientY - y1) * i) / steps)
+        if (key && !paint.done.has(key)) {
+          paint.done.add(key)
+          const [wallId, ci, pi] = key.split("|")
+          onSkip?.(wallId, Number(ci), Number(pi), paint.skip)
+        }
+      }
+      paint.last = { x: e.clientX, y: e.clientY }
+      return
+    }
     const cd = cornerDragRef.current
     if (cd) {
       const w = toWorld(e.clientX, e.clientY)
@@ -234,6 +290,10 @@ const ElevationDiagram: React.FC<{
   }
 
   const endDrag = () => {
+    if (paintRef.current) {
+      paintRef.current = null
+      return
+    }
     const cd = cornerDragRef.current
     if (cd) {
       cornerDragRef.current = null
@@ -259,8 +319,13 @@ const ElevationDiagram: React.FC<{
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onLostPointerCapture={() => (dragRef.current || cornerDragRef.current) && endDrag()}
+      onLostPointerCapture={() => (dragRef.current || cornerDragRef.current || paintRef.current) && endDrag()}
     >
+      <defs>
+        <pattern id="wb-skip-hatch" patternUnits="userSpaceOnUse" width={font * 0.35} height={font * 0.35} patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={font * 0.35} className={styles.skipHatch} strokeWidth={stroke * 1.5} />
+        </pattern>
+      </defs>
       {drawable.map((r, wi) => {
         const x0 = offsets[wi]
         const L = r.wall.lengthMm
@@ -319,6 +384,23 @@ const ElevationDiagram: React.FC<{
                   />
                 )
               })}
+              {/* boards left out of the order: hatched, still in place */}
+              {r.courses.flatMap((c) =>
+                c.pieces
+                  .filter((p) => p.skipped)
+                  .map((p) => (
+                    <g key={`k${c.index}-${p.start}`} className={styles.skipped}>
+                      <rect x={x0 + p.start} y={-c.top} width={p.end - p.start} height={c.top - c.bottom} />
+                      <rect
+                        x={x0 + p.start}
+                        y={-c.top}
+                        width={p.end - p.start}
+                        height={c.top - c.bottom}
+                        fill="url(#wb-skip-hatch)"
+                      />
+                    </g>
+                  )),
+              )}
               {/* row numbers at the start of each course, and every board's
                   label ("3a") — with its length and stock board on request */}
               {(() => {
@@ -422,14 +504,24 @@ const ElevationDiagram: React.FC<{
               ]
               return (
                 <g key={o.id}>
-                  <rect x={ox - fw} y={oy - fw} width={o.width + fw * 2} height={o.height + fw} className={styles.facing} />
+                  <rect
+                    x={ox - fw}
+                    y={oy - fw}
+                    width={o.width + fw * 2}
+                    height={o.height + fw}
+                    className={`${styles.facing} ${o.skipParts?.facings ? styles.trimSkipped : ""}`}
+                  />
+                  {o.skipParts?.facings && (
+                    <rect x={ox - fw} y={oy - fw} width={o.width + fw * 2} height={o.height + fw} fill="url(#wb-skip-hatch)" pointerEvents="none" />
+                  )}
                   <line
                     x1={ox - fw - lap}
                     x2={ox + o.width + fw + lap}
                     y1={oy - fw}
                     y2={oy - fw}
-                    className={styles.flashing}
+                    className={`${styles.flashing} ${o.skipParts?.flashing ? styles.flashingSkipped : ""}`}
                     strokeWidth={stroke * 3}
+                    strokeDasharray={o.skipParts?.flashing ? `${font * 0.25} ${font * 0.2}` : undefined}
                   />
                   <rect
                     x={ox}
@@ -441,6 +533,17 @@ const ElevationDiagram: React.FC<{
                     data-draggable
                     onPointerDown={(e) => startDrag(e, r, o, "move")}
                   />
+                  {o.skipParts && (
+                    <text
+                      x={ox + o.width / 2}
+                      y={oy + o.height - font * 0.35}
+                      fontSize={Math.min(font * 0.55, o.width / 7)}
+                      textAnchor="middle"
+                      className={styles.joinerySkippedNote}
+                    >
+                      {o.skipParts.facings && o.skipParts.scribers && o.skipParts.flashing ? "trims skipped" : "some trims skipped"}
+                    </text>
+                  )}
                   {selected && (
                     <>
                       {corners.map(([mode, cx, cy]) => (
@@ -473,7 +576,7 @@ const ElevationDiagram: React.FC<{
             })}
 
             {(() => {
-              const editable = !!onEditMeasure
+              const editable = !!onEditMeasure && !skipMode
               const click = (key: string) => (e: React.MouseEvent<SVGTextElement>) => {
                 if (!editable) return
                 e.stopPropagation()
@@ -560,6 +663,44 @@ const ElevationDiagram: React.FC<{
             <text x={x0 + L / 2} y={dimY + font * 3.3} fontSize={font * 0.75} className={styles.dim} textAnchor="middle">
               {r.courses.length} courses
             </text>
+
+            {/* skip mode: every board becomes a tap target, above everything else */}
+            {skipMode &&
+              r.courses.flatMap((c) =>
+                c.pieces.map((p, i) => {
+                  const key = `${r.wall.id}|${c.index}|${i}`
+                  return (
+                    <rect
+                      key={`hit${key}`}
+                      x={x0 + p.start}
+                      y={-c.top}
+                      width={p.end - p.start}
+                      height={c.top - c.bottom}
+                      className={styles.skipTarget}
+                      data-skip={key}
+                      data-draggable
+                      onPointerDown={(e) => startPaint(e, key, !!p.skipped)}
+                    />
+                  )
+                }),
+              )}
+            {/* …and each window or door, above the boards, opens its trims */}
+            {skipMode &&
+              (r.wall.openings ?? []).map((o) => (
+                <rect
+                  key={`jt${o.id}`}
+                  x={x0 + o.x - fw}
+                  y={-(o.sill + o.height) - fw}
+                  width={o.width + fw * 2}
+                  height={o.height + fw}
+                  className={styles.joineryTarget}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                  }}
+                  onClick={() => onJoineryTap?.(r.wall.id, o.id)}
+                />
+              ))}
           </g>
         )
       })}

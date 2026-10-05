@@ -1,0 +1,143 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal {
+  width: min(24rem, 100%);
+  background: var(--background);
+  color: var(--foreground);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.3);
+  padding: 1rem 1.1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+
+  h2 {
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+}
+
+.close {
+  border: none;
+  background: none;
+  color: var(--foreground);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  opacity: 0.7;
+}
+
+.size {
+  margin-top: -0.5rem;
+  font-size: 0.82rem;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+// the one-tap option, big and first
+.whole {
+  padding: 0.85rem 1rem;
+  border: 2px solid var(--color-danger);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--color-danger);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(177, 27, 27, 0.08);
+  }
+}
+
+.wholeOn {
+  background: var(--color-danger);
+  color: #fff;
+
+  &:hover {
+    background: var(--color-danger);
+    filter: brightness(1.08);
+  }
+}
+
+.parts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.part {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: var(--borderRadius);
+  cursor: pointer;
+
+  input {
+    margin-top: 0.2rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--color-danger);
+    flex-shrink: 0;
+  }
+}
+
+.partSkipped {
+  border-color: var(--color-danger);
+  background: rgba(177, 27, 27, 0.06);
+}
+
+.partText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.9rem;
+
+  span {
+    font-size: 0.78rem;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.status {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.done {
+  padding: 0.5rem 1.2rem;
+  border: none;
+  border-radius: var(--borderRadius);
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}

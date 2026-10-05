@@ -201,3 +201,58 @@
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
+
+// boards marked "don't count": greyed and hatched, still in their place
+.skipped {
+  pointer-events: none;
+
+  rect:first-child {
+    fill: rgba(127, 127, 127, 0.4);
+  }
+}
+
+.skipHatch {
+  stroke: var(--foreground);
+  opacity: 0.35;
+}
+
+// skip mode: each board is a tap/drag target
+.skipTarget {
+  fill: transparent;
+  stroke: var(--color-danger);
+  stroke-opacity: 0;
+  cursor: pointer;
+  touch-action: none;
+
+  &:hover {
+    fill: rgba(177, 27, 27, 0.18);
+  }
+}
+
+// joinery trims left out in skip mode
+.trimSkipped {
+  fill: rgba(127, 127, 127, 0.45);
+}
+
+.flashingSkipped {
+  opacity: 0.45;
+}
+
+.joinerySkippedNote {
+  fill: var(--color-danger);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+// skip mode: a window or door is a tap target for its trims
+.joineryTarget {
+  fill: transparent;
+  stroke: var(--color-danger);
+  stroke-opacity: 0;
+  cursor: pointer;
+
+  &:hover {
+    fill: rgba(177, 27, 27, 0.12);
+    stroke-opacity: 0.8;
+  }
+}

@@ -61,9 +61,10 @@ export const planBoards = (
     for (const r of results.get(e.id) ?? []) {
       const code = codes.get(r.wall.id) ?? "?"
       for (const c of r.courses) {
-        c.pieces.forEach((p, i) =>
-          pieces.push({ length: Math.ceil(p.cutLength - 1e-6), label: boardId(code, c.index, i) }),
-        )
+        c.pieces.forEach((p, i) => {
+          // skipped boards keep their id (so labels don't shift) but aren't ordered
+          if (!p.skipped) pieces.push({ length: Math.ceil(p.cutLength - 1e-6), label: boardId(code, c.index, i) })
+        })
       }
     }
   }
