@@ -51,6 +51,14 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     tags: ["Sag angle", "Anchor tension", "Live diagram"],
     link: "/tension",
   },
+  {
+    id: "weatherboards",
+    title: "Weatherboards",
+    description:
+      "Mark up every elevation — raked tops and bottoms, rakes that start part way along, draggable window and door openings — and get a course-by-course layout with staggered stud joins and the leanest board order across 4.2–6.0 m lengths.",
+    tags: ["Elevations", "Rakes & openings", "Board order", "Cutting plan"],
+    link: "/weatherboards",
+  },
 ]
 
 // Ideas queued up for the same rule-of-thumb, real-materials-list treatment

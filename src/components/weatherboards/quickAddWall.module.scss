@@ -1,0 +1,168 @@
+.quickAdd {
+  padding: 1rem 1.1rem 1.1rem;
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--borderRadius);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  input {
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    // 16px is the iOS Safari threshold below which focusing an input
+    // auto-zooms the page
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+    width: 6.5rem;
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.15);
+    }
+  }
+}
+
+.shapes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.shape {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.4rem;
+  border: 2px solid rgba(27, 177, 47, 0.4);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  svg {
+    width: 3rem;
+    height: 2rem;
+    fill: rgba(196, 150, 92, 0.3);
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+
+  &:hover {
+    border-color: var(--color-primary);
+  }
+}
+
+.shapeActive {
+  border-color: var(--color-primary);
+  background-color: rgba(27, 177, 47, 0.1);
+  color: var(--color-primary);
+
+  svg {
+    fill: rgba(196, 150, 92, 0.55);
+  }
+}
+
+.grid,
+.windows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.25rem;
+}
+
+.windows {
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.unitInput {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.nameInput {
+  width: 11rem !important;
+  font-weight: 600;
+}
+
+.hint {
+  font-size: 0.76rem;
+  opacity: 0.65;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+  height: 2.45rem;
+
+  button {
+    width: 2.4rem;
+    height: 100%;
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+
+    &:hover {
+      background-color: rgba(27, 177, 47, 0.12);
+    }
+  }
+
+  span {
+    min-width: 2.2rem;
+    text-align: center;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.addButton {
+  padding: 0.6rem 1.4rem;
+  border: none;
+  border-radius: var(--borderRadius);
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.footer .hint {
+  flex: 1;
+  min-width: 14rem;
+}

@@ -235,6 +235,38 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Weatherboard calculator projects. Same private/public split as the
+    // decking decks/projects above: private ones live under the owner's
+    // account; public ones have no owner — anyone can view, create, or
+    // edit one with no login, but never delete, so a public project can be
+    // edited by a random visitor but not wiped out. `summary` is the brief
+    // order the projects page shows on each card.
+    match /users/{userId}/weatherboardProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.settings is map
+        && request.resource.data.elevations is list
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /publicWeatherboardProjects/{projectId} {
+      allow get, list: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.settings is map
+        && request.resource.data.elevations is list
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;
