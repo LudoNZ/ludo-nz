@@ -5,6 +5,7 @@ import { WallResult, edgePoints } from "./weatherboardCalc"
 import { WALL_END_LABELS, WALL_SHAPE_LABELS, WallShape, applyShape, newId, newOpening } from "./data"
 import { setWindowCount } from "./quickWall"
 import CornersEditor from "./cornersEditor"
+import OpeningFields from "./openingFields"
 import NumField from "./numField"
 import styles from "./wallEditor.module.scss"
 
@@ -111,13 +112,6 @@ const EdgeEditor: React.FC<{
   )
 }
 
-const OPENING_FIELDS: { key: keyof Omit<Opening, "id" | "auto" | "skipParts">; label: string; min?: number }[] = [
-  { key: "x", label: "From left" },
-  { key: "sill", label: "Sill height" },
-  { key: "width", label: "Width", min: 1 },
-  { key: "height", label: "Height", min: 1 },
-]
-
 /** Windows and doors in one wall — the numbers mirror what dragging on
  * the elevation does, for when the plans give exact positions. */
 const OpeningsEditor: React.FC<{
@@ -164,20 +158,7 @@ const OpeningsEditor: React.FC<{
           <span className={o.auto ? styles.tagAuto : styles.tagPinned} title={o.auto ? "Auto-placed" : "Pinned where you put it"}>
             {o.auto ? "auto" : "pinned"}
           </span>
-          {OPENING_FIELDS.map((f) => (
-            <label key={f.key}>
-              {f.label}
-              <span className={styles.unitInput}>
-                <NumField
-                  value={o[f.key]}
-                  min={f.min}
-                  step={10}
-                  onChange={(v) => onChange(openings.map((p) => (p.id === o.id ? { ...p, [f.key]: v, auto: false } : p)))}
-                />
-                mm
-              </span>
-            </label>
-          ))}
+          <OpeningFields opening={o} onChange={(next) => onChange(openings.map((p) => (p.id === o.id ? next : p)))} />
           <button
             type="button"
             className={styles.iconButton}

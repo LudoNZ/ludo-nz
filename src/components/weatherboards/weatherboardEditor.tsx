@@ -10,6 +10,7 @@ import { boardId, calculateResults, planBoards, planTrims, stockBoardOf, wallCod
 import { calculateWall } from "./weatherboardCalc"
 import { setBoardSkipped, skipTotals } from "./skips"
 import JoinerySkipModal from "./joinerySkipModal"
+import OpeningFields from "./openingFields"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
 import { applyQuickForm, detachQuick, formFromWall } from "./quickEdit"
@@ -478,6 +479,48 @@ const WeatherboardEditor: React.FC<{
                 {skipMode ? "✓ Done skipping" : "Skip boards…"}
               </button>
             </div>
+            {/* the selected window/door's shape and size, right by the drawing */}
+            {!skipMode &&
+              (() => {
+                const wall = activeElevation.walls.find((w) => (w.openings ?? []).some((o) => o.id === selectedOpeningId))
+                const i = wall?.openings.findIndex((o) => o.id === selectedOpeningId) ?? -1
+                const o = wall && i >= 0 ? wall.openings[i] : null
+                if (!wall || !o) return null
+                const kind = o.sill <= Math.min(wall.bottom.left, wall.bottom.right) + 100 ? "Door" : "Window"
+                return (
+                  <div className={styles.openingPanel}>
+                    <div className={styles.openingPanelHeader}>
+                      <strong>
+                        {codes.get(wall.id)} · {wall.name} — {kind} {i + 1}
+                      </strong>
+                      <button
+                        type="button"
+                        className={`${styles.linkButton} ${styles.danger}`}
+                        onClick={() => {
+                          updateElevation(activeElevation.id, (e) => ({
+                            ...e,
+                            walls: e.walls.map((w) =>
+                              w.id === wall.id ? { ...w, openings: w.openings.filter((x) => x.id !== o.id) } : w,
+                            ),
+                          }))
+                          setSelectedOpeningId(null)
+                        }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.openingPanelClose}
+                        aria-label="Deselect"
+                        onClick={() => setSelectedOpeningId(null)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <OpeningFields opening={o} onChange={(next) => updateOpening(activeElevation.id, wall.id, next)} />
+                  </div>
+                )
+              })()}
             {skipMode && (
               <p className={styles.skipBanner}>
                 <strong>Skip boards:</strong> tap a board to leave it out of the order — tap again to count it. Drag across

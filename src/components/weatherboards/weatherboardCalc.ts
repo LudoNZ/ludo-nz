@@ -214,15 +214,33 @@ const splitRun = (run: Run, studs: number[], avoid: Set<number>, s: Weatherboard
   return out
 }
 
+/** An opening's head height above datum at each jamb — equal unless it
+ * has a raking top. */
+export const openingHeads = (o: Opening) => ({
+  left: o.sill + o.height,
+  right: o.sill + (o.heightRight ?? o.height),
+})
+
 /** Cuts the openings that span the whole band [lo, hi] out of its runs.
+ * Under a raking head only the stretch where the head clears the band
+ * is cut; the rest of that course runs through and is notched.
  * Boards run under the facings right to the opening's edge, so the
  * facings never shorten them. */
 const subtractOpenings = (runs: Run[], openings: Opening[], lo: number, hi: number): Run[] => {
   let out = runs
   for (const o of openings) {
-    if (o.width <= 0 || o.sill > lo + SLIVER_MM || o.sill + o.height < hi - SLIVER_MM) continue
-    const a = o.x
-    const b = o.x + o.width
+    if (o.width <= 0 || o.sill > lo + SLIVER_MM) continue
+    const { left: hl, right: hr } = openingHeads(o)
+    const need = hi - SLIVER_MM
+    if (hl < need && hr < need) continue
+    let a = o.x
+    let b = o.x + o.width
+    if (hl < need || hr < need) {
+      // the head crosses this course's top part way along
+      const cross = o.x + (o.width * (need - hl)) / (hr - hl)
+      if (hl >= need) b = cross
+      else a = cross
+    }
     out = out.flatMap((r) => {
       if (b <= r.start || a >= r.end) return [r]
       const parts: Run[] = []
@@ -286,7 +304,8 @@ export const calculateWall = (wall: Wall, s: WeatherboardSettings): WallResult =
   const areaM2 = wallAreaM2(top, bottom)
   const openingM2 = openings.reduce((sum, o) => {
     const w = Math.max(0, Math.min(L, o.x + o.width) - Math.max(0, o.x))
-    const h = Math.max(0, Math.min(maxY, o.sill + o.height) - Math.max(minY, o.sill))
+    const heads = openingHeads(o)
+    const h = Math.max(0, Math.min(maxY, (heads.left + heads.right) / 2) - Math.max(minY, o.sill))
     return sum + (w * h) / 1e6
   }, 0)
 

@@ -30,7 +30,9 @@ const snap = (v: number) => Math.round(v / SNAP_MM) * SNAP_MM
  * pinned. Kept inside the wall horizontally, never below the minimum size. */
 const dragOpening = (d: Drag, dx: number, dy: number): Opening => {
   const o = d.orig
+  const raking = o.heightRight !== undefined
   let { x, sill, width, height } = o
+  let heightRight = o.heightRight
   if (d.mode === "move") {
     x = snap(o.x + dx)
     sill = snap(o.sill + dy)
@@ -43,9 +45,15 @@ const dragOpening = (d: Drag, dx: number, dy: number): Opening => {
       width = Math.max(MIN_OPENING_MM, snap(o.width + dx))
     }
     if (d.mode === "sw" || d.mode === "se") {
-      const head = o.sill + o.height
-      sill = Math.min(snap(o.sill + dy), head - MIN_OPENING_MM)
-      height = head - sill
+      // bottom corners move the sill; both heads stay put
+      const headL = o.sill + o.height
+      const headR = o.sill + (o.heightRight ?? o.height)
+      sill = Math.min(snap(o.sill + dy), Math.min(headL, headR) - MIN_OPENING_MM)
+      height = headL - sill
+      if (raking) heightRight = headR - sill
+    } else if (raking && d.mode === "ne") {
+      // a raking head's top corners each set their own jamb height
+      heightRight = Math.max(MIN_OPENING_MM, snap((o.heightRight ?? o.height) + dy))
     } else {
       height = Math.max(MIN_OPENING_MM, snap(o.height + dy))
     }
@@ -55,7 +63,7 @@ const dragOpening = (d: Drag, dx: number, dy: number): Opening => {
     width += x
     x = 0
   } else if (x + width > d.wallLength) width = d.wallLength - x
-  return { ...o, x, sill, width, height }
+  return raking ? { ...o, x, sill, width, height, heightRight } : { ...o, x, sill, width, height }
 }
 
 /** One elevation drawn to scale: every wall left to right, its outline
@@ -285,7 +293,14 @@ const ElevationDiagram: React.FC<{
     if (!w) return
     const next = dragOpening(d, w.x - d.startX, w.y - d.startY)
     const cur = previewRef.current?.opening ?? d.orig
-    if (cur.x === next.x && cur.sill === next.sill && cur.width === next.width && cur.height === next.height) return
+    if (
+      cur.x === next.x &&
+      cur.sill === next.sill &&
+      cur.width === next.width &&
+      cur.height === next.height &&
+      cur.heightRight === next.heightRight
+    )
+      return
     setPreview({ wallId: d.wallId, opening: next })
   }
 
@@ -496,38 +511,37 @@ const ElevationDiagram: React.FC<{
               const selected = o.id === selectedOpeningId
               const ox = x0 + o.x
               const oy = -(o.sill + o.height)
+              // head at each jamb (SVG y) — equal unless it's a raking top
+              const hL = -(o.sill + o.height)
+              const hR = -(o.sill + (o.heightRight ?? o.height))
+              const base = -o.sill
               const corners: [DragMode, number, number][] = [
-                ["nw", ox, oy],
-                ["ne", ox + o.width, oy],
-                ["sw", ox, oy + o.height],
-                ["se", ox + o.width, oy + o.height],
+                ["nw", ox, hL],
+                ["ne", ox + o.width, hR],
+                ["sw", ox, base],
+                ["se", ox + o.width, base],
               ]
+              const shape = `${ox},${base} ${ox + o.width},${base} ${ox + o.width},${hR} ${ox},${hL}`
+              const frame = `${ox - fw},${base} ${ox + o.width + fw},${base} ${ox + o.width + fw},${hR - fw} ${ox - fw},${hL - fw}`
+              // the head flashing follows the head's slope out past the facings
+              const slope = (hR - hL) / o.width
+              const fx1 = ox - fw - lap
+              const fx2 = ox + o.width + fw + lap
               return (
                 <g key={o.id}>
-                  <rect
-                    x={ox - fw}
-                    y={oy - fw}
-                    width={o.width + fw * 2}
-                    height={o.height + fw}
-                    className={`${styles.facing} ${o.skipParts?.facings ? styles.trimSkipped : ""}`}
-                  />
-                  {o.skipParts?.facings && (
-                    <rect x={ox - fw} y={oy - fw} width={o.width + fw * 2} height={o.height + fw} fill="url(#wb-skip-hatch)" pointerEvents="none" />
-                  )}
+                  <polygon points={frame} className={`${styles.facing} ${o.skipParts?.facings ? styles.trimSkipped : ""}`} />
+                  {o.skipParts?.facings && <polygon points={frame} fill="url(#wb-skip-hatch)" pointerEvents="none" />}
                   <line
-                    x1={ox - fw - lap}
-                    x2={ox + o.width + fw + lap}
-                    y1={oy - fw}
-                    y2={oy - fw}
+                    x1={fx1}
+                    x2={fx2}
+                    y1={hL - fw + (fx1 - ox) * slope}
+                    y2={hL - fw + (fx2 - ox) * slope}
                     className={`${styles.flashing} ${o.skipParts?.flashing ? styles.flashingSkipped : ""}`}
                     strokeWidth={stroke * 3}
                     strokeDasharray={o.skipParts?.flashing ? `${font * 0.25} ${font * 0.2}` : undefined}
                   />
-                  <rect
-                    x={ox}
-                    y={oy}
-                    width={o.width}
-                    height={o.height}
+                  <polygon
+                    points={shape}
                     className={`${styles.opening} ${selected ? styles.openingSelected : ""}`}
                     strokeWidth={stroke * 2}
                     data-draggable
@@ -561,13 +575,13 @@ const ElevationDiagram: React.FC<{
                       ))}
                       <text
                         x={ox + o.width / 2}
-                        y={oy + o.height / 2}
+                        y={(base + (hL + hR) / 2) / 2}
                         fontSize={font * 0.7}
                         className={styles.openingLabel}
                         textAnchor="middle"
                         dominantBaseline="middle"
                       >
-                        {o.width} × {o.height}
+                        {o.width} × {o.heightRight !== undefined ? `${o.height}/${o.heightRight}` : o.height}
                       </text>
                     </>
                   )}
@@ -690,9 +704,9 @@ const ElevationDiagram: React.FC<{
                 <rect
                   key={`jt${o.id}`}
                   x={x0 + o.x - fw}
-                  y={-(o.sill + o.height) - fw}
+                  y={-(o.sill + Math.max(o.height, o.heightRight ?? o.height)) - fw}
                   width={o.width + fw * 2}
-                  height={o.height + fw}
+                  height={Math.max(o.height, o.heightRight ?? o.height) + fw}
                   className={styles.joineryTarget}
                   onPointerDown={(e) => {
                     e.stopPropagation()

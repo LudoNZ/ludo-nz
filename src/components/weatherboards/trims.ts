@@ -39,11 +39,15 @@ export const openingTrims = (o: Opening, s: WeatherboardSettings): Record<Joiner
   const fw = Math.max(0, s.facingWidthMm ?? 0)
   const lap = Math.max(0, s.flashingLapMm ?? 0)
   if (o.width <= 0 || o.height <= 0) return { facings: [], scribers: [], flashing: [] }
-  const jamb = Math.ceil(o.height + fw)
+  // a raking head: each jamb its own height, the head along the slope
+  const hr = o.heightRight ?? o.height
+  const jambL = Math.ceil(o.height + fw)
+  const jambR = Math.ceil(hr + fw)
+  const head = Math.hypot(o.width, hr - o.height)
   return {
-    facings: [jamb, jamb, Math.ceil(o.width + fw * 2)],
-    scribers: [jamb, jamb],
-    flashing: [Math.ceil(o.width + fw * 2 + lap * 2)],
+    facings: [jambL, jambR, Math.ceil(head + fw * 2)],
+    scribers: [jambL, jambR],
+    flashing: [Math.ceil(head + fw * 2 + lap * 2)],
   }
 }
 

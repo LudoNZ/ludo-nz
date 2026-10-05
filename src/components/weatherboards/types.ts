@@ -24,7 +24,11 @@ export interface Opening {
   x: number
   sill: number
   width: number
+  /** Height at the left jamb (and the right too, unless it rakes). */
   height: number
+  /** Set for a raking-top unit: the height at the right jamb. The head
+   * runs straight from the left height to this one. */
+  heightRight?: number
   /** Placed by the automatic window layout and free to be re-spaced;
    * cleared the moment it's dragged or its numbers are edited. */
   auto?: boolean
