@@ -117,3 +117,13 @@
 .content {
   min-height: 300px;
 }
+
+.tabDot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: #e0533d;
+  vertical-align: middle;
+}

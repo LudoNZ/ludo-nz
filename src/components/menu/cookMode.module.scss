@@ -1,0 +1,504 @@
+@import "/src/styles/config";
+
+$line: color-mix(in srgb, var(--foreground) 18%, transparent);
+$alert: #e0533d;
+
+.cookMode {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.topRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backBtn,
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+
+  &:hover { text-decoration: underline; }
+}
+
+.awakeToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.recipeName {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.description {
+  margin: -0.75rem 0 0;
+  opacity: 0.7;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.servings {
+  margin: -0.75rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.55;
+}
+
+// --- Sticky timer bar ---
+.timerBar {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: color-mix(in srgb, var(--background) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid $line;
+  border-radius: var(--borderRadius);
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--borderRadius);
+  border: 1px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--foreground);
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 6.5rem;
+}
+
+.chipPaused { opacity: 0.55; }
+
+.chipAlert {
+  border-color: $alert;
+  background: color-mix(in srgb, #{$alert} 18%, transparent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { background: color-mix(in srgb, #{$alert} 35%, transparent); }
+}
+
+.chipLabel {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+.chipTime {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+// --- Sections ---
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+
+  h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+}
+
+.sectionHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.count {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.ingredients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid $line;
+  border-radius: var(--borderRadius);
+
+  li:not(:last-child) { border-bottom: 1px solid $line; }
+}
+
+.ingredient {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  line-height: 1.4;
+
+  input {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+    accent-color: var(--color-primary);
+  }
+}
+
+.ingredientDone span {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+// --- Steps ---
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.step {
+  border: 1px solid $line;
+  border-radius: var(--borderRadius);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: border-color 0.15s, background 0.15s;
+  scroll-margin-top: 6rem;
+}
+
+.stepCurrent {
+  border: 2px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+.stepDone:not(.stepCurrent) .stepText { opacity: 0.45; }
+
+.stepHead {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.stepCheck {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-primary);
+  background: none;
+  color: var(--color-primary);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepCheckOn {
+  background: var(--color-primary);
+  color: var(--background);
+}
+
+.stepText {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0.3rem 0 0;
+  text-align: left;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.stepNav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+
+  button { flex: 1; }
+}
+
+// --- Buttons ---
+.primaryBtn,
+.secondaryBtn,
+.dangerBtn {
+  border-radius: var(--borderRadius);
+  padding: 0.6rem 1rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+.primaryBtn {
+  background: var(--color-primary);
+  color: var(--background);
+  border: 1px solid var(--color-primary);
+
+  &:hover:not(:disabled) { opacity: 0.85; }
+}
+
+.secondaryBtn {
+  background: none;
+  color: var(--foreground);
+  border: 1px solid color-mix(in srgb, var(--foreground) 40%, transparent);
+
+  &:hover:not(:disabled) { border-color: var(--foreground); }
+}
+
+.dangerBtn {
+  background: $alert;
+  color: #fff;
+  border: 1px solid $alert;
+}
+
+// --- Step timer ---
+.stepTimer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-left: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--borderRadius);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+
+  @media (max-width: $MAX_PHONE) { margin-left: 0; }
+}
+
+.stepTimerOver {
+  background: color-mix(in srgb, #{$alert} 18%, transparent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.stepTimerInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.stepTimerLabel {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.stepTimerTime {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepTimerBtns {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.progress {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+  overflow: hidden;
+
+  div {
+    height: 100%;
+    background: var(--color-primary);
+    transition: width 0.1s linear;
+  }
+}
+
+// --- Batches ---
+.batchPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-left: 2.75rem;
+
+  @media (max-width: $MAX_PHONE) { margin-left: 0; }
+}
+
+.activeBatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: var(--borderRadius);
+  border: 1px solid var(--color-primary);
+  background: var(--background);
+}
+
+.activeBatchHead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.phaseLabel {
+  flex: 1;
+  font-weight: 400;
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.discardBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  opacity: 0.4;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.2rem;
+
+  &:hover { opacity: 1; }
+}
+
+.bigTime {
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.bigTimeOver { color: $alert; }
+
+.target {
+  font-size: 1rem;
+  font-weight: 400;
+  opacity: 0.55;
+}
+
+.tableWrap { overflow-x: auto; }
+
+.batchTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+
+  th, td {
+    padding: 0.4rem 0.5rem;
+    text-align: right;
+    border-bottom: 1px solid $line;
+  }
+
+  th:first-child, td:first-child { text-align: left; }
+
+  th {
+    font-weight: 600;
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+
+  tfoot td {
+    font-weight: 700;
+    border-bottom: none;
+  }
+}
+
+.offTarget { color: $alert; }
+
+// --- Notes, finish, logs ---
+.notes {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.finishRow {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid $line;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.logs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid $line;
+  border-radius: var(--borderRadius);
+}
+
+.logRow:not(:last-child) { border-bottom: 1px solid $line; }
+
+.logSummary {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.7rem 0.9rem;
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logMeta {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.logDetail {
+  padding: 0 0.9rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.muted {
+  opacity: 0.6;
+  font-size: 0.85rem;
+  margin: 0;
+}

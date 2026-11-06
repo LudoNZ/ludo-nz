@@ -22,9 +22,14 @@ import MealBuilder from "@/components/menu/mealBuilder"
 import WeeklyPlan from "@/components/menu/weeklyPlan"
 import ShoppingList from "@/components/menu/shoppingList"
 import Pantry from "@/components/menu/pantry"
+import RecipeList from "@/components/menu/recipeList"
+import RecipeEditor, { SaveRecipeData } from "@/components/menu/recipeEditor"
+import CookMode from "@/components/menu/cookMode"
+import { Recipe, CookState, CookLog, PANCAKE_RECIPE } from "@/components/menu/recipeTypes"
 import Link from "next/link"
 
-type Tab = "build" | "pantry" | "plan" | "shopping"
+type Tab = "build" | "pantry" | "plan" | "shopping" | "cook"
+const TABS: Tab[] = ["build", "pantry", "plan", "shopping", "cook"]
 
 export interface SaveMealData {
   name: string
@@ -56,6 +61,29 @@ const MenuSessionPage: React.FC = () => {
   const [activeTemplate, setActiveTemplate] = useState<MealTemplate | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<MealTemplate | null>(null)
   const [showTemplateForm, setShowTemplateForm] = useState(false)
+
+  // Cook state
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [cooks, setCooks] = useState<CookState[]>([])
+  const [cookLogs, setCookLogs] = useState<CookLog[]>([])
+  const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
+  const [showRecipeEditor, setShowRecipeEditor] = useState(false)
+
+  // Remember tab + open recipe per menu so a phone reload mid-cook lands back on it.
+  const viewKey = `menu_view_${code}`
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(viewKey) || "null")
+      if (saved && TABS.includes(saved.tab)) setActiveTab(saved.tab)
+      if (saved?.recipeId) setActiveRecipeId(saved.recipeId)
+    } catch { /* ignore */ }
+  }, [viewKey])
+  useEffect(() => {
+    try {
+      localStorage.setItem(viewKey, JSON.stringify({ tab: activeTab, recipeId: activeRecipeId }))
+    } catch { /* ignore */ }
+  }, [viewKey, activeTab, activeRecipeId])
 
   useEffect(() => {
     const unsubSession = onSnapshot(doc(firestore, "menuSessions", code), (snap) => {
@@ -132,7 +160,39 @@ const MenuSessionPage: React.FC = () => {
       } as IngredientCategory)))
     })
 
+    const unsubRecipes = onSnapshot(
+      query(collection(firestore, "menuSessions", code, "recipes"), orderBy("createdAt", "asc")),
+      (snap) => {
+        setRecipes(snap.docs.map((d) => {
+          const data = d.data()
+          return {
+            id: d.id,
+            ...data,
+            description: data.description ?? "",
+            servings: data.servings ?? "",
+            ingredients: data.ingredients ?? [],
+            steps: data.steps ?? [],
+            notes: data.notes ?? [],
+          } as Recipe
+        }))
+      }
+    )
+
+    const unsubCooks = onSnapshot(collection(firestore, "menuSessions", code, "cooks"), (snap) => {
+      setCooks(snap.docs.map((d) => ({ ...d.data(), recipeId: d.id } as CookState)))
+    })
+
+    const unsubCookLogs = onSnapshot(
+      query(collection(firestore, "menuSessions", code, "cookLogs"), orderBy("finishedAt", "desc")),
+      (snap) => {
+        setCookLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as CookLog)))
+      }
+    )
+
     return () => {
+      unsubRecipes()
+      unsubCooks()
+      unsubCookLogs()
       unsubSession()
       unsubMeals()
       unsubPantry()
@@ -251,6 +311,44 @@ const MenuSessionPage: React.FC = () => {
   const handleDeleteMeal = useCallback(async (mealId: string) => {
     await deleteDoc(doc(firestore, "menuSessions", code, "meals", mealId))
   }, [code])
+
+  // --- Recipes ---
+  const handleSaveRecipe = useCallback(async (data: SaveRecipeData) => {
+    if (editingRecipe) {
+      await updateDoc(doc(firestore, "menuSessions", code, "recipes", editingRecipe.id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+      })
+    } else {
+      const ref = await addDoc(collection(firestore, "menuSessions", code, "recipes"), {
+        ...data,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      setActiveRecipeId(ref.id)
+    }
+    setShowRecipeEditor(false)
+    setEditingRecipe(null)
+  }, [code, editingRecipe])
+
+  const handleDeleteRecipe = useCallback(async () => {
+    if (!editingRecipe) return
+    await deleteDoc(doc(firestore, "menuSessions", code, "recipes", editingRecipe.id))
+    await deleteDoc(doc(firestore, "menuSessions", code, "cooks", editingRecipe.id))
+    setShowRecipeEditor(false)
+    setEditingRecipe(null)
+    setActiveRecipeId(null)
+  }, [code, editingRecipe])
+
+  const handleAddPancakes = useCallback(async () => {
+    await addDoc(collection(firestore, "menuSessions", code, "recipes"), {
+      ...PANCAKE_RECIPE,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  }, [code])
+
+  const activeRecipe = recipes.find((r) => r.id === activeRecipeId) ?? null
 
   // --- Seed demo data ---
   const handleLoadDemoData = useCallback(async () => {
@@ -531,6 +629,12 @@ const MenuSessionPage: React.FC = () => {
         >
           Shop
         </button>
+        <button
+          className={`${styles.tab} ${activeTab === "cook" ? styles.tabActive : ""}`}
+          onClick={() => setActiveTab("cook")}
+        >
+          Cook{cooks.length > 0 && <span className={styles.tabDot} aria-label="cooking now" />}
+        </button>
       </div>
 
       <div className={styles.content}>
@@ -591,7 +695,37 @@ const MenuSessionPage: React.FC = () => {
             onGoToPlan={() => setActiveTab("plan")}
           />
         )}
+
+        {activeTab === "cook" && !activeRecipe && (
+          <RecipeList
+            recipes={recipes}
+            cooks={cooks}
+            onOpen={(r) => setActiveRecipeId(r.id)}
+            onNew={() => { setEditingRecipe(null); setShowRecipeEditor(true) }}
+            onAddPancakes={handleAddPancakes}
+          />
+        )}
+
+        {activeTab === "cook" && activeRecipe && (
+          <CookMode
+            code={code}
+            recipe={activeRecipe}
+            cook={cooks.find((c) => c.recipeId === activeRecipe.id) ?? null}
+            logs={cookLogs.filter((l) => l.recipeId === activeRecipe.id)}
+            onBack={() => setActiveRecipeId(null)}
+            onEdit={() => { setEditingRecipe(activeRecipe); setShowRecipeEditor(true) }}
+          />
+        )}
       </div>
+
+      {showRecipeEditor && (
+        <RecipeEditor
+          recipe={editingRecipe}
+          onSave={handleSaveRecipe}
+          onDelete={editingRecipe ? handleDeleteRecipe : undefined}
+          onClose={() => { setShowRecipeEditor(false); setEditingRecipe(null) }}
+        />
+      )}
 
       {showTemplateForm && (
         <TemplateForm

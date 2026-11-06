@@ -98,6 +98,34 @@ service cloud.firestore {
         allow update: if request.resource.data.name is string;
         allow delete: if true;
       }
+
+      // Step-by-step recipes for Cook mode
+      match /recipes/{recipeId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.name is string
+          && request.resource.data.ingredients is list
+          && request.resource.data.steps is list;
+        allow delete: if true;
+      }
+
+      // Live cook state, one doc per recipe (ticks, current step, timers, batches)
+      match /cooks/{recipeId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.recipeId == recipeId
+          && request.resource.data.batches is list
+          && request.resource.data.timers is map;
+        allow delete: if true;
+      }
+
+      // Finished cooks with per-batch times
+      match /cookLogs/{logId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['recipeId', 'recipeName', 'startedAt', 'finishedAt', 'batches'])
+          && request.resource.data.recipeName is string
+          && request.resource.data.batches is list;
+        allow update: if false;
+        allow delete: if true;
+      }
     }
 
     // Per-user pull-up / exercise tracking
