@@ -122,3 +122,28 @@
   opacity: 0.4;
   user-select: none;
 }
+
+// shown when copying failed: the text in a box to select and copy by hand
+.manual {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  p {
+    font-size: 0.9rem;
+  }
+
+  textarea {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    // 16px keeps iOS Safari from zooming on focus
+    font-size: max(0.8rem, 16px);
+    padding: 0.5rem;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    resize: vertical;
+  }
+}

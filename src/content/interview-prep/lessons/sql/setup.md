@@ -89,8 +89,10 @@ createdb qa_practice
 
 Get the seed with the **Practice database** buttons at the top of this page, either way:
 
+- **Copy as Termux command**, then long-press at the Termux prompt and paste. That one paste creates the database if it isn't there yet, saves the SQL to `seed.sql` and loads it with `psql -v ON_ERROR_STOP=1`. It takes a few seconds to scroll past.
 - **Download seed.sql**, then let Termux read your Downloads folder once with `termux-setup-storage`, and run `psql -d qa_practice -v ON_ERROR_STOP=1 -f ~/storage/downloads/seed.sql`.
-- **Copy seed SQL**, then in Termux run `cat > seed.sql`, long-press to paste, press Ctrl+D (Ctrl is on Termux's extra-keys row), and run `psql -d qa_practice -v ON_ERROR_STOP=1 -f seed.sql`. Saving to a file first is more reliable than pasting about 90 KB straight into `psql`.
+
+Don't paste the plain SQL (**Copy SQL only**) at the Termux prompt: that's the shell, not `psql`, so it tries to run every line and prints `syntax error near unexpected token` over and over. Plain SQL only goes inside `psql` itself, or into a file.
 
 After a tablet restart, start the server again with `pg_ctl -D $PREFIX/var/lib/postgresql start`.
 
