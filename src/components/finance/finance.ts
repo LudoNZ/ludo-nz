@@ -2,11 +2,20 @@
 
 // ── Savings account / term deposit ─────────────────────────────────────
 
-export type Compounding = "daily" | "monthly" | "quarterly" | "annually"
+export type Compounding = "daily" | "monthly" | "quarterly" | "sixmonthly" | "annually"
 export type ContributionFrequency = "none" | "weekly" | "fortnightly" | "monthly"
 
-/** NZ resident withholding tax (RWT) rates on interest. */
-export const RWT_RATES = [0, 10.5, 17.5, 30, 33, 39] as const
+/** Tax on interest: RWT rates for ordinary accounts, plus 28% — the top PIR,
+ * which caps tax on PIE accounts (e.g. Kiwibank PIE Online Call). */
+export const TAX_OPTIONS: { pct: number; label: string }[] = [
+  { pct: 0, label: "0% (RWT-exempt)" },
+  { pct: 10.5, label: "10.5% RWT" },
+  { pct: 17.5, label: "17.5% RWT" },
+  { pct: 28, label: "28% PIR (PIE account)" },
+  { pct: 30, label: "30% RWT" },
+  { pct: 33, label: "33% RWT" },
+  { pct: 39, label: "39% RWT" },
+]
 
 export interface SavingsInputs {
   initial: number
@@ -33,6 +42,7 @@ const creditEvery: Record<Compounding, number> = {
   daily: 1,
   monthly: DAYS_PER_YEAR / 12,
   quarterly: DAYS_PER_YEAR / 4,
+  sixmonthly: DAYS_PER_YEAR / 2,
   annually: DAYS_PER_YEAR,
 }
 
@@ -97,7 +107,7 @@ export function projectSavings(i: SavingsInputs): YearPoint[] {
 /** The single equivalent annual rate after compounding, before tax. */
 export function effectiveAnnualRate(ratePct: number, compounding: Compounding): number {
   const r = ratePct / 100
-  const n = { daily: 365, monthly: 12, quarterly: 4, annually: 1 }[compounding]
+  const n = { daily: 365, monthly: 12, quarterly: 4, sixmonthly: 2, annually: 1 }[compounding]
   return (Math.pow(1 + r / n, n) - 1) * 100
 }
 

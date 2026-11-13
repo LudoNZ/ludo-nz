@@ -33,7 +33,7 @@ const KiwiSaverCalculator = () => {
   const [employerPct, setEmployerPct] = useState(3.5)
   const [follow2028Rise, setFollow2028Rise] = useState(true)
   const [voluntaryMonthly, setVoluntaryMonthly] = useState(0)
-  const [feePct, setFeePct] = useState(0.6)
+  const [feePct, setFeePct] = useState(1)
   const [pirPct, setPirPct] = useState(28)
   const [inflationPct, setInflationPct] = useState(2)
   const [govContribution, setGovContribution] = useState(true)
@@ -101,7 +101,8 @@ const KiwiSaverCalculator = () => {
   return (
     <section className={styles.calculator}>
       <p className={styles.intro}>
-        Projects your KiwiSaver to retirement in the higher-risk funds. Growth and Aggressive funds hold mostly shares,
+        Projects your KiwiSaver to retirement in the higher-risk funds — set up for the Fisher Funds KiwiSaver Plan,
+        Kiwibank&apos;s KiwiSaver provider. Growth and Aggressive funds hold mostly shares,
         so they swing harder year to year but have historically compounded faster over long horizons. Balanced is shown
         dashed for comparison.
       </p>
@@ -147,7 +148,11 @@ const KiwiSaverCalculator = () => {
 
       <h3 className={styles.subhead}>Fund assumptions</h3>
       <div className={styles.formGrid}>
-        <NumberField label="Fees" suffix="% p.a." value={feePct} onChange={setFeePct} step={0.05} max={5} />
+        <div className={styles.field}>
+          <label>Fees</label>
+          <NumberField bare suffix="% p.a." value={feePct} onChange={setFeePct} step={0.05} max={5} />
+          <span className={styles.hint}>Fisher Funds Aggressive: est. 0.85–1.23%</span>
+        </div>
         <div className={styles.field}>
           <label>PIR (tax on returns)</label>
           <select value={pirPct} onChange={(e) => setPirPct(Number(e.target.value))}>

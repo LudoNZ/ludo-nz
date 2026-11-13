@@ -8,7 +8,7 @@ import styles from "./finance.module.scss"
 import {
   Compounding,
   ContributionFrequency,
-  RWT_RATES,
+  TAX_OPTIONS,
   effectiveAnnualRate,
   nzd,
   projectSavings,
@@ -26,14 +26,17 @@ const COMPOUNDING: { id: Compounding; label: string }[] = [
   { id: "daily", label: "Daily" },
   { id: "monthly", label: "Monthly" },
   { id: "quarterly", label: "Quarterly" },
+  { id: "sixmonthly", label: "Six-monthly" },
   { id: "annually", label: "Annually" },
 ]
 
-const PRESETS: { label: string; rate: number; compounding: Compounding; hint: string }[] = [
-  { label: "Bonus saver", rate: 3.5, compounding: "monthly", hint: "Monthly, conditions apply" },
-  { label: "Notice saver", rate: 3.75, compounding: "monthly", hint: "32–90 day notice" },
-  { label: "Term deposit", rate: 4, compounding: "annually", hint: "Interest compounded on rollover" },
-  { label: "On-call", rate: 1.5, compounding: "monthly", hint: "Everyday online saver" },
+/** Kiwibank accounts. Rates are a snapshot (Nov 2026) and change without
+ * notice — check the Kiwibank app before relying on them. */
+const PRESETS: { label: string; rate: number; compounding: Compounding; hint: string; tax?: number }[] = [
+  { label: "Online Call", rate: 1.75, compounding: "monthly", hint: "Instant access, no bonus conditions" },
+  { label: "PIE Online Call", rate: 1.75, compounding: "monthly", hint: "Taxed at your PIR, max 28%", tax: 28 },
+  { label: "Notice Saver 90 days", rate: 2.75, compounding: "monthly", hint: "90 days' notice, $2,000 minimum" },
+  { label: "Term deposit 2 yr", rate: 4.15, compounding: "annually", hint: "Fixed for the term; interest paid annually" },
 ]
 
 /** NZ bank-style compound savings calculator: initial lump + regular
@@ -61,8 +64,9 @@ const SavingsCalculator = () => {
   return (
     <section className={styles.calculator}>
       <p className={styles.intro}>
-        Interest accrues daily and is credited — after resident withholding tax — at the end of each
-        compounding period, the same way NZ banks run savings accounts and term deposits.
+        Interest accrues daily and is credited — after tax — at the end of each compounding period, the way
+        Kiwibank runs its savings accounts and term deposits. The buttons fill in Kiwibank rates (Nov 2026
+        snapshot — check the app for today&apos;s rate).
       </p>
 
       <div className={styles.presets}>
@@ -74,6 +78,8 @@ const SavingsCalculator = () => {
             onClick={() => {
               setRatePct(p.rate)
               setCompounding(p.compounding)
+              if (p.tax !== undefined) setRwtPct(p.tax)
+              else if (rwtPct === 28) setRwtPct(30)
             }}
           >
             {p.label} · {p.rate}%
@@ -116,11 +122,11 @@ const SavingsCalculator = () => {
         </div>
         <NumberField label="Term" suffix="years" value={years} onChange={setYears} step={1} min={1} max={60} />
         <div className={styles.field}>
-          <label>RWT rate</label>
+          <label>Tax on interest</label>
           <select value={rwtPct} onChange={(e) => setRwtPct(Number(e.target.value))}>
-            {RWT_RATES.map((r) => (
-              <option key={r} value={r}>
-                {r === 0 ? "0% (RWT-exempt)" : `${r}%`}
+            {TAX_OPTIONS.map((t) => (
+              <option key={t.pct} value={t.pct}>
+                {t.label}
               </option>
             ))}
           </select>
@@ -165,7 +171,7 @@ const SavingsCalculator = () => {
             { label: "Starting balance", value: nzd(initial) },
             { label: "Deposits added", value: nzd(end.contributed - initial) },
             { label: "Gross interest", value: nzd(end.grossInterest) },
-            { label: `RWT at ${rwtPct}%`, value: `−${nzd(end.tax)}` },
+            { label: `Tax at ${rwtPct}%`, value: `−${nzd(end.tax)}` },
             { label: "Final balance", value: nzd(end.balance) },
           ]}
         />
@@ -222,8 +228,9 @@ const SavingsCalculator = () => {
       )}
 
       <p className={styles.disclaimer}>
-        Estimate only. Assumes the rate stays fixed for the whole term; bank rates change, bonus-saver rates usually
-        need conditions met each month, and term deposits typically pay interest at maturity or annually.
+        Estimate only. Assumes the rate stays fixed for the whole term. Kiwibank&apos;s Online Call and Notice Saver
+        rates can change at any time; term deposit rates are fixed only for the term, and rolling over will pick up
+        whatever the rate is then. Breaking a term deposit early costs 2% off the rate.
       </p>
     </section>
   )
