@@ -80,9 +80,14 @@ const Header = () => {
             </>
           )}
           {auth && !!auth.customClaims?.admin && (
-            <li className={styles.authLink}>
-              <Link href={"/admin-dashboard"}>Admin</Link>
-            </li>
+            <>
+              <li>
+                <Link href={"/finance"}>Finance</Link>
+              </li>
+              <li className={styles.authLink}>
+                <Link href={"/admin-dashboard"}>Admin</Link>
+              </li>
+            </>
           )}
         </ul>
       </nav>

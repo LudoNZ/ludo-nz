@@ -1,0 +1,358 @@
+.calculator {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.intro {
+  opacity: 0.85;
+  line-height: 1.55;
+  max-width: 44rem;
+}
+
+.subhead {
+  font-size: 1rem;
+  color: var(--color-primary);
+  margin-bottom: -0.5rem;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.presetButton {
+  padding: 0.45rem 0.9rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background-color: var(--color-primary);
+    color: var(--background);
+  }
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+
+  label {
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+}
+
+.field select,
+.inline select {
+  padding: 0.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background-color: var(--background);
+  color: var(--foreground);
+  font-size: max(1rem, 16px);
+  font-family: inherit;
+}
+
+.inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+
+  > * {
+    min-width: 0;
+  }
+}
+
+.numberInput {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background-color: var(--background);
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+
+  &:focus-within {
+    box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.15);
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 0.5rem;
+    border: none;
+    background: none;
+    color: var(--foreground);
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+
+    &:focus {
+      outline: none;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}
+
+.affix {
+  padding: 0 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+
+  label {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  input {
+    accent-color: var(--color-primary);
+  }
+}
+
+.headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 2rem;
+  padding: 1rem 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  > div {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.headlineLabel {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.headlineValue {
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.headlineSub {
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.modeToggle {
+  display: flex !important;
+  flex-direction: row !important;
+  margin-left: auto;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+
+  button {
+    padding: 0.35rem 0.75rem;
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    & + button {
+      border-left: 1px solid var(--color-primary);
+    }
+  }
+}
+
+.modeActive {
+  background-color: var(--color-primary) !important;
+  color: var(--background) !important;
+}
+
+.fundGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+}
+
+.fundCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem;
+  border: 2px solid rgba(127, 127, 127, 0.3);
+  border-radius: var(--borderRadius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: rgba(127, 127, 127, 0.6);
+  }
+}
+
+.fundSelected {
+  box-shadow: 0 0 0 1px currentColor inset;
+}
+
+.fundHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fundValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hint {
+  font-size: 0.78rem;
+  opacity: 0.65;
+}
+
+.chartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.grid {
+  stroke: currentColor;
+  opacity: 0.12;
+}
+
+.crosshair {
+  stroke: currentColor;
+  opacity: 0.35;
+  stroke-dasharray: 3 3;
+}
+
+.axisText {
+  fill: currentColor;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  font-size: 0.85rem;
+  min-height: 1.4rem;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  strong {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.legendAt {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  border: 2px dashed transparent;
+}
+
+.resultsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.linkButton {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+
+  th,
+  td {
+    padding: 0.35rem 0.6rem;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  }
+
+  th:first-child,
+  td:first-child {
+    text-align: left;
+  }
+
+  th {
+    font-weight: 600;
+    opacity: 0.75;
+  }
+}
+
+.disclaimer {
+  font-size: 0.8rem;
+  opacity: 0.6;
+  line-height: 1.5;
+}
