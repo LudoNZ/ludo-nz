@@ -3,6 +3,7 @@ import { firestore } from "../../../firebase/client"
 import { CalcSettings } from "./calcSettings"
 import { ControlPoints, CornerPosts } from "./postProfile"
 import { SoilType } from "./retainingWallCalc"
+import { PlanPoint, RetainedSide } from "./wallPlan"
 
 /** Both collections are public (no auth) — saved presets and designs are
  * visible/listable to anyone, by design, for now. See firestore.rules:
@@ -54,6 +55,13 @@ export interface SavedWallDesign {
   rlDatumM: number
   controlPoints: ControlPoints
   cornerPosts: CornerPosts
+  /** the wall's shape in plan — missing on designs saved before plans
+   * existed, which were always a single straight run (see legacyPlan) */
+  planPoints?: PlanPoint[]
+  retainedSide: RetainedSide
+  /** mm, the auger the holes are drilled with — null = sized off each
+   * post instead (the calc settings' hole-diameter multiplier) */
+  augerDiameterMm: number | null
   topCapEnabled: boolean
   calcSettings: CalcSettings
   createdAt: Date
@@ -76,6 +84,9 @@ export const subscribeToDesigns = (onData: (list: SavedWallDesign[]) => void, on
             rlDatumM: data.rlDatumM ?? 0,
             controlPoints: (data.controlPoints ?? {}) as ControlPoints,
             cornerPosts: (data.cornerPosts ?? {}) as CornerPosts,
+            planPoints: Array.isArray(data.planPoints) && data.planPoints.length >= 2 ? (data.planPoints as PlanPoint[]) : undefined,
+            retainedSide: data.retainedSide === "right" ? "right" : "left",
+            augerDiameterMm: typeof data.augerDiameterMm === "number" && data.augerDiameterMm > 0 ? data.augerDiameterMm : null,
             topCapEnabled: Boolean(data.topCapEnabled),
             calcSettings: data.calcSettings as CalcSettings,
             createdAt: data.createdAt?.toDate?.() ?? new Date(),

@@ -1,0 +1,242 @@
+.planRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  max-height: 26rem;
+  display: block;
+  // a drag on a corner must move the corner, not scroll the page
+  touch-action: pan-y;
+}
+
+// stroke widths are set inline throughout (see wallPlanView.tsx) — the
+// drawing's units are metres, so a flat CSS px width would be enormous
+
+// literal earth/timber colours, same as the elevation: they stand for
+// real materials and shouldn't swap with light/dark mode
+.retainedBand {
+  fill: #9c7a4d;
+  opacity: 0.32;
+}
+
+.wallLine {
+  stroke: #8b5a2b;
+  stroke-linecap: round;
+}
+
+.wallLineSelected {
+  stroke: #2a78d6;
+  stroke-linecap: round;
+}
+
+.wallHit {
+  stroke: transparent;
+  stroke-linecap: round;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    stroke: rgba(42, 120, 214, 0.14);
+    outline: none;
+  }
+}
+
+.post {
+  fill: #5f3d1c;
+  stroke: var(--background);
+  pointer-events: none;
+}
+
+.postSelected {
+  fill: #2a78d6;
+  stroke: var(--background);
+  pointer-events: none;
+}
+
+.postBlocked {
+  fill: var(--color-danger);
+  stroke: var(--background);
+  pointer-events: none;
+}
+
+.label {
+  fill: var(--foreground);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.labelSelected {
+  fill: #2a78d6;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.handleHit {
+  fill: transparent;
+}
+
+.vertex {
+  cursor: grab;
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.vertexDot {
+  fill: #d68910;
+  stroke: var(--background);
+}
+
+.addHandle {
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: none;
+
+    .addHandleDot {
+      stroke: #2a78d6;
+    }
+  }
+}
+
+.addHandleDot {
+  fill: var(--background);
+  stroke: var(--color-primary);
+}
+
+.addHandleCross {
+  stroke: var(--color-primary);
+  stroke-linecap: round;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.vertexSwatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background-color: #d68910;
+  flex-shrink: 0;
+}
+
+.addSwatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  justify-content: center;
+  font-size: 0.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.retainedSwatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background-color: #9c7a4d;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.segmentTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.segmentRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: var(--borderRadius);
+}
+
+.segmentRowSelected {
+  border-color: #2a78d6;
+  background-color: rgba(42, 120, 214, 0.06);
+}
+
+.segmentName {
+  background: none;
+  border: none;
+  padding: 0 0 0.6rem;
+  min-width: 4.2rem;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.segmentField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+
+  span {
+    opacity: 0.75;
+  }
+
+  input {
+    width: 6.5rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    // 16px keeps iOS Safari from zooming the page on focus
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
+    }
+  }
+}
+
+.removeCorner {
+  background: none;
+  border: none;
+  padding: 0 0 0.6rem;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--color-danger);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hint {
+  font-size: 0.78rem;
+  opacity: 0.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}

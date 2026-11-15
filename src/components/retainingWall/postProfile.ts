@@ -1,4 +1,5 @@
-import { calcHoleVolumeM3, calcPostLayout } from "../structures/postRailCalc"
+import { calcHoleVolumeM3 } from "../structures/postRailCalc"
+import { PlanPoint } from "./wallPlan"
 import { LaborEstimate } from "../structures/types"
 import { CalcSettings, findReferenceRow, postWidthM } from "./calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
@@ -16,16 +17,30 @@ export interface ControlPoint {
 /** Keyed by post index. */
 export type ControlPoints = Record<number, ControlPoint>
 
-/** Keyed by post index; presence (true) marks that post as a corner —
- * where the wall changes direction in plan. A facing board physically
- * can't run past a corner, so board runs always break there regardless of
- * whether a standard-length board would otherwise have reached further;
- * see the run-splitting in buildWallProfile below. */
+/** Keyed by post index; presence (true) marks that post as a corner.
+ * Corners now come from the plan (every interior plan vertex gets a
+ * shared corner post — see buildWallProfile), so this is only still
+ * written to saved designs for older readers, and read back to rebuild a
+ * plan for designs saved before plans existed (see legacyPlan). */
 export type CornerPosts = Record<number, true>
+
+/** One straight run of the wall between two plan vertices — "Wall A",
+ * "Wall B"… Its two end posts are shared with its neighbours. */
+export interface ProfileSegment {
+  index: number
+  startPostIndex: number
+  endPostIndex: number
+  /** m, along the unfolded wall */
+  startXM: number
+  endXM: number
+  lengthM: number
+  /** m, this run's own even post centres */
+  postSpacingM: number
+}
 
 export interface ProfilePost {
   index: number
-  /** m, position along the wall */
+  /** m, position along the unfolded wall (corners flattened out) */
   xM: number
   /** m, relative to the RL datum */
   groundLevelM: number
@@ -43,7 +58,11 @@ export interface ProfilePost {
   widthM: number
   embedmentM: number
   holeDiameterM: number
+  /** m³, the whole drilled hole */
   holeVolumeM3: number
+  /** m³, what actually gets poured: the hole above the gravel base pad,
+   * less the space the post itself takes up */
+  concreteVolumeM3: number
 }
 
 export interface ProfileBay {
@@ -89,11 +108,23 @@ export interface BoardLayerSummary {
 
 export interface WallProfile {
   rlDatumM: number
-  postSpacingM: number
+  /** one per straight run in plan, in order */
+  segments: ProfileSegment[]
   posts: ProfilePost[]
   bays: ProfileBay[]
   postsBySize: { sizeLabel: string; count: number }[]
   totalFillVolumeM3: number
+  /** m³, concrete to order before any waste allowance — every hole above
+   * its gravel base pad, less the posts' own volume */
+  totalConcreteVolumeM3: number
+  /** m³, the gravel base pads under the posts */
+  totalGravelBaseVolumeM3: number
+  /** distinct hole diameters in use, m, ascending — one value when an
+   * auger size is set, otherwise one per post size */
+  holeDiametersM: number[]
+  /** true if any post is too big to drop into its hole (its diagonal is
+   * wider than the hole) — only possible with a hand-picked auger */
+  augerTooSmall: boolean
   /** regular level facing-board courses */
   boards: BoardLayerSummary
   /** the continuous perimeter/capping board along the very top of the
@@ -285,13 +316,48 @@ function planBoardLayers(
   }
 }
 
+/** Bays needed to cover one straight run at no more than maxSpacingM
+ * centres. The epsilon keeps a run that's an exact multiple of the
+ * spacing from tipping into one extra bay on floating-point noise. */
+const bayCountFor = (lengthM: number, maxSpacingM: number): number => Math.max(1, Math.ceil(lengthM / maxSpacingM - 1e-9))
+
+/** Bay count per run for a given shape — two shapes with the same counts
+ * have the same post indices, so hand-set post levels (keyed by index)
+ * stay valid when moving between them. */
+export function segmentBayCounts(segmentLengthsM: number[], retainedHeightM: number, soil: SoilType, settings: CalcSettings): number[] {
+  if (!(retainedHeightM > 0)) return []
+  const { maxSpacingM } = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
+  return segmentLengthsM.filter((l) => l > 0).map((l) => bayCountFor(l, maxSpacingM))
+}
+
+/** Rebuilds a plan for a design saved before plans existed: a straight
+ * wall, with a (still in-line) plan vertex at each post that had been
+ * flagged as a corner — which reproduces the same posts at the same
+ * indices, so the design's hand-set levels still land on the right ones. */
+export function legacyPlan(
+  wallLengthM: number,
+  retainedHeightM: number,
+  soil: SoilType,
+  cornerPosts: CornerPosts,
+  settings: CalcSettings
+): PlanPoint[] {
+  const { maxSpacingM } = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
+  const bayCount = bayCountFor(wallLengthM, maxSpacingM)
+  const cornerXs = Object.keys(cornerPosts)
+    .map(Number)
+    .filter((i) => i > 0 && i < bayCount)
+    .sort((a, b) => a - b)
+    .map((i) => (wallLengthM * i) / bayCount)
+  return [0, ...cornerXs, wallLengthM].map((xM) => ({ xM, yM: 0 }))
+}
+
 /** Builds the full per-post, per-bay profile for a raked (or, with no
- * control points set, perfectly uniform) wall. Post count and spacing are
- * still established once from the base wallLengthM/retainedHeightM/soil
- * inputs (same reference-table lookup as the uniform calculator) — a
- * raking wall keeps uniform post centres for constructability, it's each
- * post's own size/embedment/hole and each bay's own board coursing that
- * varies with the local height. Any post or bay whose local height is
+ * control points set, perfectly uniform) wall, unfolded flat: the wall's
+ * straight runs (from the plan) laid end to end. Each run is spaced out
+ * on its own — evenly, no wider than the reference table's centres for
+ * the base retainedHeightM/soil — with one shared corner post wherever
+ * two runs meet; it's each post's own size/embedment/hole and each bay's
+ * own board coursing that varies with the local height. Any post or bay whose local height is
  * outside DIY territory is flagged (needsEngineer) and excluded from every
  * total rather than silently under-specified.
  *
@@ -306,19 +372,40 @@ function planBoardLayers(
  * — except at a corner, which always forces every row to break there
  * regardless, since a board can't physically run past one. */
 export function buildWallProfile(
-  wallLengthM: number,
+  segmentLengthsM: number[],
   retainedHeightM: number,
   soil: SoilType,
   controlPoints: ControlPoints,
-  cornerPosts: CornerPosts,
   topCapEnabled: boolean,
   rlDatumM: number,
-  settings: CalcSettings
+  settings: CalcSettings,
+  /** m — the auger the holes are actually being drilled with. Every hole
+   * is this diameter regardless of post size; without it, each hole is
+   * sized off its own post (settings.holeDiameterMultiplier). */
+  augerDiameterM: number | null = null
 ): WallProfile | null {
-  if (!(wallLengthM > 0) || !(retainedHeightM > 0)) return null
+  const runLengthsM = segmentLengthsM.filter((l) => l > 0)
+  if (runLengthsM.length === 0 || !(retainedHeightM > 0)) return null
 
   const layoutRow = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
-  const { postCount, actualSpacingM } = calcPostLayout(wallLengthM, layoutRow.maxSpacingM)
+
+  // lay every run out end to end: each run's first post is the previous
+  // run's last (the shared corner post), so only the very first run
+  // contributes its own starting post
+  const postXs: number[] = [0]
+  const cornerIndices = new Set<number>()
+  const segments: ProfileSegment[] = []
+  let runStartXM = 0
+  runLengthsM.forEach((lengthM, index) => {
+    const bayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
+    const startPostIndex = postXs.length - 1
+    for (let k = 1; k <= bayCount; k++) postXs.push(runStartXM + (lengthM * k) / bayCount)
+    const endPostIndex = postXs.length - 1
+    segments.push({ index, startPostIndex, endPostIndex, startXM: runStartXM, endXM: runStartXM + lengthM, lengthM, postSpacingM: lengthM / bayCount })
+    if (index < runLengthsM.length - 1) cornerIndices.add(endPostIndex)
+    runStartXM += lengthM
+  })
+  const postCount = postXs.length
 
   // Both end posts always anchor the rake — at the page's default level
   // unless the user has explicitly overridden that particular end — so
@@ -347,22 +434,27 @@ export function buildWallProfile(
     const sizeLabel = row.postSizeLabel
     const widthM = postWidthM(sizeLabel)
     const embedmentM = Math.max(0.01, localHeightM) * row.embedmentRatio + settings.gravelBaseAllowanceM
-    const holeDiameterM = widthM * settings.holeDiameterMultiplier
+    const holeDiameterM = augerDiameterM && augerDiameterM > 0 ? augerDiameterM : widthM * settings.holeDiameterMultiplier
     const holeVolumeM3 = calcHoleVolumeM3(holeDiameterM, embedmentM)
+    // the post stops on top of the gravel base pad, so concrete only
+    // fills the hole above the pad, around the post
+    const concreteDepthM = Math.max(0, embedmentM - settings.gravelBaseAllowanceM)
+    const concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(holeDiameterM, concreteDepthM) - widthM * widthM * concreteDepthM)
     return {
       index: i,
-      xM: i * actualSpacingM,
+      xM: postXs[i],
       groundLevelM,
       topLevelM,
       retainedHeightM: localHeightM,
       isControlPoint: Boolean(controlPoints[i]),
-      isCorner: Boolean(cornerPosts[i]),
+      isCorner: cornerIndices.has(i),
       needsEngineer,
       sizeLabel,
       widthM,
       embedmentM,
       holeDiameterM,
       holeVolumeM3,
+      concreteVolumeM3,
     }
   })
 
@@ -410,11 +502,18 @@ export function buildWallProfile(
 
   return {
     rlDatumM,
-    postSpacingM: actualSpacingM,
+    segments,
     posts,
     bays,
     postsBySize: Array.from(sizeCounts.entries()).map(([sizeLabel, count]) => ({ sizeLabel, count })),
     totalFillVolumeM3,
+    totalConcreteVolumeM3: validPosts.reduce((sum, p) => sum + p.concreteVolumeM3, 0),
+    totalGravelBaseVolumeM3: validPosts.reduce(
+      (sum, p) => sum + calcHoleVolumeM3(p.holeDiameterM, Math.min(settings.gravelBaseAllowanceM, p.embedmentM)),
+      0
+    ),
+    holeDiametersM: Array.from(new Set(validPosts.map((p) => Math.round(p.holeDiameterM * 1000) / 1000))).sort((a, b) => a - b),
+    augerTooSmall: validPosts.some((p) => p.widthM * Math.SQRT2 > p.holeDiameterM + 1e-9),
     boards,
     topBoard,
     topCap,

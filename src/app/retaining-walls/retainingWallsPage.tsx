@@ -7,7 +7,18 @@ import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
 import { SaveIcon, OpenIcon, SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
-import { buildWallProfile, ControlPoints, CornerPosts } from "@/components/retainingWall/postProfile"
+import WallPlanView from "@/components/retainingWall/wallPlanView"
+import NumField from "@/components/weatherboards/numField"
+import { buildWallProfile, ControlPoints, CornerPosts, legacyPlan, segmentBayCounts } from "@/components/retainingWall/postProfile"
+import {
+  PlanPoint,
+  RetainedSide,
+  segmentLabel,
+  segmentLengths,
+  setSegmentLength,
+  straightPlan,
+  totalLength,
+} from "@/components/retainingWall/wallPlan"
 import { CalcSettings, DEFAULT_CALC_SETTINGS, findReferenceRow } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import {
@@ -23,12 +34,25 @@ import { OpenDesignModal, SaveDesignModal } from "./designModals"
 import styles from "./retainingWallsPage.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
+/** common hire/contractor auger diameters, offered as suggestions — any
+ * size can still be typed */
+const AUGER_SIZES_MM = [200, 250, 300, 350, 400, 450, 500, 600]
 
 const RetainingWallsPage = () => {
-  const [wallLength, setWallLength] = useState("5")
+  // the wall's shape seen from above: an open run of straight walls (A,
+  // B, C…) joined at corners. Total wall length is just this unfolded.
+  const [planPoints, setPlanPoints] = useState<PlanPoint[]>(() => straightPlan(5))
+  // which side of the wall (walking it from A onward) the ground is held
+  // back on — decides which face the elevations are looking at
+  const [retainedSide, setRetainedSide] = useState<RetainedSide>("left")
+  // which run's elevation is showing, or the whole wall unfolded flat
+  const [elevationView, setElevationView] = useState<number | "all">("all")
   const [retainedHeight, setRetainedHeight] = useState("1.0")
   const [soil, setSoil] = useState<SoilType>("firmClay")
   const [rlDatum, setRlDatum] = useState("0")
+  // mm, the auger the holes are being drilled with; blank = size each
+  // hole off its own post (the calc settings' multiplier) instead
+  const [augerDiameter, setAugerDiameter] = useState("")
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showSave, setShowSave] = useState(false)
@@ -44,12 +68,9 @@ const RetainingWallsPage = () => {
   // bracket it. Reset whenever the base inputs (or the active calc
   // settings, which can change post spacing/count) change, since a stale
   // index would silently apply to the wrong physical post otherwise.
+  // Reshaping the plan only resets these when it actually changes how
+  // many posts a run gets — see handlePlanChange.
   const [controlPoints, setControlPoints] = useState<ControlPoints>({})
-  // keyed by post index — presence marks that post as a corner, where a
-  // board can't physically run through, forcing a joint there regardless
-  // of what the standard-length/2-span piece planning would otherwise do.
-  // Reset alongside controlPoints, same staleness reasoning.
-  const [cornerPosts, setCornerPosts] = useState<CornerPosts>({})
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
   const [topCapEnabled, setTopCapEnabled] = useState(false)
@@ -67,20 +88,39 @@ const RetainingWallsPage = () => {
     return () => unsubscribe()
   }, [])
 
-  const wallLengthM = parseFloat(wallLength)
+  const wallLengthM = totalLength(planPoints)
+  const segmentLengthsM = segmentLengths(planPoints)
   const retainedHeightM = parseFloat(retainedHeight)
   const rlDatumM = parseFloat(rlDatum) || 0
+  const augerDiameterParsed = parseFloat(augerDiameter)
+  const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
 
   const resetProfile = () => {
     setControlPoints({})
-    setCornerPosts({})
     setSelectedIndex(null)
   }
 
-  const profile =
-    !isNaN(wallLengthM) && !isNaN(retainedHeightM)
-      ? buildWallProfile(wallLengthM, retainedHeightM, soil, controlPoints, cornerPosts, topCapEnabled, rlDatumM, calcSettings)
-      : null
+  const profile = !isNaN(retainedHeightM)
+    ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, augerDiameterMm ? augerDiameterMm / 1000 : null)
+    : null
+
+  // a run that no longer exists (corner removed, design swapped) falls
+  // back to the whole-wall view rather than pointing at nothing
+  const shownSegment = elevationView !== "all" && profile && elevationView < profile.segments.length ? elevationView : null
+  // looking at the wall's face from the low side: with the ground held
+  // back on the left of travel, A's start is on the viewer's left;
+  // retained on the right, the viewer is round the other side and the
+  // whole thing reads right-to-left
+  const mirrored = retainedSide === "right"
+
+  const handlePlanChange = (next: PlanPoint[]) => {
+    const before = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings)
+    const after = segmentBayCounts(segmentLengths(next), retainedHeightM, soil, calcSettings)
+    // hand-set levels are keyed by post index, so they only survive a
+    // reshape that leaves every run with the same number of posts
+    if (before.join(",") !== after.join(",")) resetProfile()
+    setPlanPoints(next)
+  }
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
   const allBlocked = profile ? profile.posts.length === profile.engineerPostIndices.length : false
@@ -107,16 +147,6 @@ const RetainingWallsPage = () => {
     })
   }
 
-  const handleToggleCorner = () => {
-    if (selectedIndex === null) return
-    setCornerPosts((cp) => {
-      const next = { ...cp }
-      if (next[selectedIndex]) delete next[selectedIndex]
-      else next[selectedIndex] = true
-      return next
-    })
-  }
-
   const handleApplySettings = (settings: CalcSettings, name: string) => {
     setCalcSettings(settings)
     setCalcSettingsName(name)
@@ -124,28 +154,39 @@ const RetainingWallsPage = () => {
   }
 
   const handleSaveDesignSubmit = async (name: string) => {
-    if (isNaN(wallLengthM) || isNaN(retainedHeightM)) return
+    if (!profile) return
+    // still written for anything reading designs the pre-plan way; the
+    // plan itself is what this page rebuilds corners from
+    const cornerPosts: CornerPosts = {}
+    for (const p of profile.posts) if (p.isCorner) cornerPosts[p.index] = true
     await saveDesign(name, {
-      wallLengthM,
+      wallLengthM: Math.round(wallLengthM * 1000) / 1000,
       retainedHeightM,
       soil,
       rlDatumM,
       controlPoints,
       cornerPosts,
+      planPoints,
+      retainedSide,
+      augerDiameterMm,
       topCapEnabled,
       calcSettings,
     })
   }
 
   const handleOpenDesign = (design: SavedWallDesign) => {
-    setWallLength(String(design.wallLengthM))
+    setPlanPoints(
+      design.planPoints ?? legacyPlan(design.wallLengthM, design.retainedHeightM, design.soil, design.cornerPosts, design.calcSettings)
+    )
+    setRetainedSide(design.retainedSide)
+    setAugerDiameter(design.augerDiameterMm ? String(design.augerDiameterMm) : "")
+    setElevationView("all")
     setRetainedHeight(String(design.retainedHeightM))
     setSoil(design.soil)
     setRlDatum(String(design.rlDatumM))
     setCalcSettings(design.calcSettings)
     setCalcSettingsName(`From "${design.name}"`)
     setControlPoints(design.controlPoints)
-    setCornerPosts(design.cornerPosts)
     setTopCapEnabled(design.topCapEnabled)
     setSelectedIndex(null)
   }
@@ -157,9 +198,10 @@ const RetainingWallsPage = () => {
           <h1>Retaining Wall Calculator</h1>
           <p className={styles.intro}>
             A rough DIY materials and labour estimate for a straightforward timber post-and-board
-            retaining wall. Enter your wall length, retained height, and ground conditions to start
-            — then tap any post in the diagram to set its own ground level and top level by hand;
-            posts in between rake (slope evenly) between whichever posts you&apos;ve set.
+            retaining wall. Enter your wall length, retained height, and ground conditions to start,
+            shape the wall in the plan — add corners and drag them into place — then tap any post in
+            an elevation to set its own ground level and top level by hand; posts in between rake
+            (slope evenly) between whichever posts you&apos;ve set.
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -184,19 +226,19 @@ const RetainingWallsPage = () => {
 
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
-          <label htmlFor="wallLength">Wall length (m)</label>
-          <input
-            id="wallLength"
-            type="number"
-            min={0.1}
-            step={0.1}
-            inputMode="decimal"
-            value={wallLength}
-            onChange={(e) => {
-              setWallLength(e.target.value)
-              resetProfile()
-            }}
-          />
+          <label htmlFor="wallLength">{planPoints.length > 2 ? "Total wall length (m)" : "Wall length (m)"}</label>
+          {planPoints.length > 2 ? (
+            // with corners, each wall's own length is set in the plan
+            <input id="wallLength" type="text" readOnly value={wallLengthM.toFixed(2)} title="Set each wall's length in the plan below" />
+          ) : (
+            <NumField
+              id="wallLength"
+              min={0.1}
+              step={0.1}
+              value={Number(wallLengthM.toFixed(3))}
+              onChange={(v) => handlePlanChange(setSegmentLength(planPoints, 0, v))}
+            />
+          )}
         </div>
         <div className={styles.field}>
           <label htmlFor="retainedHeight">Retained height (m)</label>
@@ -241,6 +283,25 @@ const RetainingWallsPage = () => {
             onChange={(e) => setRlDatum(e.target.value)}
           />
         </div>
+        <div className={styles.field}>
+          <label htmlFor="augerDiameter">Auger size (mm)</label>
+          <input
+            id="augerDiameter"
+            type="number"
+            min={50}
+            step={25}
+            inputMode="numeric"
+            list="augerSizes"
+            placeholder={`Auto — ${calcSettings.holeDiameterMultiplier} × post width`}
+            value={augerDiameter}
+            onChange={(e) => setAugerDiameter(e.target.value)}
+          />
+          <datalist id="augerSizes">
+            {AUGER_SIZES_MM.map((mm) => (
+              <option key={mm} value={mm} />
+            ))}
+          </datalist>
+        </div>
       </form>
 
       <button type="button" className={styles.referenceLink} onClick={() => setShowReferenceTable(true)}>
@@ -264,6 +325,22 @@ const RetainingWallsPage = () => {
       <SaveDesignModal isOpen={showSave} onClose={() => setShowSave(false)} onSave={handleSaveDesignSubmit} />
       <OpenDesignModal isOpen={showOpen} onClose={() => setShowOpen(false)} designs={savedDesigns} onOpen={handleOpenDesign} />
 
+      <div className={styles.diagramCard}>
+        <div className={styles.diagramCardHeader}>
+          <h3>Plan</h3>
+        </div>
+        <WallPlanView
+          points={planPoints}
+          retainedSide={retainedSide}
+          profile={profile}
+          selectedSegment={shownSegment}
+          selectedPostIndex={selectedIndex}
+          onChange={handlePlanChange}
+          onRetainedSideChange={setRetainedSide}
+          onSelectSegment={setElevationView}
+        />
+      </div>
+
       {!profile ? (
         <p className={styles.hint}>Enter a wall length and retained height to see a materials estimate.</p>
       ) : (
@@ -284,19 +361,60 @@ const RetainingWallsPage = () => {
 
           <div className={styles.diagramCard}>
             <div className={styles.diagramCardHeader}>
-              <h3>Elevation</h3>
+              <h3>
+                {shownSegment !== null
+                  ? `Elevation — Wall ${segmentLabel(shownSegment)}`
+                  : profile.segments.length > 1
+                    ? "Elevation — whole wall, unfolded"
+                    : "Elevation"}
+              </h3>
               <label className={styles.topCapToggle}>
                 <input type="checkbox" checked={topCapEnabled} onChange={(e) => setTopCapEnabled(e.target.checked)} />
                 <span>Add top cap</span>
               </label>
             </div>
+            {profile.segments.length > 1 && (
+              <div className={styles.elevationTabs} role="tablist" aria-label="Elevation to view">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={shownSegment === null}
+                  className={shownSegment === null ? styles.elevationTabActive : styles.elevationTab}
+                  onClick={() => setElevationView("all")}
+                >
+                  All
+                </button>
+                {profile.segments.map((seg) => (
+                  <button
+                    key={seg.index}
+                    type="button"
+                    role="tab"
+                    aria-selected={shownSegment === seg.index}
+                    className={shownSegment === seg.index ? styles.elevationTabActive : styles.elevationTab}
+                    onClick={() => setElevationView(seg.index)}
+                  >
+                    {segmentLabel(seg.index)} · {seg.lengthM.toFixed(2)} m
+                  </button>
+                ))}
+              </div>
+            )}
             <WallProfileDiagram
               profile={profile}
               settings={calcSettings}
               topCapEnabled={topCapEnabled}
               selectedIndex={selectedIndex}
               onSelectPost={setSelectedIndex}
+              segmentIndex={shownSegment}
+              mirrored={mirrored}
             />
+            <p className={styles.viewNote}>
+              Seen from the low side, facing the retained ground
+              {profile.segments.length > 1 &&
+                (shownSegment !== null
+                  ? ` — corner to corner along wall ${segmentLabel(shownSegment)}.`
+                  : ` — walls ${mirrored ? "run right to left" : "run left to right"} from A, each corner flattened out.`)}
+              {profile.segments.length === 1 && "."}
+            </p>
           </div>
 
           {selectedPost && (
@@ -324,10 +442,12 @@ const RetainingWallsPage = () => {
                   />
                 </div>
               </div>
-              <label className={styles.cornerToggle}>
-                <input type="checkbox" checked={selectedPost.isCorner} onChange={handleToggleCorner} />
-                <span>Corner post — a facing board can&apos;t run through it, so a joint is forced here</span>
-              </label>
+              {selectedPost.isCorner && (
+                <p className={styles.cornerNote}>
+                  Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
+                  in the plan.
+                </p>
+              )}
               <div className={styles.editActions}>
                 <Button size="small" onClick={handleSaveControlPoint}>
                   Save
@@ -351,9 +471,16 @@ const RetainingWallsPage = () => {
                   title="Posts"
                   rows={[
                     ...profile.postsBySize.map((s) => ({ label: s.sizeLabel, value: `${s.count}` })),
-                    { label: "Total fill (concrete/gravel)", value: formatM3(profile.totalFillVolumeM3) },
+                    {
+                      label: augerDiameterMm ? "Hole diameter (auger)" : "Hole diameter",
+                      value: profile.holeDiametersM.map((d) => `${Math.round(d * 1000)}mm`).join(" / "),
+                    },
+                    { label: "Concrete, net of posts", value: formatM3(profile.totalConcreteVolumeM3) },
+                    { label: "Concrete + 10% waste", value: formatM3(profile.totalConcreteVolumeM3 * 1.1) },
+                    { label: "Gravel base pads", value: formatM3(profile.totalGravelBaseVolumeM3) },
+                    { label: "Total drilled volume", value: formatM3(profile.totalFillVolumeM3) },
                   ]}
-                  note="Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load."
+                  note={`${profile.augerTooSmall ? "⚠ That auger is too small for at least one post here — the post won't fit down the hole. " : ""}Concrete is each hole above its gravel base pad, less the post’s own volume — the figure to order from, before the 10% allowance for over-dug holes and spillage. Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load.`}
                 />
                 <SpecCard
                   title="Boards"

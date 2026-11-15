@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { ProfilePost, WallProfile } from "./postProfile"
+import { segmentLabel } from "./wallPlan"
 import { CalcSettings } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
 
@@ -32,7 +33,11 @@ function bayCourses(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number) 
  * every post's own level, each post drawn at its own height and embedment,
  * each bay's boards filling the (possibly sloped) area between its two
  * posts. Tap a post to select it — the caller owns what happens with that
- * (see retainingWallsPage.tsx's edit panel). Retaining-wall specific
+ * (see retainingWallsPage.tsx's edit panel). `segmentIndex` narrows the
+ * view to one straight run of the plan (corner post to corner post);
+ * without it the whole wall is drawn unfolded flat, each run labelled.
+ * `mirrored` flips the view left-to-right, for a wall whose face is seen
+ * from the side that puts its start on the right. Retaining-wall specific
  * (reads a WallProfile, not the generic PostSpec/RailSpec), unlike the
  * structures/ components, since a raked profile has no single uniform
  * spec to describe it. */
@@ -42,9 +47,20 @@ const WallProfileDiagram: React.FC<{
   topCapEnabled: boolean
   selectedIndex: number | null
   onSelectPost: (index: number) => void
-}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost }) => {
+  segmentIndex?: number | null
+  mirrored?: boolean
+}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false }) => {
+  const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
+  const fromIndex = segment ? segment.startPostIndex : 0
+  const toIndex = segment ? segment.endPostIndex : profile.posts.length - 1
+  const inView = (postIndex: number) => postIndex >= fromIndex && postIndex <= toIndex
+  // draw-space x: the unfolded distance along the wall, negated when the
+  // view is mirrored (everything below is symmetric about a post's own
+  // centre, so flipping the centres is all a mirror needs)
+  const X = (xM: number) => (mirrored ? -xM : xM)
+
   const geometry = useMemo(() => {
-    const { posts } = profile
+    const posts = profile.posts.slice(fromIndex, toIndex + 1)
     const spanM = posts[posts.length - 1].xM - posts[0].xM
     // leave room above the highest post top for the optional top cap's
     // schematic sliver, same thickness used when actually drawing it
@@ -62,16 +78,21 @@ const WallProfileDiagram: React.FC<{
     const padTop = fontSize * 2.5
     const padBottom = fontSize * 2.5
 
-    const vbMinX = posts[0].xM - padX
+    const vbMinX = (mirrored ? -posts[posts.length - 1].xM : posts[0].xM) - padX
     const vbMinY = -(maxTop + padTop)
     const vbW = spanM + padX * 2
     const vbH = maxTop - minBottom + padTop + padBottom
 
     return { spanM, maxTop, minBottom, fontSize, strokeW, padX, viewBox: `${vbMinX} ${vbMinY} ${vbW} ${vbH}` }
-  }, [profile, settings.boardCourseHeightM, topCapEnabled])
+  }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored])
 
-  const { fontSize, strokeW, viewBox } = geometry
-  const { posts, bays, rlDatumM } = profile
+  const { fontSize, strokeW, viewBox, maxTop } = geometry
+  const { rlDatumM } = profile
+  // `allPosts` stays the full list, since bays and joints refer to posts
+  // by index; `posts`/`bays` are just what this view actually draws
+  const allPosts = profile.posts
+  const posts = allPosts.filter((p) => inView(p.index))
+  const bays = profile.bays.filter((b) => inView(b.leftIndex) && inView(b.rightIndex))
 
   // SVG y grows downward, but "up" in the real world (higher level) should
   // draw higher on screen — flip every level into draw-space once here
@@ -83,10 +104,12 @@ const WallProfileDiagram: React.FC<{
         {/* bay board fill: level courses stacked from the ground, same as a
             real build — only the top course actually follows the rake */}
         {bays.map((bay) => {
-          const a = posts[bay.leftIndex]
-          const b = posts[bay.rightIndex]
+          const a = allPosts[bay.leftIndex]
+          const b = allPosts[bay.rightIndex]
+          const ax = X(a.xM)
+          const bx = X(b.xM)
           if (bay.needsEngineer) {
-            const points = `${a.xM},${y(a.groundLevelM)} ${b.xM},${y(b.groundLevelM)} ${b.xM},${y(b.topLevelM)} ${a.xM},${y(a.topLevelM)}`
+            const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topLevelM)} ${ax},${y(a.topLevelM)}`
             return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
           }
           const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b, settings.boardCourseHeightM)
@@ -99,9 +122,9 @@ const WallProfileDiagram: React.FC<{
               {levelCourses.map((c) => (
                 <rect
                   key={c.y0}
-                  x={a.xM}
+                  x={Math.min(ax, bx)}
                   y={y(c.y1)}
-                  width={b.xM - a.xM}
+                  width={Math.abs(bx - ax)}
                   height={c.y1 - c.y0}
                   className={styles.bayFill}
                   strokeWidth={strokeW * 0.4}
@@ -110,13 +133,13 @@ const WallProfileDiagram: React.FC<{
               {/* top/perimeter board — the piece that actually follows the
                   rake, visually distinct from the level courses below it */}
               <polygon
-                points={`${a.xM},${y(capTopM)} ${b.xM},${y(capTopM)} ${b.xM},${y(capTopBM)} ${a.xM},${y(capTopAM)}`}
+                points={`${ax},${y(capTopM)} ${bx},${y(capTopM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
                 className={styles.topBoardFill}
                 strokeWidth={strokeW * 0.4}
               />
               {topCapEnabled && (
                 <polygon
-                  points={`${a.xM},${y(capTopAM)} ${b.xM},${y(capTopBM)} ${b.xM},${y(capTopBM + capThicknessM)} ${a.xM},${y(capTopAM + capThicknessM)}`}
+                  points={`${ax},${y(capTopAM)} ${bx},${y(capTopBM)} ${bx},${y(capTopBM + capThicknessM)} ${ax},${y(capTopAM + capThicknessM)}`}
                   className={styles.topCapFill}
                   strokeWidth={strokeW * 0.3}
                 />
@@ -129,7 +152,7 @@ const WallProfileDiagram: React.FC<{
         {posts.map((p) => (
           <rect
             key={`hole-${p.index}`}
-            x={p.xM - p.holeDiameterM / 2}
+            x={X(p.xM) - p.holeDiameterM / 2}
             y={y(p.groundLevelM)}
             width={p.holeDiameterM}
             height={p.embedmentM}
@@ -143,11 +166,12 @@ const WallProfileDiagram: React.FC<{
         {posts.map((p) => {
           const postDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
           const cls = p.needsEngineer ? styles.postBlocked : styles.postAbove
+          const px = X(p.xM)
           return (
             <g key={`post-${p.index}`}>
-              <rect x={p.xM - p.widthM / 2} y={y(p.topLevelM)} width={p.widthM} height={p.retainedHeightM} className={cls} />
+              <rect x={px - p.widthM / 2} y={y(p.topLevelM)} width={p.widthM} height={p.retainedHeightM} className={cls} />
               <rect
-                x={p.xM - p.widthM / 2}
+                x={px - p.widthM / 2}
                 y={y(p.groundLevelM)}
                 width={p.widthM}
                 height={postDepthM}
@@ -155,22 +179,22 @@ const WallProfileDiagram: React.FC<{
                 strokeWidth={strokeW * 0.5}
               />
               {p.isControlPoint && (
-                <circle cx={p.xM} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
+                <circle cx={px} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
               )}
               {p.isCorner && (
                 <rect
-                  x={p.xM - strokeW * 3}
+                  x={px - strokeW * 3}
                   y={y(p.groundLevelM) - strokeW * 3}
                   width={strokeW * 6}
                   height={strokeW * 6}
-                  transform={`rotate(45 ${p.xM} ${y(p.groundLevelM)})`}
+                  transform={`rotate(45 ${px} ${y(p.groundLevelM)})`}
                   strokeWidth={strokeW * 0.5}
                   className={styles.cornerMark}
                 />
               )}
               {p.index === selectedIndex && (
                 <rect
-                  x={p.xM - p.widthM}
+                  x={px - p.widthM}
                   y={y(p.topLevelM) - fontSize * 0.6}
                   width={p.widthM * 2}
                   height={p.retainedHeightM + p.embedmentM + fontSize * 0.6}
@@ -181,7 +205,7 @@ const WallProfileDiagram: React.FC<{
               {/* generous invisible tap target — the post itself is often
                   too thin to reliably hit on a phone */}
               <rect
-                x={p.xM - Math.max(p.widthM, fontSize) / 1.3}
+                x={px - Math.max(p.widthM, fontSize) / 1.3}
                 y={y(p.topLevelM)}
                 width={Math.max(p.widthM, fontSize) * 1.6}
                 height={p.retainedHeightM + p.embedmentM}
@@ -206,15 +230,16 @@ const WallProfileDiagram: React.FC<{
             are kept subtle since there can be many, stacked one per row;
             top board/cap joints are bolder since there's at most one per
             post and they matter more structurally */}
-        {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].map((j, idx) => {
-          const p = posts[j.postIndex]
+        {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].filter((j) => inView(j.postIndex)).map((j, idx) => {
+          const p = allPosts[j.postIndex]
+          const px = X(p.xM)
           const tickHalfW = p.widthM * 0.9
           const cls = j.layer === "course" ? styles.jointMarkCourse : j.layer === "topBoard" ? styles.jointMarkTopBoard : styles.jointMarkTopCap
           return (
             <line
               key={`joint-${j.layer}-${j.postIndex}-${idx}`}
-              x1={p.xM - tickHalfW}
-              x2={p.xM + tickHalfW}
+              x1={px - tickHalfW}
+              x2={px + tickHalfW}
               y1={y(j.levelM)}
               y2={y(j.levelM)}
               className={cls}
@@ -225,15 +250,32 @@ const WallProfileDiagram: React.FC<{
 
         {/* ground and top-of-wall lines, following the actual rake */}
         <polyline
-          points={posts.map((p) => `${p.xM},${y(p.groundLevelM)}`).join(" ")}
+          points={posts.map((p) => `${X(p.xM)},${y(p.groundLevelM)}`).join(" ")}
           className={styles.groundLine}
           strokeWidth={strokeW}
         />
         <polyline
-          points={posts.map((p) => `${p.xM},${y(p.topLevelM)}`).join(" ")}
+          points={posts.map((p) => `${X(p.xM)},${y(p.topLevelM)}`).join(" ")}
           className={styles.topLine}
           strokeWidth={strokeW * 0.7}
         />
+
+        {/* whole-wall view of a wall with corners: name each run above it,
+            matching the plan's labels */}
+        {!segment &&
+          profile.segments.length > 1 &&
+          profile.segments.map((seg) => (
+            <text
+              key={`seg-${seg.index}`}
+              x={X((seg.startXM + seg.endXM) / 2)}
+              y={y(maxTop) - fontSize * 1.1}
+              fontSize={fontSize}
+              textAnchor="middle"
+              className={styles.segmentLabel}
+            >
+              {segmentLabel(seg.index)}
+            </text>
+          ))}
       </svg>
 
       <div className={styles.legend}>
