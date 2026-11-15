@@ -3,7 +3,7 @@ import { initializeApp, getApps } from "firebase/app"
 import { getAnalytics } from "firebase/analytics"
 import { Auth, getAuth } from "firebase/auth"
 import { FirebaseStorage, getStorage } from "firebase/storage"
-import { Firestore, getFirestore } from "firebase/firestore"
+import { Firestore, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore"
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -29,7 +29,15 @@ if (!currentApps.length) {
   const app = initializeApp(firebaseConfig)
   auth = getAuth(app)
   storage = getStorage(app)
-  firestore = getFirestore(app)
+  // In the browser, keep Firestore's cache on the device (IndexedDB, shared
+  // across tabs) rather than in memory: documents read once can be read
+  // again with no connection, and writes made offline survive a reload and
+  // sync when the connection comes back. On the server there's no
+  // IndexedDB — plain in-memory Firestore, as before.
+  firestore =
+    typeof window !== "undefined"
+      ? initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) })
+      : getFirestore(app)
 } else {
   const app = currentApps[0]
   auth = getAuth(app)

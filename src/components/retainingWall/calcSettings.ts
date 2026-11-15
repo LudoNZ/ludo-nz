@@ -74,6 +74,40 @@ export function findReferenceRow(settings: CalcSettings, retainedHeightM: number
   return rows.find((r) => retainedHeightM <= r.maxHeightM + 1e-6) ?? rows[rows.length - 1]
 }
 
+/** Post sizes offered when overriding the table with one size for every
+ * post — square sawn posts and round (SED) poles. Any label works as long
+ * as it starts with its size in mm and says "round" if it's a pole. */
+export const POST_SIZE_OPTIONS = [
+  "100 x 100mm",
+  "125 x 125mm",
+  "150 x 150mm",
+  "200 x 200mm",
+  "125mm round",
+  "150mm round",
+  "175mm round",
+  "200mm round",
+  "225mm round",
+  "250mm round",
+]
+
+/** Face width (square) or diameter (round) of a post, read off the
+ * leading number in its label — "150 x 150mm", "150mm round". */
 export function postWidthM(sizeLabel: string): number {
-  return sizeLabel.startsWith("100") ? 0.1 : 0.15
+  const mm = parseFloat(sizeLabel)
+  return mm >= 50 && mm <= 600 ? mm / 1000 : 0.15
+}
+
+export const isRoundPost = (sizeLabel: string): boolean => /round|sed|dia/i.test(sizeLabel)
+
+/** m², the post's cross-section — what it displaces in its hole */
+export function postSectionAreaM2(sizeLabel: string): number {
+  const w = postWidthM(sizeLabel)
+  return isRoundPost(sizeLabel) ? (Math.PI * w * w) / 4 : w * w
+}
+
+/** m, the smallest hole the post will physically drop into: its own
+ * diameter if round, corner to corner if square */
+export function postFitDiameterM(sizeLabel: string): number {
+  const w = postWidthM(sizeLabel)
+  return isRoundPost(sizeLabel) ? w : w * Math.SQRT2
 }

@@ -36,23 +36,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       setCurrentUser(user ?? null)
-      if (user) {
-        let tokenResult = await user.getIdTokenResult()
-        let token = tokenResult.token
-        const refreshToken = user.refreshToken
-        if (token && refreshToken) {
-          const { claimsUpdated } = await setToken({ token, refreshToken })
-          if (claimsUpdated) {
-            tokenResult = await user.getIdTokenResult(true)
-            token = tokenResult.token
-            await setToken({ token, refreshToken })
+      // Everything below talks to the network (a token refresh, and the
+      // server actions that mirror the token into a cookie). Who's signed
+      // in is already known by this point — Firebase restores it from the
+      // device — so a failure here (most often: no connection) must not
+      // leave authLoading stuck on true, which would hang every page that
+      // waits on it, including the ones meant to work offline.
+      try {
+        if (user) {
+          let tokenResult = await user.getIdTokenResult()
+          let token = tokenResult.token
+          const refreshToken = user.refreshToken
+          if (token && refreshToken) {
+            const { claimsUpdated } = await setToken({ token, refreshToken })
+            if (claimsUpdated) {
+              tokenResult = await user.getIdTokenResult(true)
+              token = tokenResult.token
+              await setToken({ token, refreshToken })
+            }
           }
+          setCustomClaims(tokenResult.claims ?? null)
+        } else {
+          await removeToken()
         }
-        setCustomClaims(tokenResult.claims ?? null)
-      } else {
-        await removeToken()
+      } catch (err) {
+        console.warn("Couldn't sync the sign-in token (offline?)", err)
+      } finally {
+        setAuthLoading(false)
       }
-      setAuthLoading(false)
     })
     return () => unsubscribe()
   }, [])

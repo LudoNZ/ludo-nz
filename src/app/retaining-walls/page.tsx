@@ -1,5 +1,5 @@
-import RetainingWallsPage from "./retainingWallsPage"
+import RetainingWallProjectsPage from "./retainingWallProjectsPage"
 
 export default function Page() {
-  return <RetainingWallsPage />
+  return <RetainingWallProjectsPage />
 }

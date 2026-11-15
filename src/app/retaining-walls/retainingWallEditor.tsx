@@ -1,67 +1,70 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { ReactNode, useEffect, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import SpecCard from "@/components/structures/specCard"
 import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
-import { SaveIcon, OpenIcon, SettingsIcon } from "@/components/icons/icons"
+import { SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
-import { buildWallProfile, ControlPoints, CornerPosts, legacyPlan, segmentBayCounts } from "@/components/retainingWall/postProfile"
+import { buildWallProfile, ControlPoints, segmentBayCounts } from "@/components/retainingWall/postProfile"
+import { overridesForWall, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
   RetainedSide,
   segmentLabel,
   segmentLengths,
   setSegmentLength,
-  straightPlan,
   totalLength,
 } from "@/components/retainingWall/wallPlan"
-import { CalcSettings, DEFAULT_CALC_SETTINGS, findReferenceRow } from "@/components/retainingWall/calcSettings"
+import { CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
-import {
-  saveDesign,
-  SavedCalcSettings,
-  SavedWallDesign,
-  subscribeToCalcSettingsList,
-  subscribeToDesigns,
-} from "@/components/retainingWall/retainingWallData"
+import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import ReferenceTableModal from "./referenceTableModal"
 import SettingsPanel from "./settingsPanel"
-import { OpenDesignModal, SaveDesignModal } from "./designModals"
-import styles from "./retainingWallsPage.module.scss"
+import styles from "./retainingWallEditor.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
 /** common hire/contractor auger diameters, offered as suggestions — any
  * size can still be typed */
 const AUGER_SIZES_MM = [200, 250, 300, 350, 400, 450, 500, 600]
 
-const RetainingWallsPage = () => {
+/** The retaining wall calculator itself, with no idea where its wall is
+ * kept: it starts from `initial` (read once, on mount — the caller mounts
+ * it only once the wall has loaded), owns the wall from then on, and
+ * reports every change up through `onChange`. The pages around it decide
+ * what a change means — autosave to a project, or stash in this browser. */
+const RetainingWallEditor: React.FC<{
+  initial: WallProject
+  onChange: (wall: WallProject) => void
+  header: ReactNode
+}> = ({ initial, onChange, header }) => {
   // the wall's shape seen from above: an open run of straight walls (A,
   // B, C…) joined at corners. Total wall length is just this unfolded.
-  const [planPoints, setPlanPoints] = useState<PlanPoint[]>(() => straightPlan(5))
+  const [planPoints, setPlanPoints] = useState<PlanPoint[]>(initial.planPoints)
   // which side of the wall (walking it from A onward) the ground is held
   // back on — decides which face the elevations are looking at
-  const [retainedSide, setRetainedSide] = useState<RetainedSide>("left")
+  const [retainedSide, setRetainedSide] = useState<RetainedSide>(initial.retainedSide)
   // which run's elevation is showing, or the whole wall unfolded flat
   const [elevationView, setElevationView] = useState<number | "all">("all")
-  const [retainedHeight, setRetainedHeight] = useState("1.0")
-  const [soil, setSoil] = useState<SoilType>("firmClay")
-  const [rlDatum, setRlDatum] = useState("0")
+  const [retainedHeight, setRetainedHeight] = useState(String(initial.retainedHeightM))
+  const [soil, setSoil] = useState<SoilType>(initial.soil)
+  const [rlDatum, setRlDatum] = useState(String(initial.rlDatumM))
   // mm, the auger the holes are being drilled with; blank = size each
   // hole off its own post (the calc settings' multiplier) instead
-  const [augerDiameter, setAugerDiameter] = useState("")
+  const [augerDiameter, setAugerDiameter] = useState(initial.augerDiameterMm ? String(initial.augerDiameterMm) : "")
+  // one post size / one hole depth for the whole wall, replacing what the
+  // reference table would work out post by post; blank = calculated
+  const [postSizeOverride, setPostSizeOverride] = useState(initial.postSizeOverride ?? "")
+  const [holeDepth, setHoleDepth] = useState(initial.holeDepthOverrideMm ? String(initial.holeDepthOverrideMm) : "")
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [showSave, setShowSave] = useState(false)
-  const [showOpen, setShowOpen] = useState(false)
 
-  const [calcSettings, setCalcSettings] = useState<CalcSettings>(DEFAULT_CALC_SETTINGS)
-  const [calcSettingsName, setCalcSettingsName] = useState("Default")
+  const [calcSettings, setCalcSettings] = useState<CalcSettings>(initial.calcSettings)
+  const [calcSettingsName, setCalcSettingsName] = useState(initial.calcSettingsName)
   const [presets, setPresets] = useState<SavedCalcSettings[]>([])
-  const [savedDesigns, setSavedDesigns] = useState<SavedWallDesign[]>([])
 
   // keyed by post index — a post with an entry here is "set by hand"; every
   // other post rakes (linearly interpolates) between whichever of these
@@ -70,10 +73,10 @@ const RetainingWallsPage = () => {
   // index would silently apply to the wrong physical post otherwise.
   // Reshaping the plan only resets these when it actually changes how
   // many posts a run gets — see handlePlanChange.
-  const [controlPoints, setControlPoints] = useState<ControlPoints>({})
+  const [controlPoints, setControlPoints] = useState<ControlPoints>(initial.controlPoints)
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
-  const [topCapEnabled, setTopCapEnabled] = useState(false)
+  const [topCapEnabled, setTopCapEnabled] = useState(initial.topCapEnabled)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -83,10 +86,6 @@ const RetainingWallsPage = () => {
     return () => unsubscribe()
   }, [])
 
-  useEffect(() => {
-    const unsubscribe = subscribeToDesigns(setSavedDesigns, () => {})
-    return () => unsubscribe()
-  }, [])
 
   const wallLengthM = totalLength(planPoints)
   const segmentLengthsM = segmentLengths(planPoints)
@@ -94,6 +93,40 @@ const RetainingWallsPage = () => {
   const rlDatumM = parseFloat(rlDatum) || 0
   const augerDiameterParsed = parseFloat(augerDiameter)
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
+  const holeDepthParsed = parseFloat(holeDepth)
+  const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm })
+
+  // report the wall upward whenever anything saveable actually changes.
+  // The first pass only records what the wall looked like on mount
+  // (nothing has changed yet — reporting would mark a freshly opened
+  // project as edited); it's also skipped while the height box is
+  // mid-edit and unparseable, so a half-typed number never gets saved.
+  const lastReported = useRef<string | null>(null)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  useEffect(() => {
+    if (!(retainedHeightM > 0)) return
+    const wall: WallProject = {
+      planPoints,
+      retainedSide,
+      retainedHeightM,
+      soil,
+      rlDatumM,
+      augerDiameterMm,
+      postSizeOverride: postSizeOverride || null,
+      holeDepthOverrideMm,
+      controlPoints,
+      topCapEnabled,
+      calcSettings,
+      calcSettingsName,
+    }
+    const json = JSON.stringify(wall)
+    const previous = lastReported.current
+    lastReported.current = json
+    if (previous === null || previous === json) return
+    onChangeRef.current(wall)
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, controlPoints, topCapEnabled, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
@@ -101,7 +134,7 @@ const RetainingWallsPage = () => {
   }
 
   const profile = !isNaN(retainedHeightM)
-    ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, augerDiameterMm ? augerDiameterMm / 1000 : null)
+    ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, overrides)
     : null
 
   // a run that no longer exists (corner removed, design swapped) falls
@@ -112,6 +145,16 @@ const RetainingWallsPage = () => {
   // retained on the right, the viewer is round the other side and the
   // whole thing reads right-to-left
   const mirrored = retainedSide === "right"
+  // the materials cards follow the elevation: the whole wall under "All",
+  // or just the one run being looked at
+  const totals = profile ? (shownSegment !== null ? profile.segmentTotals[shownSegment] : profile) : null
+  const forWall = shownSegment !== null ? ` — Wall ${segmentLabel(shownSegment)}` : ""
+  const postList = (indices: number[]) => indices.map((i) => `#${i + 1}`).join(", ")
+  const mmRange = (minM: number, maxM: number) => {
+    const lo = Math.round(minM * 1000)
+    const hi = Math.round(maxM * 1000)
+    return lo === hi ? `${lo}mm` : `${lo}–${hi}mm`
+  }
 
   const handlePlanChange = (next: PlanPoint[]) => {
     const before = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings)
@@ -153,49 +196,11 @@ const RetainingWallsPage = () => {
     resetProfile()
   }
 
-  const handleSaveDesignSubmit = async (name: string) => {
-    if (!profile) return
-    // still written for anything reading designs the pre-plan way; the
-    // plan itself is what this page rebuilds corners from
-    const cornerPosts: CornerPosts = {}
-    for (const p of profile.posts) if (p.isCorner) cornerPosts[p.index] = true
-    await saveDesign(name, {
-      wallLengthM: Math.round(wallLengthM * 1000) / 1000,
-      retainedHeightM,
-      soil,
-      rlDatumM,
-      controlPoints,
-      cornerPosts,
-      planPoints,
-      retainedSide,
-      augerDiameterMm,
-      topCapEnabled,
-      calcSettings,
-    })
-  }
-
-  const handleOpenDesign = (design: SavedWallDesign) => {
-    setPlanPoints(
-      design.planPoints ?? legacyPlan(design.wallLengthM, design.retainedHeightM, design.soil, design.cornerPosts, design.calcSettings)
-    )
-    setRetainedSide(design.retainedSide)
-    setAugerDiameter(design.augerDiameterMm ? String(design.augerDiameterMm) : "")
-    setElevationView("all")
-    setRetainedHeight(String(design.retainedHeightM))
-    setSoil(design.soil)
-    setRlDatum(String(design.rlDatumM))
-    setCalcSettings(design.calcSettings)
-    setCalcSettingsName(`From "${design.name}"`)
-    setControlPoints(design.controlPoints)
-    setTopCapEnabled(design.topCapEnabled)
-    setSelectedIndex(null)
-  }
-
   return (
     <div className={styles.retainingWallsPage}>
+      {header}
       <div className={styles.headerRow}>
         <div>
-          <h1>Retaining Wall Calculator</h1>
           <p className={styles.intro}>
             A rough DIY materials and labour estimate for a straightforward timber post-and-board
             retaining wall. Enter your wall length, retained height, and ground conditions to start,
@@ -207,12 +212,6 @@ const RetainingWallsPage = () => {
         <div className={styles.headerActions}>
           <Button size="icon" variant="secondary" onClick={() => setShowSettings(true)} ariaLabel="Calculation settings">
             <SettingsIcon />
-          </Button>
-          <Button size="icon" variant="secondary" onClick={() => setShowSave(true)} ariaLabel="Save this wall">
-            <SaveIcon />
-          </Button>
-          <Button size="icon" variant="secondary" onClick={() => setShowOpen(true)} ariaLabel="Open a saved wall">
-            <OpenIcon />
           </Button>
         </div>
       </div>
@@ -283,6 +282,41 @@ const RetainingWallsPage = () => {
             onChange={(e) => setRlDatum(e.target.value)}
           />
         </div>
+      </form>
+
+      <h3 className={styles.overridesHeading}>Posts and holes</h3>
+      <p className={styles.overridesHint}>
+        Leave a box on Auto to have it worked out post by post from the reference table and each post&apos;s own
+        height, or set it to use the same value for every post on the wall.
+      </p>
+      <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
+        <div className={styles.field}>
+          <label htmlFor="postSize">Post size</label>
+          <select id="postSize" value={postSizeOverride} onChange={(e) => setPostSizeOverride(e.target.value)}>
+            <option value="">Auto — from the table</option>
+            {POST_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                All {size}
+              </option>
+            ))}
+            {postSizeOverride && !POST_SIZE_OPTIONS.includes(postSizeOverride) && (
+              <option value={postSizeOverride}>All {postSizeOverride}</option>
+            )}
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="holeDepth">Hole depth (mm)</label>
+          <input
+            id="holeDepth"
+            type="number"
+            min={100}
+            step={50}
+            inputMode="numeric"
+            placeholder="Auto — by post height"
+            value={holeDepth}
+            onChange={(e) => setHoleDepth(e.target.value)}
+          />
+        </div>
         <div className={styles.field}>
           <label htmlFor="augerDiameter">Auger size (mm)</label>
           <input
@@ -292,7 +326,7 @@ const RetainingWallsPage = () => {
             step={25}
             inputMode="numeric"
             list="augerSizes"
-            placeholder={`Auto — ${calcSettings.holeDiameterMultiplier} × post width`}
+            placeholder={`Auto — ${calcSettings.holeDiameterMultiplier} × post`}
             value={augerDiameter}
             onChange={(e) => setAugerDiameter(e.target.value)}
           />
@@ -322,8 +356,6 @@ const RetainingWallsPage = () => {
         presets={presets}
         onApply={handleApplySettings}
       />
-      <SaveDesignModal isOpen={showSave} onClose={() => setShowSave(false)} onSave={handleSaveDesignSubmit} />
-      <OpenDesignModal isOpen={showOpen} onClose={() => setShowOpen(false)} designs={savedDesigns} onOpen={handleOpenDesign} />
 
       <div className={styles.diagramCard}>
         <div className={styles.diagramCardHeader}>
@@ -464,58 +496,74 @@ const RetainingWallsPage = () => {
             </div>
           )}
 
-          {!allBlocked && (
+          {!allBlocked && totals && (
             <>
+              {profile.segments.length > 1 && (
+                <p className={styles.breakdownNote}>
+                  {shownSegment !== null
+                    ? `Materials below are for wall ${segmentLabel(shownSegment)} only (posts ${postList(totals.postIndices) || "none"}). A corner post is counted with the wall it finishes, so the walls add up to the whole-wall figures — pick “All” above for those.`
+                    : "Materials below are for the whole wall. Pick a wall above (or tap it in the plan) to see just that wall’s share."}
+                </p>
+              )}
               <div className={styles.resultsGrid}>
                 <SpecCard
-                  title="Posts"
+                  title={`Posts${forWall}`}
                   rows={[
-                    ...profile.postsBySize.map((s) => ({ label: s.sizeLabel, value: `${s.count}` })),
+                    ...totals.postsBySize.map((s) => ({ label: s.sizeLabel, value: `${s.count}` })),
                     {
                       label: augerDiameterMm ? "Hole diameter (auger)" : "Hole diameter",
-                      value: profile.holeDiametersM.map((d) => `${Math.round(d * 1000)}mm`).join(" / "),
+                      value: totals.holeDiametersM.map((d) => `${Math.round(d * 1000)}mm`).join(" / ") || "—",
                     },
-                    { label: "Concrete, net of posts", value: formatM3(profile.totalConcreteVolumeM3) },
-                    { label: "Concrete + 10% waste", value: formatM3(profile.totalConcreteVolumeM3 * 1.1) },
-                    { label: "Gravel base pads", value: formatM3(profile.totalGravelBaseVolumeM3) },
-                    { label: "Total drilled volume", value: formatM3(profile.totalFillVolumeM3) },
+                    {
+                      label: holeDepthOverrideMm ? "Hole depth (set)" : "Hole depth",
+                      value: totals.postIndices.length ? mmRange(totals.minHoleDepthM, totals.maxHoleDepthM) : "—",
+                    },
+                    { label: "Concrete, net of posts", value: formatM3(totals.totalConcreteVolumeM3) },
+                    { label: "Concrete + 10% waste", value: formatM3(totals.totalConcreteVolumeM3 * 1.1) },
+                    { label: "Gravel base pads", value: formatM3(totals.totalGravelBaseVolumeM3) },
+                    { label: "Total drilled volume", value: formatM3(totals.totalFillVolumeM3) },
                   ]}
-                  note={`${profile.augerTooSmall ? "⚠ That auger is too small for at least one post here — the post won't fit down the hole. " : ""}Concrete is each hole above its gravel base pad, less the post’s own volume — the figure to order from, before the 10% allowance for over-dug holes and spillage. Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load.`}
+                  note={`${totals.augerTooSmall ? "⚠ That auger is too small for at least one post here — the post won't fit down the hole. " : ""}${totals.shallowHolePostIndices.length ? `⚠ The set hole depth is shallower than the reference table gives for post${totals.shallowHolePostIndices.length > 1 ? "s" : ""} ${postList(totals.shallowHolePostIndices)}. ` : ""}${totals.undersizedPostIndices.length ? `⚠ The set post size is smaller than the reference table gives for post${totals.undersizedPostIndices.length > 1 ? "s" : ""} ${postList(totals.undersizedPostIndices)}. ` : ""}Hole depth is from the post's ground level to the bottom of the hole, gravel base pad included. Concrete is each hole above its gravel base pad, less the post’s own volume — the figure to order from, before the 10% allowance for over-dug holes and spillage. Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load.`}
                 />
                 <SpecCard
-                  title="Boards"
+                  title={`Boards${forWall}`}
                   rows={[
-                    { label: "Facing boards", value: `${profile.boards.count}` },
-                    { label: "Facing — continuous (2-span)", value: `${profile.boards.twoSpanCount}` },
-                    { label: "Facing — single-span joint", value: `${profile.boards.oneSpanCount}` },
-                    { label: "Top/perimeter board", value: `${profile.topBoard.count}` },
-                    { label: "Top board — continuous (2-span)", value: `${profile.topBoard.twoSpanCount}` },
-                    { label: "Top board — single-span joint", value: `${profile.topBoard.oneSpanCount}` },
-                    ...(profile.topCap
+                    { label: "Facing boards", value: `${totals.boards.count}` },
+                    { label: "Facing — continuous (2-span)", value: `${totals.boards.twoSpanCount}` },
+                    { label: "Facing — single-span joint", value: `${totals.boards.oneSpanCount}` },
+                    { label: "Top/perimeter board", value: `${totals.topBoard.count}` },
+                    { label: "Top board — continuous (2-span)", value: `${totals.topBoard.twoSpanCount}` },
+                    { label: "Top board — single-span joint", value: `${totals.topBoard.oneSpanCount}` },
+                    ...(totals.topCap
                       ? [
-                          { label: "Top cap", value: `${profile.topCap.count}` },
-                          { label: "Top cap — continuous (2-span)", value: `${profile.topCap.twoSpanCount}` },
-                          { label: "Top cap — single-span joint", value: `${profile.topCap.oneSpanCount}` },
+                          { label: "Top cap", value: `${totals.topCap.count}` },
+                          { label: "Top cap — continuous (2-span)", value: `${totals.topCap.twoSpanCount}` },
+                          { label: "Top cap — single-span joint", value: `${totals.topCap.oneSpanCount}` },
                         ]
                       : []),
                     {
                       label: "Total boards, all layers",
-                      value: `${profile.boards.count + profile.topBoard.count + (profile.topCap?.count ?? 0)}`,
+                      value: `${totals.boards.count + totals.topBoard.count + (totals.topCap?.count ?? 0)}`,
                     },
                     {
                       label: "Total length, all layers",
-                      value: formatM(profile.boards.totalLengthM + profile.topBoard.totalLengthM + (profile.topCap?.totalLengthM ?? 0)),
+                      value: formatM(totals.boards.totalLengthM + totals.topBoard.totalLengthM + (totals.topCap?.totalLengthM ?? 0)),
                     },
                     { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
                   ]}
                   note="Every layer (facing courses, the top/perimeter board, and the cap if enabled) is planned as real cut pieces: continuous across two post spans wherever it fits, breaking to a single span only where a corner, an excluded bay, or the standard length forces it. Where joints can't be avoided, each row's joints are staggered onto different posts than the row below — see the elevation diagram's join marks."
                 />
                 <SpecCard
-                  title="Drainage backfill"
-                  rows={[{ label: "Volume", value: formatM3(profile.totalBackfillVolumeM3) }]}
-                  note="Compacted free-draining gravel behind the facing boards, roughly 150mm thick."
+                  title={`Drainage backfill${forWall}`}
+                  rows={[{ label: "Volume", value: formatM3(totals.totalBackfillVolumeM3) }]}
+                  note={`Compacted free-draining gravel behind the facing boards, ${Math.round(calcSettings.backfillThicknessM * 1000)}mm thick.`}
                 />
-                <LaborSummary estimate={profile.labor} infillLabel="Backfill placement (drainage gravel)" />
+                <LaborSummary
+                  estimate={totals.labor}
+                  infillLabel="Backfill placement (drainage gravel)"
+                  title={shownSegment !== null ? `Rough labour estimate${forWall}` : undefined}
+                  hideSetup={shownSegment !== null}
+                />
               </div>
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
@@ -530,4 +578,4 @@ const RetainingWallsPage = () => {
   )
 }
 
-export default RetainingWallsPage
+export default RetainingWallEditor

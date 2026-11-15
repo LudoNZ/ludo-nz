@@ -12,9 +12,12 @@ const EditorHeader: React.FC<{
   badge: string
   status?: ReactNode
   actions?: ReactNode
-}> = ({ name, onRename, badge, status, actions }) => (
+  /** where "← All projects" goes — the weatherboard projects page unless
+   * another calculator's editor says otherwise */
+  backHref?: string
+}> = ({ name, onRename, badge, status, actions, backHref = "/weatherboards" }) => (
   <header className={styles.header}>
-    <Link href="/weatherboards" className={styles.back}>
+    <Link href={backHref} className={styles.back}>
       ← All projects
     </Link>
     <div className={styles.titleRow}>

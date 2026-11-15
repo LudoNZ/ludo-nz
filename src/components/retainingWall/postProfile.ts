@@ -1,7 +1,7 @@
 import { calcHoleVolumeM3 } from "../structures/postRailCalc"
 import { PlanPoint } from "./wallPlan"
 import { LaborEstimate } from "../structures/types"
-import { CalcSettings, findReferenceRow, postWidthM } from "./calcSettings"
+import { CalcSettings, findReferenceRow, postFitDiameterM, postSectionAreaM2, postWidthM } from "./calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
 
 /** A post whose ground level and/or top-of-post level has been set by
@@ -56,7 +56,13 @@ export interface ProfilePost {
   needsEngineer: boolean
   sizeLabel: string
   widthM: number
+  /** m, how deep the hole is drilled below this post's ground level —
+   * structural embedment plus the gravel base pad */
   embedmentM: number
+  /** what the reference table alone would give this post — the same as
+   * sizeLabel/embedmentM unless a uniform override is in force */
+  tableSizeLabel: string
+  tableEmbedmentM: number
   holeDiameterM: number
   /** m³, the whole drilled hole */
   holeVolumeM3: number
@@ -106,12 +112,26 @@ export interface BoardLayerSummary {
   joints: BoardJoint[]
 }
 
-export interface WallProfile {
-  rlDatumM: number
-  /** one per straight run in plan, in order */
-  segments: ProfileSegment[]
-  posts: ProfilePost[]
-  bays: ProfileBay[]
+/** Hand-picked values that replace what the reference table would work
+ * out post by post — each one applies to every post on the wall. Leave
+ * one out (or null) to keep that part calculated. */
+export interface ProfileOverrides {
+  /** m — the auger the holes are actually being drilled with. Without
+   * it, each hole is sized off its own post
+   * (settings.holeDiameterMultiplier). */
+  augerDiameterM?: number | null
+  /** every post is this size, e.g. "150mm round" */
+  postSizeLabel?: string | null
+  /** m — every hole is drilled this deep below its post's ground level,
+   * gravel base pad included */
+  holeDepthM?: number | null
+}
+
+/** The materials and labour for a set of posts and bays — the whole
+ * wall, or just one of its runs. */
+export interface ProfileTotals {
+  /** posts counted here, ascending (engineer-excluded ones left out) */
+  postIndices: number[]
   postsBySize: { sizeLabel: string; count: number }[]
   totalFillVolumeM3: number
   /** m³, concrete to order before any waste allowance — every hole above
@@ -122,9 +142,17 @@ export interface WallProfile {
   /** distinct hole diameters in use, m, ascending — one value when an
    * auger size is set, otherwise one per post size */
   holeDiametersM: number[]
+  /** m, shallowest and deepest hole */
+  minHoleDepthM: number
+  maxHoleDepthM: number
   /** true if any post is too big to drop into its hole (its diagonal is
    * wider than the hole) — only possible with a hand-picked auger */
   augerTooSmall: boolean
+  /** posts whose overridden hole depth is shallower than the reference
+   * table asks for at their height */
+  shallowHolePostIndices: number[]
+  /** posts whose overridden size is smaller than the table's */
+  undersizedPostIndices: number[]
   /** regular level facing-board courses */
   boards: BoardLayerSummary
   /** the continuous perimeter/capping board along the very top of the
@@ -135,6 +163,20 @@ export interface WallProfile {
   topCap: BoardLayerSummary | null
   totalBackfillVolumeM3: number
   labor: LaborEstimate
+}
+
+export interface WallProfile extends ProfileTotals {
+  rlDatumM: number
+  /** one per straight run in plan, in order */
+  segments: ProfileSegment[]
+  posts: ProfilePost[]
+  bays: ProfileBay[]
+  /** the same breakdown for each run on its own, in step with
+   * `segments`. A corner post is counted with the run it finishes (so
+   * only wall A counts its own starting post) and setup time is left
+   * out, which makes the runs add up to the whole-wall totals less
+   * setup. */
+  segmentTotals: ProfileTotals[]
   engineerPostIndices: number[]
 }
 
@@ -379,11 +421,11 @@ export function buildWallProfile(
   topCapEnabled: boolean,
   rlDatumM: number,
   settings: CalcSettings,
-  /** m — the auger the holes are actually being drilled with. Every hole
-   * is this diameter regardless of post size; without it, each hole is
-   * sized off its own post (settings.holeDiameterMultiplier). */
-  augerDiameterM: number | null = null
+  overrides: ProfileOverrides = {}
 ): WallProfile | null {
+  const augerDiameterM = overrides.augerDiameterM && overrides.augerDiameterM > 0 ? overrides.augerDiameterM : null
+  const postSizeOverride = overrides.postSizeLabel || null
+  const holeDepthOverrideM = overrides.holeDepthM && overrides.holeDepthM > 0 ? overrides.holeDepthM : null
   const runLengthsM = segmentLengthsM.filter((l) => l > 0)
   if (runLengthsM.length === 0 || !(retainedHeightM > 0)) return null
 
@@ -431,15 +473,17 @@ export function buildWallProfile(
     // still gets *some* geometry so the diagram can render and flag it,
     // it just never counts toward materials
     const row = findReferenceRow(settings, Math.min(Math.max(localHeightM, 0.01), ENGINEER_HEIGHT_LIMIT_M), soil)
-    const sizeLabel = row.postSizeLabel
+    const tableSizeLabel = row.postSizeLabel
+    const tableEmbedmentM = Math.max(0.01, localHeightM) * row.embedmentRatio + settings.gravelBaseAllowanceM
+    const sizeLabel = postSizeOverride ?? tableSizeLabel
     const widthM = postWidthM(sizeLabel)
-    const embedmentM = Math.max(0.01, localHeightM) * row.embedmentRatio + settings.gravelBaseAllowanceM
-    const holeDiameterM = augerDiameterM && augerDiameterM > 0 ? augerDiameterM : widthM * settings.holeDiameterMultiplier
+    const embedmentM = holeDepthOverrideM ?? tableEmbedmentM
+    const holeDiameterM = augerDiameterM ?? widthM * settings.holeDiameterMultiplier
     const holeVolumeM3 = calcHoleVolumeM3(holeDiameterM, embedmentM)
     // the post stops on top of the gravel base pad, so concrete only
     // fills the hole above the pad, around the post
     const concreteDepthM = Math.max(0, embedmentM - settings.gravelBaseAllowanceM)
-    const concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(holeDiameterM, concreteDepthM) - widthM * widthM * concreteDepthM)
+    const concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(holeDiameterM, concreteDepthM) - postSectionAreaM2(sizeLabel) * concreteDepthM)
     return {
       index: i,
       xM: postXs[i],
@@ -452,6 +496,8 @@ export function buildWallProfile(
       sizeLabel,
       widthM,
       embedmentM,
+      tableSizeLabel,
+      tableEmbedmentM,
       holeDiameterM,
       holeVolumeM3,
       concreteVolumeM3,
@@ -484,47 +530,65 @@ export function buildWallProfile(
     })
   }
 
-  const validPosts = posts.filter((p) => !p.needsEngineer)
-  const sizeCounts = new Map<string, number>()
-  for (const p of validPosts) sizeCounts.set(p.sizeLabel, (sizeCounts.get(p.sizeLabel) ?? 0) + 1)
+  const totalsFor = (countedPosts: ProfilePost[], countedBays: ProfileBay[], setupHours: number): ProfileTotals => {
+    const validPosts = countedPosts.filter((p) => !p.needsEngineer)
+    const sizeCounts = new Map<string, number>()
+    for (const p of validPosts) sizeCounts.set(p.sizeLabel, (sizeCounts.get(p.sizeLabel) ?? 0) + 1)
 
-  const validBays = bays.filter((b) => !b.needsEngineer)
-  const runs = groupIntoRuns(validBays, posts)
-  const { boards, topBoard, topCap } = planBoardLayers(runs, posts, settings, topCapEnabled)
+    const validBays = countedBays.filter((b) => !b.needsEngineer)
+    const runs = groupIntoRuns(validBays, posts)
+    const { boards, topBoard, topCap } = planBoardLayers(runs, posts, settings, topCapEnabled)
 
-  const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
-  const totalFillVolumeM3 = validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0)
+    const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
+    const totalBoardCount = boards.count + topBoard.count + (topCap?.count ?? 0)
+    const postsHours = validPosts.length * settings.hoursPerPost
+    const railsHours = totalBoardCount * settings.hoursPerBoard
+    const infillHours = totalBackfillVolumeM3 * settings.hoursPerM3Backfill
+    const depths = validPosts.map((p) => p.embedmentM)
 
-  const totalBoardCount = boards.count + topBoard.count + (topCap?.count ?? 0)
-  const postsHours = validPosts.length * settings.hoursPerPost
-  const railsHours = totalBoardCount * settings.hoursPerBoard
-  const infillHours = totalBackfillVolumeM3 * settings.hoursPerM3Backfill
+    return {
+      postIndices: validPosts.map((p) => p.index),
+      postsBySize: Array.from(sizeCounts.entries()).map(([sizeLabel, count]) => ({ sizeLabel, count })),
+      totalFillVolumeM3: validPosts.reduce((sum, p) => sum + p.holeVolumeM3, 0),
+      totalConcreteVolumeM3: validPosts.reduce((sum, p) => sum + p.concreteVolumeM3, 0),
+      totalGravelBaseVolumeM3: validPosts.reduce(
+        (sum, p) => sum + calcHoleVolumeM3(p.holeDiameterM, Math.min(settings.gravelBaseAllowanceM, p.embedmentM)),
+        0
+      ),
+      holeDiametersM: Array.from(new Set(validPosts.map((p) => Math.round(p.holeDiameterM * 1000) / 1000))).sort((a, b) => a - b),
+      minHoleDepthM: depths.length ? Math.min(...depths) : 0,
+      maxHoleDepthM: depths.length ? Math.max(...depths) : 0,
+      augerTooSmall: validPosts.some((p) => postFitDiameterM(p.sizeLabel) > p.holeDiameterM + 1e-9),
+      shallowHolePostIndices: validPosts.filter((p) => p.embedmentM < p.tableEmbedmentM - 1e-6).map((p) => p.index),
+      undersizedPostIndices: validPosts.filter((p) => p.widthM < postWidthM(p.tableSizeLabel) - 1e-6).map((p) => p.index),
+      boards,
+      topBoard,
+      topCap,
+      totalBackfillVolumeM3,
+      labor: {
+        setupHours,
+        postsHours,
+        railsHours,
+        infillHours,
+        totalHours: setupHours + postsHours + railsHours + infillHours,
+      },
+    }
+  }
 
   return {
+    ...totalsFor(posts, bays, settings.setupHours),
     rlDatumM,
     segments,
     posts,
     bays,
-    postsBySize: Array.from(sizeCounts.entries()).map(([sizeLabel, count]) => ({ sizeLabel, count })),
-    totalFillVolumeM3,
-    totalConcreteVolumeM3: validPosts.reduce((sum, p) => sum + p.concreteVolumeM3, 0),
-    totalGravelBaseVolumeM3: validPosts.reduce(
-      (sum, p) => sum + calcHoleVolumeM3(p.holeDiameterM, Math.min(settings.gravelBaseAllowanceM, p.embedmentM)),
-      0
+    segmentTotals: segments.map((seg) =>
+      totalsFor(
+        // the corner post a run starts on belongs to the run before it
+        posts.filter((p) => p.index <= seg.endPostIndex && (seg.index === 0 ? p.index >= seg.startPostIndex : p.index > seg.startPostIndex)),
+        bays.filter((b) => b.leftIndex >= seg.startPostIndex && b.rightIndex <= seg.endPostIndex),
+        0
+      )
     ),
-    holeDiametersM: Array.from(new Set(validPosts.map((p) => Math.round(p.holeDiameterM * 1000) / 1000))).sort((a, b) => a - b),
-    augerTooSmall: validPosts.some((p) => p.widthM * Math.SQRT2 > p.holeDiameterM + 1e-9),
-    boards,
-    topBoard,
-    topCap,
-    totalBackfillVolumeM3,
-    labor: {
-      setupHours: settings.setupHours,
-      postsHours,
-      railsHours,
-      infillHours,
-      totalHours: settings.setupHours + postsHours + railsHours + infillHours,
-    },
     engineerPostIndices: posts.filter((p) => p.needsEngineer).map((p) => p.index),
   }
 }
