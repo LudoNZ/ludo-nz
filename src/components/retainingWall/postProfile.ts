@@ -1,7 +1,7 @@
 import { calcHoleVolumeM3 } from "../structures/postRailCalc"
 import { PlanPoint } from "./wallPlan"
 import { LaborEstimate } from "../structures/types"
-import { CalcSettings, findReferenceRow, postFitDiameterM, postSectionAreaM2, postWidthM } from "./calcSettings"
+import { boardStockLengths, CalcSettings, findReferenceRow, planBoardOrder, postFitDiameterM, postSectionAreaM2, postWidthM } from "./calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
 
 /** A post whose ground level and/or top-of-post level has been set by
@@ -90,6 +90,46 @@ export interface ProfileBay {
    * piece on top of these (see WallProfile.topBoard) */
   levelCourseCount: number
   levelBoardLengthM: number
+  /** of levelCourseCount, the courses from the bottom up that go in at
+   * full height; any above that are cut down to fit under a raked top
+   * board */
+  fullCourseCount: number
+  /** m, the top board's length across this bay — along the slope when
+   * it's raked */
+  topBoardLengthM: number
+  /** rise over run of the top of the wall across this bay */
+  topSlope: number
+}
+
+/** How one bay's boards stack between posts `a` and `b`. Level courses
+ * always start from the lower of the two ground levels.
+ *
+ * Normally they stop at the last full course under the shorter post, and
+ * the top board makes up whatever is left — level underneath, cut to the
+ * rake on top.
+ *
+ * With a raked top board, the top board is a full-height board running
+ * parallel to the top of the wall, and the level courses carry on up
+ * until they meet its sloping underside — the ones that cross it are cut
+ * down to suit. */
+export function bayCourseLayout(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number, rakedTopBoard: boolean) {
+  const widthM = Math.abs(b.xM - a.xM)
+  const riseM = b.topLevelM - a.topLevelM
+  const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
+  const ch = boardCourseHeightM
+  if (!rakedTopBoard) {
+    const fullCourseCount = Math.max(0, Math.floor((Math.min(a.topLevelM, b.topLevelM) - baseLevelM) / ch + 1e-9))
+    const levelTopM = baseLevelM + fullCourseCount * ch
+    return { baseLevelM, courseCount: fullCourseCount, fullCourseCount, undersideAM: levelTopM, undersideBM: levelTopM, topBoardLengthM: widthM }
+  }
+  const slopeLengthM = Math.hypot(widthM, riseM)
+  // a board `ch` wide laid on the slope is taller than `ch` measured plumb
+  const dropM = widthM > 0 ? (ch * slopeLengthM) / widthM : ch
+  const undersideAM = a.topLevelM - dropM
+  const undersideBM = b.topLevelM - dropM
+  const courseCount = Math.max(0, Math.ceil((Math.max(undersideAM, undersideBM) - baseLevelM) / ch - 1e-9))
+  const fullCourseCount = Math.min(courseCount, Math.max(0, Math.floor((Math.min(undersideAM, undersideBM) - baseLevelM) / ch + 1e-9)))
+  return { baseLevelM, courseCount, fullCourseCount, undersideAM, undersideBM, topBoardLengthM: slopeLengthM }
 }
 
 /** A board piece boundary that lands mid-run (not a run's own start/end,
@@ -108,19 +148,17 @@ export interface BoardJoint {
  * board, or the optional top cap) planned into real cut pieces — see the
  * run/piece loops in buildWallProfile. */
 export interface BoardLayerSummary {
+  /** cut pieces */
   count: number
-  /** of count, how many are cut as one continuous length across two bays
-   * (the preferred, stronger layout) vs. broken to a single bay because a
-   * corner, an excluded bay, or the standard board length forced it */
-  twoSpanCount: number
-  oneSpanCount: number
   totalLengthM: number
+  /** pieces that need cutting down along their length to fit under a
+   * raked top board — only ever non-zero for the level courses */
+  rakeCutCount: number
+  /** m, each piece's length (post centre to post centre), in no order */
+  pieceLengthsM: number[]
   joints: BoardJoint[]
 }
 
-/** Hand-picked values that replace what the reference table would work
- * out post by post — each one applies to every post on the wall. Leave
- * one out (or null) to keep that part calculated. */
 /** A hand-set post layout for one run, replacing the reference table's
  * spacing: either a fixed number of bays (posts thrown in or taken out —
  * always re-spaced evenly), or the widest centres to allow, which the
@@ -146,6 +184,10 @@ export interface ProfileOverrides {
   /** m — every hole is drilled this deep below its post's ground level,
    * gravel base pad included */
   holeDepthM?: number | null
+  /** build option rather than an override: the top board is a full board
+   * laid on the rake, with the level courses under it cut down to suit —
+   * see bayCourseLayout */
+  rakedTopBoard?: boolean
 }
 
 /** The materials and labour for a set of posts and bays — the whole
@@ -182,12 +224,19 @@ export interface ProfileTotals {
   /** an extra flat board laid over the top board/post tops for a
    * finished look and to protect end grain — null when not enabled */
   topCap: BoardLayerSummary | null
+  /** what to buy, by stock length, for the facing courses and the top
+   * board together (the same boards) — offcuts reused where they fit */
+  boardOrder: { lengthM: number; count: number }[]
+  /** the same for the top cap, a separate order; empty when not enabled */
+  topCapOrder: { lengthM: number; count: number }[]
   totalBackfillVolumeM3: number
   labor: LaborEstimate
 }
 
 export interface WallProfile extends ProfileTotals {
   rlDatumM: number
+  /** true when the top board is laid on the rake — see bayCourseLayout */
+  rakedTopBoard: boolean
   /** one per straight run in plan, in order */
   segments: ProfileSegment[]
   posts: ProfilePost[]
@@ -252,55 +301,72 @@ function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBa
   return runs
 }
 
-/** Plans one ordered list of bays into pieces: pairs two bays into one
- * continuous length wherever they're physically adjacent and fit the
- * standard board length, otherwise a single bay. `phase` offsets where
- * pairing starts — 0 pairs (0,1)(2,3)…, 1 leaves bay 0 on its own first
- * so pairing shifts to (1,2)(3,4)… — the mechanism staggered joints are
- * built from: calling this with an alternating phase row to row moves
- * each row's joints to different posts, like coursed brickwork, instead
- * of stacking every row's joint on the same post. */
-function planPieces(bays: ProfileBay[], standardBoardLengthM: number, phase: 0 | 1): { start: number; end: number }[] {
+/** Plans one ordered list of bays into pieces. A piece runs on across as
+ * many bays as the longest board allows (`maxLengthM`) — fewer joints is
+ * stronger and quicker — and only ever ends on a post. A stretch of wall
+ * that fits in one board is never joined. Where joints can't be avoided,
+ * `phase` 1 starts with a piece about half as long as it could be, which
+ * moves every joint in that row onto different posts than a phase 0 row
+ * — alternating phase row to row staggers the joints like coursed
+ * brickwork instead of stacking them all on one post. */
+function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { start: number; end: number }[] {
   const pieces: { start: number; end: number }[] = []
-  let i = 0
-  if (phase === 1 && bays.length > 0) {
-    pieces.push({ start: 0, end: 0 })
-    i = 1
+  // how far a piece starting at bay `from` can reach without leaving the
+  // unbroken stretch that ends at bay `last`
+  const reach = (from: number, last: number): number => {
+    let end = from
+    let length = bays[from].widthM
+    while (end < last && length + bays[end + 1].widthM <= maxLengthM + 1e-6) {
+      end++
+      length += bays[end].widthM
+    }
+    return end
   }
+  let i = 0
   while (i < bays.length) {
-    const bay = bays[i]
-    const next = bays[i + 1]
-    const adjacent = Boolean(next) && next.leftIndex === bay.rightIndex
-    const pairs = adjacent && bay.widthM + next!.widthM <= standardBoardLengthM + 1e-6
-    if (pairs) {
-      pieces.push({ start: i, end: i + 1 })
-      i += 2
-    } else {
-      pieces.push({ start: i, end: i })
-      i += 1
+    // the unbroken stretch starting here (the row may skip bays that are
+    // too low to have this course)
+    let last = i
+    while (last + 1 < bays.length && bays[last + 1].leftIndex === bays[last].rightIndex) last++
+    let end = reach(i, last)
+    if (end < last && phase === 1) end = i + Math.max(1, Math.floor((end - i + 1) / 2)) - 1
+    pieces.push({ start: i, end })
+    i = end + 1
+    while (i <= last) {
+      end = reach(i, last)
+      pieces.push({ start: i, end })
+      i = end + 1
     }
   }
   return pieces
 }
 
+type LayerAgg = { totalLengthM: number; rakeCutCount: number; pieceLengthsM: number[]; joints: BoardJoint[] }
+
 /** Folds a planned piece list into running totals plus the joints between
- * consecutive pieces (always at the post shared by the two pieces —
- * there's no other place a piece boundary can fall). `levelAtPost` gives
+ * consecutive pieces that butt up on a shared post. `levelAtPost` gives
  * the height to draw that joint at, specific to which layer/row it's on. */
 function accumulatePieces(
-  agg: { twoSpanCount: number; oneSpanCount: number; totalLengthM: number; joints: BoardJoint[] },
+  agg: LayerAgg,
   bays: ProfileBay[],
   pieces: { start: number; end: number }[],
-  lengthOf: (bay: ProfileBay) => number,
   levelAtPost: (postIndex: number) => number,
-  layer: BoardJoint["layer"]
+  layer: BoardJoint["layer"],
+  lengthOf: (bay: ProfileBay) => number = (bay) => bay.widthM,
+  isRakeCut: (bay: ProfileBay) => boolean = () => false
 ) {
   pieces.forEach((p, idx) => {
-    if (p.end > p.start) agg.twoSpanCount++
-    else agg.oneSpanCount++
-    for (let i = p.start; i <= p.end; i++) agg.totalLengthM += lengthOf(bays[i])
+    let lengthM = 0
+    let rakeCut = false
+    for (let i = p.start; i <= p.end; i++) {
+      lengthM += lengthOf(bays[i])
+      if (isRakeCut(bays[i])) rakeCut = true
+    }
+    if (rakeCut) agg.rakeCutCount++
+    agg.pieceLengthsM.push(lengthM)
+    agg.totalLengthM += lengthM
     const next = pieces[idx + 1]
-    if (next) {
+    if (next && bays[next.start].leftIndex === bays[p.end].rightIndex) {
       const jointPostIndex = bays[p.end].rightIndex
       agg.joints.push({ postIndex: jointPostIndex, levelM: levelAtPost(jointPostIndex), layer })
     }
@@ -318,12 +384,16 @@ function planBoardLayers(
   runs: ProfileBay[][],
   posts: ProfilePost[],
   settings: CalcSettings,
-  topCapEnabled: boolean
+  topCapEnabled: boolean,
+  rakedTopBoard: boolean
 ): { boards: BoardLayerSummary; topBoard: BoardLayerSummary; topCap: BoardLayerSummary | null } {
-  const courseAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
-  const topBoardAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
-  const topCapAgg = { twoSpanCount: 0, oneSpanCount: 0, totalLengthM: 0, joints: [] as BoardJoint[] }
+  const newAgg = (): LayerAgg => ({ totalLengthM: 0, rakeCutCount: 0, pieceLengthsM: [], joints: [] })
+  const courseAgg = newAgg()
+  const topBoardAgg = newAgg()
+  const topCapAgg = newAgg()
   const ch = settings.boardCourseHeightM
+  const stocks = boardStockLengths(settings)
+  const maxLengthM = stocks[stocks.length - 1]
   // schematic cap thickness, kept in sync with the diagram's own constant
   const capThicknessM = ch * 0.25
 
@@ -331,44 +401,52 @@ function planBoardLayers(
     const maxCourses = Math.max(0, ...run.map((b) => b.levelCourseCount))
     for (let k = 0; k < maxCourses; k++) {
       const rowBays = run.filter((b) => b.levelCourseCount > k)
-      const phase: 0 | 1 = (k % 2) as 0 | 1
-      const pieces = planPieces(rowBays, settings.standardBoardLengthM, phase)
+      const pieces = planPieces(rowBays, maxLengthM, (k % 2) as 0 | 1)
       accumulatePieces(
         courseAgg,
         rowBays,
         pieces,
-        (bay) => bay.widthM,
         (postIndex) => posts[postIndex].groundLevelM + (k + 0.5) * ch,
-        "course"
+        "course",
+        undefined,
+        (bay) => k >= bay.fullCourseCount
       )
     }
 
     // continue the alternation up from wherever the level courses left off,
     // so the top board's joint doesn't land back on the same post as the
     // course immediately below it
-    const topBoardPhase: 0 | 1 = (maxCourses % 2) as 0 | 1
-    const topBoardPieces = planPieces(run, settings.standardBoardLengthM, topBoardPhase)
-    accumulatePieces(topBoardAgg, run, topBoardPieces, (bay) => bay.widthM, (postIndex) => posts[postIndex].topLevelM, "topBoard")
+    // A raked top board is one straight board on the slope, so it can't
+    // carry on past a post where the rake changes — it's joined (mitred)
+    // there. Otherwise the top board is cut to the rake bay by bay and
+    // can run straight through.
+    const stretches: ProfileBay[][] = []
+    for (const bay of run) {
+      const stretch = stretches[stretches.length - 1]
+      const sameRake = stretch && Math.abs(stretch[stretch.length - 1].topSlope - bay.topSlope) < 1e-4
+      if (stretch && (!rakedTopBoard || sameRake)) stretch.push(bay)
+      else stretches.push([bay])
+    }
+    stretches.forEach((stretch, idx) => {
+      const topBoardPieces = planPieces(stretch, maxLengthM, (maxCourses % 2) as 0 | 1)
+      accumulatePieces(topBoardAgg, stretch, topBoardPieces, (postIndex) => posts[postIndex].topLevelM, "topBoard", (bay) => bay.topBoardLengthM)
+      if (idx < stretches.length - 1) {
+        const postIndex = stretch[stretch.length - 1].rightIndex
+        topBoardAgg.joints.push({ postIndex, levelM: posts[postIndex].topLevelM, layer: "topBoard" })
+      }
+    })
 
     if (topCapEnabled) {
-      const capPhase: 0 | 1 = ((maxCourses + 1) % 2) as 0 | 1
-      const capPieces = planPieces(run, settings.standardBoardLengthM, capPhase)
-      accumulatePieces(
-        topCapAgg,
-        run,
-        capPieces,
-        (bay) => bay.widthM,
-        (postIndex) => posts[postIndex].topLevelM + capThicknessM,
-        "topCap"
-      )
+      const capPieces = planPieces(run, maxLengthM, ((maxCourses + 1) % 2) as 0 | 1)
+      accumulatePieces(topCapAgg, run, capPieces, (postIndex) => posts[postIndex].topLevelM + capThicknessM, "topCap")
     }
   }
 
-  const finalize = (agg: typeof courseAgg): BoardLayerSummary => ({
-    count: agg.twoSpanCount + agg.oneSpanCount,
-    twoSpanCount: agg.twoSpanCount,
-    oneSpanCount: agg.oneSpanCount,
+  const finalize = (agg: LayerAgg): BoardLayerSummary => ({
+    count: agg.pieceLengthsM.length,
     totalLengthM: agg.totalLengthM,
+    rakeCutCount: agg.rakeCutCount,
+    pieceLengthsM: agg.pieceLengthsM,
     joints: agg.joints,
   })
 
@@ -440,15 +518,13 @@ export function legacyPlan(
  * total rather than silently under-specified.
  *
  * Board coursing is planned as real cut pieces, not just a total-length
- * divide: a course run breaks at any corner post (a board can't physically
- * run past one) and at any excluded bay, and within each unbroken run it
- * prefers a single piece spanning two bays at a time — same reasoning as
- * lapped fence rails, fewer joints is stronger. Where a run's long enough
- * that joints can't be avoided, each row's joints are staggered onto
- * different posts than the row below it (and the top board and top cap
- * continue that same alternation), so joints never all stack on one post
- * — except at a corner, which always forces every row to break there
- * regardless, since a board can't physically run past one. */
+ * divide: a course breaks at any corner post (a board can't physically
+ * run past one) and at any excluded bay, and in between each board runs
+ * on over as many posts as the longest stock length allows — fewer
+ * joints is stronger. Where a stretch is too long for one board, each
+ * row's joints are staggered onto different posts than the row below it
+ * (and the top board and top cap continue that same alternation), so
+ * joints never all stack on one post. */
 export function buildWallProfile(
   segmentLengthsM: number[],
   retainedHeightM: number,
@@ -462,6 +538,7 @@ export function buildWallProfile(
   const augerDiameterM = overrides.augerDiameterM && overrides.augerDiameterM > 0 ? overrides.augerDiameterM : null
   const postSizeOverride = overrides.postSizeLabel || null
   const holeDepthOverrideM = overrides.holeDepthM && overrides.holeDepthM > 0 ? overrides.holeDepthM : null
+  const rakedTopBoard = Boolean(overrides.rakedTopBoard)
   const runsIn = segmentLengthsM.map((l, i) => ({ l, spacing: overrides.runSpacing?.[i] })).filter((r) => r.l > 0)
   const runLengthsM = runsIn.map((r) => r.l)
   if (runLengthsM.length === 0 || !(retainedHeightM > 0)) return null
@@ -555,14 +632,8 @@ export function buildWallProfile(
     const needsEngineer = a.needsEngineer || b.needsEngineer
     const heightM = Math.max(a.retainedHeightM, b.retainedHeightM)
     const widthM = b.xM - a.xM
-    // level courses fill from the lower of the two ground levels up to the
-    // lower of the two top levels — the shorter side's own top — same
-    // geometry the diagram draws; whatever's left above that (always
-    // something, even if it's a full course's worth) is the top board,
-    // not counted here
-    const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
-    const minTopM = Math.min(a.topLevelM, b.topLevelM)
-    const levelCourseCount = needsEngineer ? 0 : Math.max(0, Math.floor((minTopM - baseLevelM) / settings.boardCourseHeightM))
+    const layout = bayCourseLayout(a, b, settings.boardCourseHeightM, rakedTopBoard)
+    const levelCourseCount = needsEngineer ? 0 : layout.courseCount
     bays.push({
       leftIndex: a.index,
       rightIndex: b.index,
@@ -571,6 +642,9 @@ export function buildWallProfile(
       needsEngineer,
       levelCourseCount,
       levelBoardLengthM: needsEngineer ? 0 : widthM * levelCourseCount,
+      fullCourseCount: needsEngineer ? 0 : layout.fullCourseCount,
+      topBoardLengthM: layout.topBoardLengthM,
+      topSlope: widthM > 0 ? (b.topLevelM - a.topLevelM) / widthM : 0,
     })
   }
 
@@ -581,7 +655,7 @@ export function buildWallProfile(
 
     const validBays = countedBays.filter((b) => !b.needsEngineer)
     const runs = groupIntoRuns(validBays, posts)
-    const { boards, topBoard, topCap } = planBoardLayers(runs, posts, settings, topCapEnabled)
+    const { boards, topBoard, topCap } = planBoardLayers(runs, posts, settings, topCapEnabled, rakedTopBoard)
 
     const totalBackfillVolumeM3 = validBays.reduce((sum, b) => sum + b.widthM * b.heightM * settings.backfillThicknessM, 0)
     const totalBoardCount = boards.count + topBoard.count + (topCap?.count ?? 0)
@@ -608,6 +682,8 @@ export function buildWallProfile(
       boards,
       topBoard,
       topCap,
+      boardOrder: planBoardOrder([...boards.pieceLengthsM, ...topBoard.pieceLengthsM], boardStockLengths(settings)),
+      topCapOrder: topCap ? planBoardOrder(topCap.pieceLengthsM, boardStockLengths(settings)) : [],
       totalBackfillVolumeM3,
       labor: {
         setupHours,
@@ -622,6 +698,7 @@ export function buildWallProfile(
   return {
     ...totalsFor(posts, bays, settings.setupHours),
     rlDatumM,
+    rakedTopBoard,
     segments,
     posts,
     bays,

@@ -28,6 +28,9 @@ export interface WallProject {
   /** keyed by post index */
   controlPoints: ControlPoints
   topCapEnabled: boolean
+  /** top board laid on the rake as a full board, with the level boards
+   * under it cut down to suit */
+  rakedTopBoard: boolean
   calcSettings: CalcSettings
   calcSettingsName: string
 }
@@ -60,6 +63,7 @@ export const newBlankWall = (): WallProject => ({
   runSpacing: [],
   controlPoints: {},
   topCapEnabled: false,
+  rakedTopBoard: false,
   calcSettings: DEFAULT_CALC_SETTINGS,
   calcSettingsName: "Default",
 })
@@ -96,6 +100,7 @@ export const wallFromData = (data: unknown): WallProject => {
     runSpacing: Array.isArray(d.runSpacing) ? d.runSpacing.map(runSpacingFromData) : [],
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     topCapEnabled: Boolean(d.topCapEnabled),
+    rakedTopBoard: Boolean(d.rakedTopBoard),
     calcSettings:
       settings && Array.isArray(settings.referenceTable) && settings.referenceTable.length > 0
         ? { ...DEFAULT_CALC_SETTINGS, ...settings }
@@ -120,8 +125,9 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
+  rakedTopBoard: wall.rakedTopBoard,
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Modal } from "@/app/elements/Modal/modal"
 import Button from "@/components/button/button"
-import { CalcSettings, DEFAULT_CALC_SETTINGS, WallSpecRow } from "@/components/retainingWall/calcSettings"
+import { boardStockLengths, CalcSettings, DEFAULT_CALC_SETTINGS, WallSpecRow } from "@/components/retainingWall/calcSettings"
 import { SOIL_LABELS } from "@/components/retainingWall/retainingWallCalc"
 import { saveCalcSettings, SavedCalcSettings } from "@/components/retainingWall/retainingWallData"
 import styles from "./settingsPanel.module.scss"
@@ -41,6 +41,8 @@ const SettingsPanel: React.FC<{
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [savingName, setSavingName] = useState("")
   const [saving, setSaving] = useState(false)
+  // typed as free text ("4.2, 4.8, 5.4, 6"), parsed into the draft as it changes
+  const [stockText, setStockText] = useState(boardStockLengths(activeSettings).join(", "))
 
   // re-sync from whatever's actually active every time the panel opens, so
   // it never starts from stale edits left over from a previous open
@@ -48,6 +50,7 @@ const SettingsPanel: React.FC<{
     if (isOpen) {
       setDraft(activeSettings)
       setDraftName(activeName)
+      setStockText(boardStockLengths(activeSettings).join(", "))
       setShowSaveInput(false)
       setSavingName("")
     }
@@ -187,12 +190,26 @@ const SettingsPanel: React.FC<{
             step={0.01}
             onChange={(v) => updateField("boardCourseHeightM", v)}
           />
-          <NumField
-            label="Standard board length (m)"
-            value={draft.standardBoardLengthM}
-            step={0.1}
-            onChange={(v) => updateField("standardBoardLengthM", v)}
-          />
+          <div className={styles.field}>
+            <label htmlFor="boardStockLengths">Board lengths available (m)</label>
+            <input
+              id="boardStockLengths"
+              type="text"
+              inputMode="text"
+              placeholder="4.2, 4.8, 5.4, 6"
+              value={stockText}
+              onChange={(e) => {
+                setStockText(e.target.value)
+                updateField(
+                  "boardStockLengthsM",
+                  e.target.value
+                    .split(/[\s,;/]+/)
+                    .map(Number)
+                    .filter((n) => n > 0)
+                )
+              }}
+            />
+          </div>
           <NumField
             label="Backfill thickness (m)"
             value={draft.backfillThicknessM}

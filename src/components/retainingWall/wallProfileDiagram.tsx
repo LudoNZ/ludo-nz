@@ -1,32 +1,13 @@
 "use client"
 
-import { useMemo } from "react"
-import { ProfilePost, WallProfile } from "./postProfile"
+import { useId, useMemo } from "react"
+import { bayCourseLayout, WallProfile } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
 import { CalcSettings } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
 
 const formatLevel = (relativeM: number, rlDatumM: number): string =>
   rlDatumM !== 0 ? `RL ${(rlDatumM + relativeM).toFixed(3)}` : `${relativeM.toFixed(2)} m`
-
-/** Boards are laid level, not individually raked — only the very top
- * course follows the slope, cut/set to it, while every course under that
- * stacks level from the lower of the two posts' ground levels. Splits a
- * bay into however many full level courses fit under the *shorter* of its
- * two posts, plus one capping region on top that's level too when the
- * bay isn't actually raked (both posts the same height) and a sloped
- * quadrilateral when it is. */
-function bayCourses(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number) {
-  const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
-  const minTopM = Math.min(a.topLevelM, b.topLevelM)
-  const fullCourses = Math.max(0, Math.floor((minTopM - baseLevelM) / boardCourseHeightM))
-  const levelTopM = baseLevelM + fullCourses * boardCourseHeightM
-  const levelCourses = Array.from({ length: fullCourses }, (_, i) => ({
-    y0: baseLevelM + i * boardCourseHeightM,
-    y1: baseLevelM + (i + 1) * boardCourseHeightM,
-  }))
-  return { levelCourses, capTopM: levelTopM, capTopAM: a.topLevelM, capTopBM: b.topLevelM }
-}
 
 /** Interactive front elevation of a raked (or, with no control points set,
  * perfectly uniform) wall: sloped ground and top-of-wall lines through
@@ -50,6 +31,7 @@ const WallProfileDiagram: React.FC<{
   segmentIndex?: number | null
   mirrored?: boolean
 }> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false }) => {
+  const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
   const toIndex = segment ? segment.endPostIndex : profile.posts.length - 1
@@ -113,28 +95,41 @@ const WallProfileDiagram: React.FC<{
             const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topLevelM)} ${ax},${y(a.topLevelM)}`
             return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
           }
-          const { levelCourses, capTopM, capTopAM, capTopBM } = bayCourses(a, b, settings.boardCourseHeightM)
+          const ch = settings.boardCourseHeightM
+          const layout = bayCourseLayout(a, b, ch, profile.rakedTopBoard)
+          const { baseLevelM, undersideAM, undersideBM } = layout
+          const capTopAM = a.topLevelM
+          const capTopBM = b.topLevelM
           // purely a schematic sliver on top of the top board — real
           // thickness isn't tracked (no calc setting for it), just enough
           // to read as a distinct capping layer at any wall scale
-          const capThicknessM = settings.boardCourseHeightM * 0.25
+          const capThicknessM = ch * 0.25
+          const bayClip = `${clipId}-bay-${bay.leftIndex}`
           return (
             <g key={`bay-${bay.leftIndex}`}>
-              {levelCourses.map((c) => (
-                <rect
-                  key={c.y0}
-                  x={Math.min(ax, bx)}
-                  y={y(c.y1)}
-                  width={Math.abs(bx - ax)}
-                  height={c.y1 - c.y0}
-                  className={styles.bayFill}
-                  strokeWidth={strokeW * 0.4}
-                />
-              ))}
-              {/* top/perimeter board — the piece that actually follows the
-                  rake, visually distinct from the level courses below it */}
+              {/* level courses, each drawn full height and then clipped to
+                  the top board's underside — so with a raked top board
+                  the courses it crosses show cut down to suit */}
+              <clipPath id={bayClip}>
+                <polygon points={`${ax},${y(baseLevelM)} ${bx},${y(baseLevelM)} ${bx},${y(undersideBM)} ${ax},${y(undersideAM)}`} />
+              </clipPath>
+              <g clipPath={`url(#${bayClip})`}>
+                {Array.from({ length: layout.courseCount }, (_, k) => (
+                  <rect
+                    key={k}
+                    x={Math.min(ax, bx)}
+                    y={y(baseLevelM + (k + 1) * ch)}
+                    width={Math.abs(bx - ax)}
+                    height={ch}
+                    className={styles.bayFill}
+                    strokeWidth={strokeW * 0.4}
+                  />
+                ))}
+              </g>
+              {/* top/perimeter board — the piece that follows the rake:
+                  cut to it on top only, or (raked) a full board on the slope */}
               <polygon
-                points={`${ax},${y(capTopM)} ${bx},${y(capTopM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
+                points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
                 className={styles.topBoardFill}
                 strokeWidth={strokeW * 0.4}
               />

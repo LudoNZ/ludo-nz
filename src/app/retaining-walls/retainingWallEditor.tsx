@@ -19,7 +19,7 @@ import {
   setSegmentLength,
   totalLength,
 } from "@/components/retainingWall/wallPlan"
-import { CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
+import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import ReferenceTableModal from "./referenceTableModal"
@@ -79,6 +79,9 @@ const RetainingWallEditor: React.FC<{
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
   const [topCapEnabled, setTopCapEnabled] = useState(initial.topCapEnabled)
+  // whole-wall option: the top board goes on as a full board following
+  // the rake, and the level boards under it are cut down to suit
+  const [rakedTopBoard, setRakedTopBoard] = useState(initial.rakedTopBoard)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -97,7 +100,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard })
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
@@ -121,6 +124,7 @@ const RetainingWallEditor: React.FC<{
       runSpacing,
       controlPoints,
       topCapEnabled,
+      rakedTopBoard,
       calcSettings,
       calcSettingsName,
     }
@@ -129,7 +133,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, controlPoints, topCapEnabled, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, controlPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
@@ -445,10 +449,16 @@ const RetainingWallEditor: React.FC<{
                     ? "Elevation — whole wall, unfolded"
                     : "Elevation"}
               </h3>
-              <label className={styles.topCapToggle}>
-                <input type="checkbox" checked={topCapEnabled} onChange={(e) => setTopCapEnabled(e.target.checked)} />
-                <span>Add top cap</span>
-              </label>
+              <div className={styles.elevationOptions}>
+                <label className={styles.topCapToggle}>
+                  <input type="checkbox" checked={rakedTopBoard} onChange={(e) => setRakedTopBoard(e.target.checked)} />
+                  <span>Rake the top board</span>
+                </label>
+                <label className={styles.topCapToggle}>
+                  <input type="checkbox" checked={topCapEnabled} onChange={(e) => setTopCapEnabled(e.target.checked)} />
+                  <span>Add top cap</span>
+                </label>
+              </div>
             </div>
             {profile.segments.length > 1 && (
               <div className={styles.elevationTabs} role="tablist" aria-label="Elevation to view">
@@ -638,30 +648,31 @@ const RetainingWallEditor: React.FC<{
                 <SpecCard
                   title={`Boards${forWall}`}
                   rows={[
-                    { label: "Facing boards", value: `${totals.boards.count}` },
-                    { label: "Facing — continuous (2-span)", value: `${totals.boards.twoSpanCount}` },
-                    { label: "Facing — single-span joint", value: `${totals.boards.oneSpanCount}` },
-                    { label: "Top/perimeter board", value: `${totals.topBoard.count}` },
-                    { label: "Top board — continuous (2-span)", value: `${totals.topBoard.twoSpanCount}` },
-                    { label: "Top board — single-span joint", value: `${totals.topBoard.oneSpanCount}` },
+                    { label: "Facing boards (pieces)", value: `${totals.boards.count}` },
+                    { label: "Facing — joins", value: `${totals.boards.joints.length}` },
+                    ...(rakedTopBoard ? [{ label: "Facing — cut down to the rake", value: `${totals.boards.rakeCutCount}` }] : []),
+                    { label: rakedTopBoard ? "Top board, raked (pieces)" : "Top/perimeter board (pieces)", value: `${totals.topBoard.count}` },
+                    { label: "Top board — joins", value: `${totals.topBoard.joints.length}` },
                     ...(totals.topCap
                       ? [
-                          { label: "Top cap", value: `${totals.topCap.count}` },
-                          { label: "Top cap — continuous (2-span)", value: `${totals.topCap.twoSpanCount}` },
-                          { label: "Top cap — single-span joint", value: `${totals.topCap.oneSpanCount}` },
+                          { label: "Top cap (pieces)", value: `${totals.topCap.count}` },
+                          { label: "Top cap — joins", value: `${totals.topCap.joints.length}` },
                         ]
                       : []),
                     {
-                      label: "Total boards, all layers",
-                      value: `${totals.boards.count + totals.topBoard.count + (totals.topCap?.count ?? 0)}`,
-                    },
-                    {
-                      label: "Total length, all layers",
+                      label: "Total fixed length, all layers",
                       value: formatM(totals.boards.totalLengthM + totals.topBoard.totalLengthM + (totals.topCap?.totalLengthM ?? 0)),
                     },
-                    { label: "Standard length assumed", value: formatM(calcSettings.standardBoardLengthM, 1) },
+                    ...totals.boardOrder.map((o) => ({ label: `To order — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
+                    ...totals.topCapOrder.map((o) => ({ label: `Top cap, to order — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
+                    {
+                      label: "Lengths available",
+                      value: boardStockLengths(calcSettings)
+                        .map((l) => `${l}`)
+                        .join(" / ") + " m",
+                    },
                   ]}
-                  note="Every layer (facing courses, the top/perimeter board, and the cap if enabled) is planned as real cut pieces: continuous across two post spans wherever it fits, breaking to a single span only where a corner, an excluded bay, or the standard length forces it. Where joints can't be avoided, each row's joints are staggered onto different posts than the row below — see the elevation diagram's join marks."
+                  note={`${rakedTopBoard ? "The top board is a full board laid on the rake of the wall; the level boards run up to its underside and the ones that meet it are cut down along their length to suit. It's measured along the slope, and joined at any post where the rake changes. " : ""}Every layer is planned as real cut pieces. A board runs on over as many posts as the longest available length allows and only ever ends on a post; it always breaks at a corner or an excluded bay. Where a wall is too long for one board, each row's joins are staggered onto different posts than the row below — see the join marks on the elevation. The order is worked out with longest pieces first, cutting shorter pieces from offcuts where they fit, and no allowance for saw cuts or waste.${shownSegment !== null ? " Ordered wall by wall, offcuts can't be shared between walls, so the walls' orders can add up to more than the whole-wall order." : ""} Change the available lengths in the calculation settings.`}
                 />
                 <SpecCard
                   title={`Drainage backfill${forWall}`}

@@ -31,8 +31,9 @@ export interface CalcSettings {
   holeDiameterMultiplier: number
   /** m, height of one facing-board course */
   boardCourseHeightM: number
-  /** m, assumed stock length a board is cut from */
-  standardBoardLengthM: number
+  /** m, the lengths facing boards can be bought in. A board runs as far
+   * along the wall as the longest of these allows before it's joined. */
+  boardStockLengthsM: number[]
   /** m, compacted drainage gravel layer thickness behind the boards */
   backfillThicknessM: number
   setupHours: number
@@ -58,7 +59,7 @@ export const DEFAULT_CALC_SETTINGS: CalcSettings = {
   gravelBaseAllowanceM: 0.1,
   holeDiameterMultiplier: 3,
   boardCourseHeightM: 0.2,
-  standardBoardLengthM: 3.0,
+  boardStockLengthsM: [4.2, 4.8, 5.4, 6.0],
   backfillThicknessM: 0.15,
   setupHours: 1.5,
   hoursPerPost: 1.5,
@@ -110,4 +111,41 @@ export function postSectionAreaM2(sizeLabel: string): number {
 export function postFitDiameterM(sizeLabel: string): number {
   const w = postWidthM(sizeLabel)
   return isRoundPost(sizeLabel) ? w : w * Math.SQRT2
+}
+
+/** The board lengths to plan with, shortest first — falling back to the
+ * defaults for settings saved before stock lengths existed (or with
+ * nothing usable entered). */
+export function boardStockLengths(settings: CalcSettings): number[] {
+  const list = Array.isArray(settings.boardStockLengthsM) ? settings.boardStockLengthsM : []
+  const valid = Array.from(new Set(list.filter((l) => typeof l === "number" && l >= 0.5 && l <= 12))).sort((a, b) => a - b)
+  return valid.length ? valid : DEFAULT_CALC_SETTINGS.boardStockLengthsM
+}
+
+/** Works out what to buy for a list of cut pieces: longest pieces first,
+ * each cut from the leftover of a length already on the list if it fits
+ * (tightest fit first), otherwise from a new length — the shortest one
+ * it fits in. A piece longer than every stock length is counted as one
+ * of the longest. Saw cuts aren't allowed for. */
+export function planBoardOrder(pieceLengthsM: number[], stockLengthsM: number[]): { lengthM: number; count: number }[] {
+  const stocks = [...stockLengthsM].sort((a, b) => a - b)
+  if (stocks.length === 0) return []
+  const open: { lengthM: number; leftM: number }[] = []
+  for (const piece of [...pieceLengthsM].sort((a, b) => b - a)) {
+    let best: { lengthM: number; leftM: number } | null = null
+    for (const board of open) {
+      if (board.leftM + 1e-6 >= piece && (!best || board.leftM < best.leftM)) best = board
+    }
+    if (best) {
+      best.leftM -= piece
+      continue
+    }
+    const lengthM = stocks.find((l) => l + 1e-6 >= piece) ?? stocks[stocks.length - 1]
+    open.push({ lengthM, leftM: Math.max(0, lengthM - piece) })
+  }
+  const counts = new Map<number, number>()
+  for (const board of open) counts.set(board.lengthM, (counts.get(board.lengthM) ?? 0) + 1)
+  return Array.from(counts.entries())
+    .map(([lengthM, count]) => ({ lengthM, count }))
+    .sort((a, b) => a.lengthM - b.lengthM)
 }
