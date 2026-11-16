@@ -341,19 +341,21 @@ function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBa
 }
 
 /** Plans one ordered list of bays into pieces. Joins are the weak points
- * of a retaining wall, so every row uses as few pieces as will cover it:
- * a piece runs on across as many bays as the longest board allows
- * (`maxLengthM`) and only ever ends on a post, and a stretch of wall that
- * fits in one board is never joined.
+ * of a retaining wall, so for every unbroken stretch, in this order:
  *
- * `phase` staggers the joins that are left, like coursed brickwork, so
- * they don't all stack on one post. Phase 0 lays full-length boards from
- * the start of the stretch, leaving the short piece at the far end;
- * phase 1 lays them from the far end back, leaving the short piece at
- * the start — the same number of pieces, with every join on a different
- * post. Only when that can't move the joins (the stretch is an exact
- * number of full boards) does a phase 1 row take one extra piece,
- * starting with a board about half the full length. */
+ * 1. as few pieces as will cover it — a piece runs on across as many
+ *    bays as the longest board allows (`maxLengthM`) and only ever ends
+ *    on a post, and a stretch that fits in one board is never joined;
+ * 2. no piece covering just one bay wherever that can be avoided, so a
+ *    join never lands on the first post in from an end when the pieces
+ *    can be shared out differently (4 + 1 bays becomes 3 + 2);
+ * 3. joins staggered row to row, like coursed brickwork, so they don't
+ *    stack on one post. `phase` 0 puts the longest boards at the start
+ *    of the stretch; `phase` 1 is planned to keep its joins off the
+ *    posts a phase 0 row joins on, with its longest boards toward the
+ *    far end. Only when no layout with the same number of pieces can do
+ *    that (the stretch is an exact number of full boards) does a phase 1
+ *    row take one extra piece. */
 function planPieces(
   bays: ProfileBay[],
   maxLengthM: number,
@@ -362,31 +364,49 @@ function planPieces(
 ): { start: number; end: number }[] {
   const pieces: { start: number; end: number }[] = []
   const fits = (lengthM: number) => lengthM <= maxLengthM + 1e-6
-  // full-length boards from bay `first`, working toward bay `last`
-  const fromStart = (first: number, last: number) => {
-    const out: { start: number; end: number }[] = []
-    let i = first
-    while (i <= last) {
-      let end = i
-      let length = lengthOf(bays[i])
-      while (end < last && fits(length + lengthOf(bays[end + 1]))) length += lengthOf(bays[++end])
-      out.push({ start: i, end })
-      i = end + 1
+
+  type Plan = { pieces: number; singles: number; shared: number; ends: number[] }
+  /** Best way to cut bays first..last, by `order` of priority. `avoid`
+   * holds the bay indices another row's pieces end on (its joins);
+   * `longFirst` breaks ties toward a longer first piece. */
+  const solve = (first: number, last: number, order: "fewest" | "staggered", avoid: Set<number>, longFirst: boolean): Plan => {
+    const key = (p: { pieces: number; singles: number; shared: number }) =>
+      order === "fewest" ? [p.pieces, p.singles, p.shared] : [p.shared, p.pieces, p.singles]
+    const better = (a: number[], b: number[]) => {
+      for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return a[k] < b[k]
+      return false
     }
-    return out
-  }
-  // the same, from bay `last` working back toward bay `first`
-  const fromEnd = (first: number, last: number) => {
-    const out: { start: number; end: number }[] = []
-    let i = last
-    while (i >= first) {
-      let start = i
-      let length = lengthOf(bays[i])
-      while (start > first && fits(length + lengthOf(bays[start - 1]))) length += lengthOf(bays[--start])
-      out.unshift({ start, end: i })
-      i = start - 1
+    // best[i - first]: the best plan for bays i..last; one past the end is empty
+    const best: (Plan & { next: number })[] = []
+    best[last + 1 - first] = { pieces: 0, singles: 0, shared: 0, ends: [], next: -1 }
+    for (let i = last; i >= first; i--) {
+      const reach: number[] = []
+      let length = 0
+      for (let j = i; j <= last; j++) {
+        length += lengthOf(bays[j])
+        // a single bay is always a piece, even one too long for any board
+        if (j > i && !fits(length)) break
+        reach.push(j)
+      }
+      if (longFirst) reach.reverse()
+      let chosen: (Plan & { next: number }) | null = null
+      for (const j of reach) {
+        const rest = best[j + 1 - first]
+        const candidate = {
+          pieces: rest.pieces + 1,
+          singles: rest.singles + (j === i ? 1 : 0),
+          shared: rest.shared + (j < last && avoid.has(j) ? 1 : 0),
+          ends: [],
+          next: j,
+        }
+        if (!chosen || better(key(candidate), key(chosen))) chosen = candidate
+      }
+      best[i - first] = chosen!
     }
-    return out
+    const ends: number[] = []
+    for (let i = first; i <= last; i = ends[ends.length - 1] + 1) ends.push(best[i - first].next)
+    const { pieces: count, singles, shared } = best[0]
+    return { pieces: count, singles, shared, ends }
   }
 
   let i = 0
@@ -395,16 +415,20 @@ function planPieces(
     // too low to have this course)
     let last = i
     while (last + 1 < bays.length && bays[last + 1].leftIndex === bays[last].rightIndex) last++
-    const forward = fromStart(i, last)
-    if (phase === 0 || forward.length === 1) pieces.push(...forward)
-    else {
-      const backward = fromEnd(i, last)
-      const moved = backward.length !== forward.length || backward.some((p, k) => p.end !== forward[k].end)
-      if (moved) pieces.push(...backward)
-      else {
-        const half = Math.max(1, Math.floor((forward[0].end - i + 1) / 2))
-        pieces.push({ start: i, end: i + half - 1 }, ...fromStart(i + half, last))
+    const base = solve(i, last, "fewest", new Set(), true)
+    let plan = base
+    if (phase === 1 && base.pieces > 1) {
+      const avoid = new Set(base.ends.slice(0, -1))
+      plan = solve(i, last, "fewest", avoid, false)
+      if (plan.shared > 0) {
+        const staggered = solve(i, last, "staggered", avoid, false)
+        if (staggered.pieces <= plan.pieces + 1) plan = staggered
       }
+    }
+    let start = i
+    for (const end of plan.ends) {
+      pieces.push({ start, end })
+      start = end + 1
     }
     i = last + 1
   }
