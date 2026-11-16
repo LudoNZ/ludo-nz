@@ -360,6 +360,21 @@ const RetainingWallEditor: React.FC<{
           </select>
         </div>
         <div className={styles.field}>
+          <label htmlFor="boardHeight">Board height (mm)</label>
+          {/* part of this project's calculation settings, surfaced here
+              because it's changed job to job; it doesn't move any posts,
+              so hand-set levels are left alone */}
+          <NumField
+            id="boardHeight"
+            min={50}
+            step={10}
+            value={Math.round(calcSettings.boardCourseHeightM * 1000)}
+            onChange={(v) => {
+              if (v >= 50 && v <= 500) setCalcSettings((settings) => ({ ...settings, boardCourseHeightM: v / 1000 }))
+            }}
+          />
+        </div>
+        <div className={styles.field}>
           <label htmlFor="rlDatum">RL datum (0 = relative)</label>
           <input
             id="rlDatum"

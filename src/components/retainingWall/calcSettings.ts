@@ -58,7 +58,7 @@ export const DEFAULT_CALC_SETTINGS: CalcSettings = {
   ],
   gravelBaseAllowanceM: 0.1,
   holeDiameterMultiplier: 3,
-  boardCourseHeightM: 0.2,
+  boardCourseHeightM: 0.15,
   boardStockLengthsM: [4.2, 4.8, 5.4, 6.0],
   backfillThicknessM: 0.15,
   setupHours: 1.5,
