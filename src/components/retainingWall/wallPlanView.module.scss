@@ -240,3 +240,58 @@
   flex-wrap: wrap;
   gap: 0.6rem;
 }
+
+// post count for a wall, pushed to the free end of its row
+.segmentPosts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-left: auto;
+  // fixed width, so the steppers line up down the table whatever the label says
+  min-width: 12.5rem;
+  font-size: 0.8rem;
+}
+
+.segmentPostsLabel {
+  opacity: 0.75;
+}
+
+.postStepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.2rem;
+  font-size: 0.95rem;
+
+  button {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-primary);
+    border-radius: 50%;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+  }
+
+  strong {
+    min-width: 1.4rem;
+    text-align: center;
+  }
+}
+
+.postSpacing {
+  opacity: 0.8;
+}
+
+.postSpacingWarn {
+  color: #c0392b;
+  font-weight: 600;
+}

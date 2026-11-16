@@ -74,7 +74,11 @@ const WallPlanView: React.FC<{
   onChange: (points: PlanPoint[]) => void
   onRetainedSideChange: (side: RetainedSide) => void
   onSelectSegment: (index: number) => void
-}> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment }) => {
+  /** sets how many bays (posts − 1) a wall is divided into */
+  onSetBayCount: (segmentIndex: number, bayCount: number) => void
+}> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
+  onSetBayCount,
+}) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // the view is held still for the length of a drag — refitting it to the
   // moving corner every frame would slide the drawing out from under the
@@ -290,6 +294,9 @@ const WallPlanView: React.FC<{
       <div className={styles.segmentTable}>
         {lengths.map((lengthM, i) => {
           const isLast = i === lengths.length - 1
+          const seg = profile?.segments.length === lengths.length ? profile.segments[i] : undefined
+          const bays = seg ? seg.endPostIndex - seg.startPostIndex : 0
+          const tooWide = seg ? seg.postSpacingM > seg.tableMaxSpacingM + 1e-6 : false
           return (
             <div key={i} className={`${styles.segmentRow} ${selectedSegment === i ? styles.segmentRowSelected : ""}`}>
               <button type="button" className={styles.segmentName} onClick={() => onSelectSegment(i)}>
@@ -328,13 +335,38 @@ const WallPlanView: React.FC<{
                   </button>
                 </>
               )}
+              {seg && (
+                <div className={styles.segmentPosts}>
+                  <span className={styles.segmentPostsLabel}>
+                    Posts{seg.spacingOverridden ? " (set by hand)" : ""}
+                  </span>
+                  <span className={styles.postStepper}>
+                    <button
+                      type="button"
+                      aria-label={`One post fewer on wall ${segmentLabel(i)}`}
+                      disabled={bays <= 1}
+                      onClick={() => onSetBayCount(i, bays - 1)}
+                    >
+                      −
+                    </button>
+                    <strong>{bays + 1}</strong>
+                    <button type="button" aria-label={`One post more on wall ${segmentLabel(i)}`} onClick={() => onSetBayCount(i, bays + 1)}>
+                      +
+                    </button>
+                    <span className={tooWide ? styles.postSpacingWarn : styles.postSpacing}>
+                      at {Math.round(seg.postSpacingM * 1000)}mm{tooWide ? " ⚠" : ""}
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
           )
         })}
       </div>
       <p className={styles.hint}>
         Turns are measured walking the wall from A onward: positive turns left, negative turns right, 90 is a square
-        corner.
+        corner. A corner post is shared, so each wall&apos;s post count includes both of its ends. Tap a wall&apos;s
+        name to see its elevation, where its spacing can be set or cleared.
       </p>
 
       <div className={styles.actions}>

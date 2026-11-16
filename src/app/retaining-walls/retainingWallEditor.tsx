@@ -414,6 +414,7 @@ const RetainingWallEditor: React.FC<{
           onChange={handlePlanChange}
           onRetainedSideChange={setRetainedSide}
           onSelectSegment={setElevationView}
+          onSetBayCount={(segmentIndex, bayCount) => applyRunSpacing(segmentIndex, { bayCount })}
         />
       </div>
 
@@ -475,7 +476,9 @@ const RetainingWallEditor: React.FC<{
               </div>
             )}
             <div className={styles.spacingRows}>
-              {(shownSegment !== null ? [profile.segments[shownSegment]] : profile.segments).map((seg) => {
+              {/* one wall at a time: with several walls, the whole-wall view
+                  leaves the post counts to the plan's own table */}
+              {(shownSegment !== null ? [profile.segments[shownSegment]] : profile.segments.length === 1 ? profile.segments : []).map((seg) => {
                 const bays = seg.endPostIndex - seg.startPostIndex
                 const tooWide = seg.postSpacingM > seg.tableMaxSpacingM + 1e-6
                 const setSpacing = runSpacing[seg.index]?.maxSpacingM
