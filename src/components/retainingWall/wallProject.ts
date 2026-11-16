@@ -40,6 +40,9 @@ export interface WallProject {
   /** boards at each end of a wall are measured to the outside face of
    * the end post (true) or to its centre (false) */
   boardsToPostOutside: boolean
+  /** set once the project is set up: the editor makes every input read
+   * only until it's unlocked again, so nothing gets changed by accident */
+  locked: boolean
   calcSettings: CalcSettings
   calcSettingsName: string
 }
@@ -76,6 +79,7 @@ export const newBlankWall = (): WallProject => ({
   topCapEnabled: false,
   rakedTopBoard: false,
   boardsToPostOutside: true,
+  locked: false,
   calcSettings: DEFAULT_CALC_SETTINGS,
   calcSettingsName: "Default",
 })
@@ -124,6 +128,7 @@ export const wallFromData = (data: unknown): WallProject => {
     topCapEnabled: Boolean(d.topCapEnabled),
     rakedTopBoard: Boolean(d.rakedTopBoard),
     boardsToPostOutside: d.boardsToPostOutside !== false,
+    locked: Boolean(d.locked),
     calcSettings:
       settings && Array.isArray(settings.referenceTable) && settings.referenceTable.length > 0
         ? { ...DEFAULT_CALC_SETTINGS, ...settings }

@@ -76,8 +76,11 @@ const WallPlanView: React.FC<{
   onSelectSegment: (index: number) => void
   /** sets how many bays (posts − 1) a wall is divided into */
   onSetBayCount: (segmentIndex: number, bayCount: number) => void
+  /** locked: the plan can be looked at (and a wall picked) but not changed */
+  readOnly?: boolean
 }> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
   onSetBayCount,
+  readOnly = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // the view is held still for the length of a drag — refitting it to the
@@ -116,6 +119,7 @@ const WallPlanView: React.FC<{
   }
 
   const handlePointerDown = (index: number) => (e: React.PointerEvent) => {
+    if (readOnly) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { index, startClientX: e.clientX, startClientY: e.clientY, dragging: false }
     setFrozenView(fitViewBox(points))
@@ -235,7 +239,7 @@ const WallPlanView: React.FC<{
         })}
 
         {/* "+" on each run: adds a corner there, ready to drag out */}
-        {points.slice(0, -1).map((a, i) => {
+        {(readOnly ? [] : points.slice(0, -1)).map((a, i) => {
           const b = points[i + 1]
           const cx = (a.xM + b.xM) / 2
           const cy = (a.yM + b.yM) / 2
@@ -310,6 +314,7 @@ const WallPlanView: React.FC<{
                   step={0.1}
                   onChange={(v) => onChange(setSegmentLength(points, i, v))}
                   ariaLabel={`Wall ${segmentLabel(i)} length in metres`}
+                  disabled={readOnly}
                 />
               </label>
               {!isLast && (
@@ -323,11 +328,13 @@ const WallPlanView: React.FC<{
                         if (v > -180 && v < 180) onChange(setTurn(points, i + 1, v))
                       }}
                       ariaLabel={`Turn after wall ${segmentLabel(i)} in degrees, positive is left`}
+                      disabled={readOnly}
                     />
                   </label>
                   <button
                     type="button"
                     className={styles.removeCorner}
+                    disabled={readOnly}
                     onClick={() => onChange(removeCorner(points, i + 1))}
                     aria-label={`Remove the corner between walls ${segmentLabel(i)} and ${segmentLabel(i + 1)}`}
                   >
@@ -344,13 +351,18 @@ const WallPlanView: React.FC<{
                     <button
                       type="button"
                       aria-label={`One post fewer on wall ${segmentLabel(i)}`}
-                      disabled={bays <= 1}
+                      disabled={readOnly || bays <= 1}
                       onClick={() => onSetBayCount(i, bays - 1)}
                     >
                       −
                     </button>
                     <strong>{bays + 1}</strong>
-                    <button type="button" aria-label={`One post more on wall ${segmentLabel(i)}`} onClick={() => onSetBayCount(i, bays + 1)}>
+                    <button
+                      type="button"
+                      aria-label={`One post more on wall ${segmentLabel(i)}`}
+                      disabled={readOnly}
+                      onClick={() => onSetBayCount(i, bays + 1)}
+                    >
                       +
                     </button>
                     <span className={tooWide ? styles.postSpacingWarn : styles.postSpacing}>
@@ -370,10 +382,10 @@ const WallPlanView: React.FC<{
       </p>
 
       <div className={styles.actions}>
-        <Button size="small" variant="secondary" onClick={() => onChange(appendSegment(points, retainedSide, NEW_SEGMENT_M))}>
+        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onChange(appendSegment(points, retainedSide, NEW_SEGMENT_M))}>
           Add a wall on the end
         </Button>
-        <Button size="small" variant="secondary" onClick={() => onRetainedSideChange(lowSide)}>
+        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onRetainedSideChange(lowSide)}>
           Flip retained side
         </Button>
       </div>

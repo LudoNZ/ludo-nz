@@ -328,3 +328,23 @@
   font-size: 0.85rem;
   cursor: pointer;
 }
+
+// a group of inputs that goes read only when the wall is locked — a
+// fieldset purely for its `disabled`, with none of its own styling
+.lockable {
+  min-width: 0;
+  // only the fieldset's own side margins — it's often also a layout
+  // class (the spacing rows, the elevation options) with margins to keep
+  margin-inline: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lockedNote {
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background-color: rgba(42, 120, 214, 0.06);
+  font-size: 0.9rem;
+}

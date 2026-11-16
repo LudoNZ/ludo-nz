@@ -74,14 +74,11 @@ const RetainingWallEditor: React.FC<{
 
   // keyed by post index — a post with an entry here is "set by hand"; every
   // other post rakes (linearly interpolates) between whichever of these
-  // bracket it. Reset whenever the base inputs (or the active calc
-  // settings, which can change post spacing/count) change, since a stale
-  // index would silently apply to the wrong physical post otherwise.
-  // Reshaping the plan only resets these when it actually changes how
-  // many posts a run gets — see handlePlanChange.
+  // bracket it. When the post layout changes they follow their posts
+  // rather than being wiped — see the alignedCounts effect below.
   const [controlPoints, setControlPoints] = useState<ControlPoints>(initial.controlPoints)
   // hole depths set by hand, keyed by post index the same way — so they
-  // are reset and shifted along with the hand-set levels
+  // follow their posts along with the hand-set levels
   const [depthPoints, setDepthPoints] = useState<DepthPoints>(initial.depthPoints)
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
@@ -93,6 +90,9 @@ const RetainingWallEditor: React.FC<{
   // post, or to its centre — chosen in its own modal (see BoardEndsModal)
   const [boardsToPostOutside, setBoardsToPostOutside] = useState(initial.boardsToPostOutside)
   const [showBoardEnds, setShowBoardEnds] = useState(false)
+  // once the job is set up: every input goes read only until unlocked,
+  // so nothing about the wall gets changed by accident
+  const [locked, setLocked] = useState(initial.locked)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -141,6 +141,7 @@ const RetainingWallEditor: React.FC<{
       topCapEnabled,
       rakedTopBoard,
       boardsToPostOutside,
+      locked,
       calcSettings,
       calcSettingsName,
     }
@@ -149,13 +150,54 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
-  const resetProfile = () => {
-    setControlPoints({})
-    setDepthPoints({})
+  // Hand-set levels and depths are keyed by post index, so whenever the
+  // post layout changes — a wall reshaped, a post added, different soil,
+  // height or calculation settings — they have to follow their posts.
+  // `alignedCounts` is the layout (bays per wall) the keys currently
+  // match. When the layout moves on, everything on walls whose post count
+  // is unchanged from the start of the wall, or from the end, is kept
+  // (shifted to its post's new number); only posts inside the walls that
+  // actually changed are let go, since those posts have all moved.
+  const [heightEditing, setHeightEditing] = useState(false)
+  const bayCountsKey = retainedHeightM > 0 ? segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing).join(",") : null
+  const alignedCounts = useRef<string | null>(bayCountsKey)
+  useEffect(() => {
+    if (bayCountsKey === null || heightEditing) return
+    if (alignedCounts.current === null || alignedCounts.current === bayCountsKey) {
+      alignedCounts.current = bayCountsKey
+      return
+    }
+    const before = alignedCounts.current.split(",").map(Number)
+    const after = bayCountsKey.split(",").map(Number)
+    alignedCounts.current = bayCountsKey
+    let prefix = 0
+    while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++
+    let suffix = 0
+    while (
+      suffix < before.length - prefix &&
+      suffix < after.length - prefix &&
+      before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+    )
+      suffix++
+    const sum = (counts: number[]) => counts.reduce((t, n) => t + n, 0)
+    const keepUpTo = sum(before.slice(0, prefix)) // last post of the unchanged walls at the start
+    const keepFrom = sum(before) - sum(before.slice(before.length - suffix)) // first post of the unchanged walls at the end
+    const shiftBy = sum(after) - sum(before)
+    const follow = <T,>(points: Record<number, T>): Record<number, T> => {
+      const next: Record<number, T> = {}
+      for (const [key, value] of Object.entries(points)) {
+        const i = Number(key)
+        if (i <= keepUpTo) next[i] = value as T
+        else if (i >= keepFrom) next[i + shiftBy] = value as T
+      }
+      return next
+    }
+    setControlPoints(follow)
+    setDepthPoints(follow)
     setSelectedIndex(null)
-  }
+  }, [bayCountsKey, heightEditing])
 
   const profile = !isNaN(retainedHeightM)
     ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, overrides)
@@ -205,38 +247,14 @@ const RetainingWallEditor: React.FC<{
       nextSpacing = nextSpacing.slice(0, next.length - 1)
       setRunSpacing(nextSpacing)
     }
-    const before = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing)
-    const after = segmentBayCounts(segmentLengths(next), retainedHeightM, soil, calcSettings, nextSpacing)
-    // hand-set levels are keyed by post index, so they only survive a
-    // reshape that leaves every run with the same number of posts
-    if (before.join(",") !== after.join(",")) resetProfile()
     setPlanPoints(next)
   }
 
   /** Sets (or, with null, clears) one wall's hand-set spacing. Hand-set
-   * levels are keyed by post index, so the ones before this wall stay
-   * put, the ones after it shift along with their posts, and the ones
-   * on posts inside this wall — which all move — are dropped. */
+   * levels follow their posts — see the alignedCounts effect. */
   const applyRunSpacing = (segmentIndex: number, spacing: RunSpacing | null) => {
     if (!profile) return
-    const seg = profile.segments[segmentIndex]
-    const nextSpacing = Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? spacing : (runSpacing[i] ?? null)))
-    const oldBays = seg.endPostIndex - seg.startPostIndex
-    const newBays = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, nextSpacing)[segmentIndex]
-    setRunSpacing(nextSpacing)
-    if (newBays === oldBays) return
-    const shift = <T,>(points: Record<number, T>): Record<number, T> => {
-      const next: Record<number, T> = {}
-      for (const [key, value] of Object.entries(points)) {
-        const i = Number(key)
-        if (i <= seg.startPostIndex) next[i] = value as T
-        else if (i >= seg.endPostIndex) next[i + newBays - oldBays] = value as T
-      }
-      return next
-    }
-    setControlPoints(shift)
-    setDepthPoints(shift)
-    setSelectedIndex(null)
+    setRunSpacing(Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? spacing : (runSpacing[i] ?? null))))
   }
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
@@ -279,9 +297,9 @@ const RetainingWallEditor: React.FC<{
   }
 
   const handleApplySettings = (settings: CalcSettings, name: string) => {
+    if (locked) return
     setCalcSettings(settings)
     setCalcSettingsName(name)
-    resetProfile()
   }
 
   return (
@@ -298,19 +316,30 @@ const RetainingWallEditor: React.FC<{
           </p>
         </div>
         <div className={styles.headerActions}>
-          <Button size="icon" variant="secondary" onClick={() => setShowSettings(true)} ariaLabel="Calculation settings">
+          <Button size="small" variant={locked ? "primary" : "secondary"} onClick={() => setLocked((l) => !l)}>
+            {locked ? "🔒 Locked — unlock" : "🔓 Lock"}
+          </Button>
+          <Button size="icon" variant="secondary" onClick={() => setShowSettings(true)} ariaLabel="Calculation settings" disabled={locked}>
             <SettingsIcon />
           </Button>
         </div>
       </div>
 
+      {locked && (
+        <p className={styles.lockedNote}>
+          🔒 This wall is locked: its shape and settings are read only, so nothing gets changed by accident. You can still
+          look around — switch elevations, tap posts, open the reference table. Unlock it to make changes.
+        </p>
+      )}
+
       <p className={styles.settingsHint}>
         Using &quot;{calcSettingsName}&quot; calculation settings.{" "}
-        <button type="button" className={styles.inlineLink} onClick={() => setShowSettings(true)}>
+        <button type="button" className={styles.inlineLink} onClick={() => setShowSettings(true)} disabled={locked}>
           Change
         </button>
       </p>
 
+      <fieldset disabled={locked} className={styles.lockable}>
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
           <label htmlFor="wallLength">{planPoints.length > 2 ? "Total wall length (m)" : "Wall length (m)"}</label>
@@ -338,8 +367,12 @@ const RetainingWallEditor: React.FC<{
             value={retainedHeight}
             onChange={(e) => {
               setRetainedHeight(e.target.value)
-              resetProfile()
             }}
+            // half-typed heights ("1" on the way to "1.25") can land in a
+            // different band of the table and change the post layout for
+            // a moment — hold off re-aligning hand-set posts until done
+            onFocus={() => setHeightEditing(true)}
+            onBlur={() => setHeightEditing(false)}
           />
         </div>
         <div className={styles.field}>
@@ -349,7 +382,6 @@ const RetainingWallEditor: React.FC<{
             value={soil}
             onChange={(e) => {
               setSoil(e.target.value as SoilType)
-              resetProfile()
             }}
           >
             {SOIL_TYPES.map((s) => (
@@ -386,12 +418,14 @@ const RetainingWallEditor: React.FC<{
           />
         </div>
       </form>
+      </fieldset>
 
       <h3 className={styles.overridesHeading}>Posts and holes</h3>
       <p className={styles.overridesHint}>
         Leave a box on Auto to have it worked out post by post from the reference table and each post&apos;s own
         height, or set it to use the same value for every post on the wall.
       </p>
+      <fieldset disabled={locked} className={styles.lockable}>
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
           <label htmlFor="postSize">Post size</label>
@@ -440,6 +474,7 @@ const RetainingWallEditor: React.FC<{
           </datalist>
         </div>
       </form>
+      </fieldset>
 
       <button type="button" className={styles.referenceLink} onClick={() => setShowReferenceTable(true)}>
         View the reference table this calculator uses →
@@ -455,7 +490,9 @@ const RetainingWallEditor: React.FC<{
         isOpen={showBoardEnds}
         onClose={() => setShowBoardEnds(false)}
         toOutside={boardsToPostOutside}
-        onChange={setBoardsToPostOutside}
+        onChange={(toOutside) => {
+          if (!locked) setBoardsToPostOutside(toOutside)
+        }}
         endPostWidthM={profile?.posts[0]?.widthM ?? null}
         wallCount={profile?.segments.length ?? 1}
       />
@@ -482,6 +519,7 @@ const RetainingWallEditor: React.FC<{
           onRetainedSideChange={setRetainedSide}
           onSelectSegment={setElevationView}
           onSetBayCount={(segmentIndex, bayCount) => applyRunSpacing(segmentIndex, { bayCount })}
+          readOnly={locked}
         />
       </div>
 
@@ -512,7 +550,7 @@ const RetainingWallEditor: React.FC<{
                     ? "Elevation — whole wall, unfolded"
                     : "Elevation"}
               </h3>
-              <div className={styles.elevationOptions}>
+              <fieldset disabled={locked} className={`${styles.elevationOptions} ${styles.lockable}`}>
                 <button type="button" className={styles.optionButton} onClick={() => setShowBoardEnds(true)}>
                   Board ends: {boardsToPostOutside ? "outside of post" : "post centre"}
                 </button>
@@ -524,7 +562,7 @@ const RetainingWallEditor: React.FC<{
                   <input type="checkbox" checked={topCapEnabled} onChange={(e) => setTopCapEnabled(e.target.checked)} />
                   <span>Add top cap</span>
                 </label>
-              </div>
+              </fieldset>
             </div>
             {profile.segments.length > 1 && (
               <div className={styles.elevationTabs} role="tablist" aria-label="Elevation to view">
@@ -551,7 +589,7 @@ const RetainingWallEditor: React.FC<{
                 ))}
               </div>
             )}
-            <div className={styles.spacingRows}>
+            <fieldset disabled={locked} className={`${styles.spacingRows} ${styles.lockable}`}>
               {/* one wall at a time: with several walls, the whole-wall view
                   leaves the post counts to the plan's own table */}
               {(shownSegment !== null ? [profile.segments[shownSegment]] : profile.segments.length === 1 ? profile.segments : []).map((seg) => {
@@ -615,7 +653,7 @@ const RetainingWallEditor: React.FC<{
                   </div>
                 )
               })}
-            </div>
+            </fieldset>
             <WallProfileDiagram
               profile={profile}
               settings={calcSettings}
@@ -638,6 +676,7 @@ const RetainingWallEditor: React.FC<{
           {selectedPost && (
             <div className={styles.editPanel} key={selectedPost.index}>
               <h3>Post #{selectedPost.index + 1}</h3>
+              <fieldset disabled={locked} className={styles.lockable}>
               <div className={styles.editFields}>
                 <div className={styles.field}>
                   <label>Ground level {rlDatumM !== 0 ? "(RL)" : "(m)"}</label>
@@ -694,6 +733,7 @@ const RetainingWallEditor: React.FC<{
                 A rake point works like a hand-set top: the hole bottoms of the posts between two rake points sit on a
                 straight line between them, with the wall&apos;s end posts holding their own worked-out depth.
               </p>
+              </fieldset>
               {selectedPost.isCorner && (
                 <p className={styles.cornerNote}>
                   Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
@@ -701,11 +741,11 @@ const RetainingWallEditor: React.FC<{
                 </p>
               )}
               <div className={styles.editActions}>
-                <Button size="small" onClick={handleSaveControlPoint}>
+                <Button size="small" onClick={handleSaveControlPoint} disabled={locked}>
                   Save
                 </Button>
                 {selectedPost.isControlPoint && (
-                  <Button size="small" variant="secondary" onClick={handleClearControlPoint}>
+                  <Button size="small" variant="secondary" onClick={handleClearControlPoint} disabled={locked}>
                     Reset to raked
                   </Button>
                 )}
@@ -786,7 +826,9 @@ const RetainingWallEditor: React.FC<{
                   hideSetup={shownSegment !== null}
                 />
               </div>
-              <BoardOrderCard piecesM={orderPieces} stockLengthsM={boardStocks} fixed={boardOrderFixed} onChange={setBoardOrderFixed} />
+              <fieldset disabled={locked} className={styles.lockable}>
+                <BoardOrderCard piecesM={orderPieces} stockLengthsM={boardStocks} fixed={boardOrderFixed} onChange={setBoardOrderFixed} />
+              </fieldset>
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
                 conditions vary a lot in practice; if in doubt, especially near a boundary, driveway, or structure,

@@ -13,7 +13,8 @@ const NumField: React.FC<{
   step?: number
   className?: string
   ariaLabel?: string
-}> = ({ value, onChange, id, min, step = 1, className, ariaLabel }) => {
+  disabled?: boolean
+}> = ({ value, onChange, id, min, step = 1, className, ariaLabel, disabled }) => {
   const [text, setText] = useState(String(value))
 
   useEffect(() => {
@@ -29,6 +30,7 @@ const NumField: React.FC<{
       step={step}
       className={className}
       aria-label={ariaLabel}
+      disabled={disabled}
       value={text}
       onChange={(e) => {
         setText(e.target.value)
