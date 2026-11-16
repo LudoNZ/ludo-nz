@@ -10,6 +10,19 @@ import { SavedWallDesign } from "./retainingWallData"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
 import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
 
+export interface PartialBoardOrder {
+  enabled: boolean
+  wallRows: Record<string, number>
+  fixed: Record<string, number>
+}
+
+const numberMap = (raw: unknown): Record<string, number> =>
+  Object.fromEntries(
+    Object.entries(typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {}).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number" && entry[1] >= 0
+    )
+  )
+
 export interface WallProject {
   planPoints: PlanPoint[]
   retainedSide: RetainedSide
@@ -29,6 +42,12 @@ export interface WallProject {
    * by hand, keyed by the length in metres as text ("6", "5.4"). A
    * length with no entry is worked out to cover whatever's left. */
   boardOrderFixed: Record<string, number>
+  /** an order for part of the job: which walls, and how many of each
+   * wall's rows (counted from the bottom; the top board is the last
+   * row). `wallRows` is keyed by wall index — a wall with no entry is in
+   * with all its rows, 0 leaves it out. `fixed` pins counts per stock
+   * length for this partial order, separately from the whole-wall one. */
+  boardOrderPartial: PartialBoardOrder
   /** keyed by post index */
   controlPoints: ControlPoints
   /** hole depths set by hand on individual posts, keyed by post index */
@@ -74,6 +93,7 @@ export const newBlankWall = (): WallProject => ({
   holeDepthOverrideMm: null,
   runSpacing: [],
   boardOrderFixed: {},
+  boardOrderPartial: { enabled: false, wallRows: {}, fixed: {} },
   controlPoints: {},
   depthPoints: {},
   topCapEnabled: false,
@@ -119,6 +139,11 @@ export const wallFromData = (data: unknown): WallProject => {
         ([, n]) => typeof n === "number" && n >= 0
       )
     ),
+    boardOrderPartial: {
+      enabled: Boolean(d.boardOrderPartial?.enabled),
+      wallRows: numberMap(d.boardOrderPartial?.wallRows),
+      fixed: numberMap(d.boardOrderPartial?.fixed),
+    },
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     depthPoints: Object.fromEntries(
       Object.entries(typeof d.depthPoints === "object" && d.depthPoints !== null ? d.depthPoints : {})

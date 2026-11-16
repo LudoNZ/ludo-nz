@@ -104,3 +104,107 @@
   font-weight: 600;
   color: #c0392b;
 }
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.4rem;
+
+  h3 {
+    margin-bottom: 0;
+  }
+}
+
+.mode,
+.modeOn {
+  padding: 0.25rem 0.8rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.modeOn {
+  background-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.partial {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: var(--borderRadius);
+}
+
+.partialHint {
+  font-size: 0.82rem;
+  opacity: 0.7;
+}
+
+.wallRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  font-size: 0.92rem;
+}
+
+.wallTick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 5.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rowStepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  button {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-primary);
+    border-radius: 50%;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+  }
+
+  input {
+    width: 3.6rem;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid var(--color-primary);
+    border-radius: 6px;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    font-weight: 700;
+    text-align: center;
+  }
+}
+
+.wallNote {
+  font-size: 0.8rem;
+  opacity: 0.65;
+}

@@ -10,8 +10,8 @@ import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
-import { buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts } from "@/components/retainingWall/postProfile"
-import { overridesForWall, WallProject } from "@/components/retainingWall/wallProject"
+import { boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
+import { overridesForWall, PartialBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
   RetainedSide,
@@ -65,6 +65,8 @@ const RetainingWallEditor: React.FC<{
   const [runSpacing, setRunSpacing] = useState<(RunSpacing | null)[]>(initial.runSpacing)
   // the board order as actually placed: counts pinned per stock length
   const [boardOrderFixed, setBoardOrderFixed] = useState<Record<string, number>>(initial.boardOrderFixed)
+  // an order for part of the job — chosen walls and rows — see BoardOrderCard
+  const [boardOrderPartial, setBoardOrderPartial] = useState<PartialBoardOrder>(initial.boardOrderPartial)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -136,6 +138,7 @@ const RetainingWallEditor: React.FC<{
       holeDepthOverrideMm,
       runSpacing,
       boardOrderFixed,
+      boardOrderPartial,
       controlPoints,
       depthPoints,
       topCapEnabled,
@@ -150,7 +153,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -204,11 +207,11 @@ const RetainingWallEditor: React.FC<{
     : null
 
   const boardStocks = useMemo(() => boardStockLengths(calcSettings), [calcSettings])
-  // every facing and top-board piece on the whole wall, for the order.
+  // every facing and top-board piece, by wall and by row, for the order.
   // Keyed on the pieces themselves, so the order card only re-plans when
   // the cut list really changes.
-  const orderPiecesJson = profile ? JSON.stringify([...profile.boards.pieceBaysM, ...profile.topBoard.pieceBaysM]) : "[]"
-  const orderPieces = useMemo(() => JSON.parse(orderPiecesJson) as number[][], [orderPiecesJson])
+  const orderWallsJson = profile ? JSON.stringify(boardRowsByWall(profile)) : "[]"
+  const orderWalls = useMemo(() => JSON.parse(orderWallsJson) as WallOrderRows[], [orderWallsJson])
 
   // a run that no longer exists (corner removed, design swapped) falls
   // back to the whole-wall view rather than pointing at nothing
@@ -328,7 +331,8 @@ const RetainingWallEditor: React.FC<{
       {locked && (
         <p className={styles.lockedNote}>
           🔒 This wall is locked: its shape and settings are read only, so nothing gets changed by accident. You can still
-          look around — switch elevations, tap posts, open the reference table. Unlock it to make changes.
+          look around — switch elevations, tap posts, open the reference table — and the board order at the bottom
+          stays editable. Unlock it to make changes.
         </p>
       )}
 
@@ -826,9 +830,16 @@ const RetainingWallEditor: React.FC<{
                   hideSetup={shownSegment !== null}
                 />
               </div>
-              <fieldset disabled={locked} className={styles.lockable}>
-                <BoardOrderCard piecesM={orderPieces} stockLengthsM={boardStocks} fixed={boardOrderFixed} onChange={setBoardOrderFixed} />
-              </fieldset>
+              {/* deliberately not locked: the order is worked on after the
+                  wall is set up, which is exactly when it's locked */}
+              <BoardOrderCard
+                walls={orderWalls}
+                stockLengthsM={boardStocks}
+                fixed={boardOrderFixed}
+                onChange={setBoardOrderFixed}
+                partial={boardOrderPartial}
+                onPartialChange={setBoardOrderPartial}
+              />
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
                 conditions vary a lot in practice; if in doubt, especially near a boundary, driveway, or structure,

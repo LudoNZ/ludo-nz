@@ -189,6 +189,10 @@ export interface BoardLayerSummary {
   /** the same pieces, each as the bay lengths it spans — where it could
    * be split at a post if a board that long can't be had */
   pieceBaysM: number[][]
+  /** where each of those pieces sits, in step with pieceBaysM: the post
+   * it starts on, and which level course it's in counting up from 0 at
+   * the bottom (-1 for a layer with no rows — the top board, the cap) */
+  pieceInfo: { postIndex: number; row: number }[]
   joints: BoardJoint[]
 }
 
@@ -435,7 +439,14 @@ function planPieces(
   return pieces
 }
 
-type LayerAgg = { totalLengthM: number; rakeCutCount: number; pieceLengthsM: number[]; pieceBaysM: number[][]; joints: BoardJoint[] }
+type LayerAgg = {
+  totalLengthM: number
+  rakeCutCount: number
+  pieceLengthsM: number[]
+  pieceBaysM: number[][]
+  pieceInfo: { postIndex: number; row: number }[]
+  joints: BoardJoint[]
+}
 
 /** Folds a planned piece list into running totals plus the joints between
  * consecutive pieces that butt up on a shared post. `levelAtPost` gives
@@ -447,7 +458,8 @@ function accumulatePieces(
   levelAtPost: (postIndex: number) => number,
   layer: BoardJoint["layer"],
   lengthOf: (bay: ProfileBay) => number = (bay) => bay.boardLengthM,
-  isRakeCut: (bay: ProfileBay) => boolean = () => false
+  isRakeCut: (bay: ProfileBay) => boolean = () => false,
+  row = -1
 ) {
   pieces.forEach((p, idx) => {
     let lengthM = 0
@@ -461,6 +473,7 @@ function accumulatePieces(
     if (rakeCut) agg.rakeCutCount++
     agg.pieceLengthsM.push(lengthM)
     agg.pieceBaysM.push(baysM)
+    agg.pieceInfo.push({ postIndex: bays[p.start].leftIndex, row })
     agg.totalLengthM += lengthM
     const next = pieces[idx + 1]
     if (next && bays[next.start].leftIndex === bays[p.end].rightIndex) {
@@ -484,7 +497,7 @@ function planBoardLayers(
   topCapEnabled: boolean,
   rakedTopBoard: boolean
 ): { boards: BoardLayerSummary; topBoard: BoardLayerSummary; topCap: BoardLayerSummary | null } {
-  const newAgg = (): LayerAgg => ({ totalLengthM: 0, rakeCutCount: 0, pieceLengthsM: [], pieceBaysM: [], joints: [] })
+  const newAgg = (): LayerAgg => ({ totalLengthM: 0, rakeCutCount: 0, pieceLengthsM: [], pieceBaysM: [], pieceInfo: [], joints: [] })
   const courseAgg = newAgg()
   const topBoardAgg = newAgg()
   const topCapAgg = newAgg()
@@ -506,7 +519,8 @@ function planBoardLayers(
         (postIndex) => posts[postIndex].groundLevelM + (k + 0.5) * ch,
         "course",
         undefined,
-        (bay) => k >= bay.fullCourseCount
+        (bay) => k >= bay.fullCourseCount,
+        k
       )
     }
 
@@ -545,6 +559,7 @@ function planBoardLayers(
     rakeCutCount: agg.rakeCutCount,
     pieceLengthsM: agg.pieceLengthsM,
     pieceBaysM: agg.pieceBaysM,
+    pieceInfo: agg.pieceInfo,
     joints: agg.joints,
   })
 
@@ -867,4 +882,32 @@ export function buildWallProfile(
     ),
     engineerPostIndices: posts.filter((p) => p.needsEngineer).map((p) => p.index),
   }
+}
+
+/** One wall's boards for ordering: its rows from the bottom up — every
+ * level course, then the top board as the last row — each row a list of
+ * pieces, each piece the bay lengths it spans. */
+export interface WallOrderRows {
+  segmentIndex: number
+  rows: number[][][]
+}
+
+/** The facing boards and top board of every wall, split up by wall and
+ * by row, so an order can be made for part of the job. (The top cap is
+ * ordered separately.) */
+export function boardRowsByWall(profile: WallProfile): WallOrderRows[] {
+  const segmentOf = (postIndex: number) =>
+    profile.segments.find((seg) => postIndex >= seg.startPostIndex && postIndex < seg.endPostIndex)?.index ?? profile.segments.length - 1
+  const courses = profile.segments.map(() => [] as number[][][])
+  const tops = profile.segments.map(() => [] as number[][])
+  profile.boards.pieceInfo.forEach((info, i) => {
+    const rows = courses[segmentOf(info.postIndex)]
+    ;(rows[info.row] ??= []).push(profile.boards.pieceBaysM[i])
+  })
+  profile.topBoard.pieceInfo.forEach((info, i) => tops[segmentOf(info.postIndex)].push(profile.topBoard.pieceBaysM[i]))
+  return profile.segments.map((seg) => ({
+    segmentIndex: seg.index,
+    // a sparse row (no bay on this wall tall enough for it) is dropped
+    rows: [...Array.from(courses[seg.index], (row) => row ?? []).filter((row) => row.length > 0), ...(tops[seg.index].length ? [tops[seg.index]] : [])],
+  }))
 }
