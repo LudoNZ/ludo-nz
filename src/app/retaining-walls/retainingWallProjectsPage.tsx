@@ -19,6 +19,7 @@ import {
 } from "@/components/retainingWall/wallProjectStore"
 // same layout as the weatherboard projects page, so the two match
 import styles from "../weatherboards/weatherboardsPage.module.scss"
+import AdminProjectsSection from "./adminProjectsSection"
 
 /** Landing page for the retaining wall calculator: a scratch wall that
  * lives in this browser, public projects (anyone can open, add or edit
@@ -73,6 +74,7 @@ const RetainingWallProjectsPage = () => {
   useEffect(() => subscribeToDesigns(setDesigns, () => {}), [])
 
   const signedIn = !!auth?.currentUser
+  const isAdmin = !!auth?.customClaims?.admin
 
   /** `key` just identifies which button is busy. */
   const create = async (key: string, kind: ProjectLocation["kind"], name: string, wall: WallProject) => {
@@ -183,6 +185,8 @@ const RetainingWallProjectsPage = () => {
           </div>
         )}
       </section>
+
+      {isAdmin && <AdminProjectsSection myUid={auth?.currentUser?.uid ?? null} />}
 
       {designs.length > 0 && (
         <section className={styles.section}>

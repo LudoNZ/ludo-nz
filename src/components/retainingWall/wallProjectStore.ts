@@ -3,11 +3,12 @@
  * weatherboards/projectStore.ts): a private project lives under your
  * account (users/{uid}/retainingWallProjects) and only you see it; a
  * public one (publicRetainingWallProjects) has no owner — anyone can
- * view, create or edit it, no login needed, but nobody can delete it.
+ * view, create or edit it, no login needed, but only an admin can delete
+ * it. An admin can also list and delete every project, anyone's.
  * Every loaded project carries the location it came from so saves go
  * back to the same place. */
 
-import { collection, deleteDoc, doc, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
+import { collection, collectionGroup, deleteDoc, doc, DocumentReference, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { summariseWall, wallFromData, WallProject, WallSummary } from "./wallProject"
 
@@ -122,3 +123,74 @@ export const deleteProject = async (location: ProjectLocation, id: string) => {
   if (location.kind === "public") return
   await deleteDoc(docRef(location, id))
 }
+
+/** Moves a private project into the public ones, keeping its id — so its
+ * link carries on working, now for anyone. The public copy is written
+ * first and the private one only removed once that's on the server, so
+ * a failure part-way never loses the wall. Needs a connection. */
+export const makeProjectPublic = async (uid: string, id: string, name: string, wall: WallProject) => {
+  await saveProject({ kind: "public" }, id, name, wall)
+  await deleteDoc(docRef({ kind: "private", uid }, id))
+}
+
+/** A project as an admin sees it: any project in the database, with a
+ * handle to delete it by. */
+export interface AdminProjectRow {
+  /** unique across both places — a moved project's id can exist in each */
+  key: string
+  id: string
+  name: string
+  /** null for a public project */
+  ownerUid: string | null
+  summary: WallSummary | null
+  updatedAt: Date | null
+  ref: DocumentReference
+}
+
+/** Every retaining wall project there is — the public ones plus every
+ * account's private ones. Admins only: the rules refuse the private
+ * half to anyone else. */
+export const subscribeToAllProjects = (onData: (rows: AdminProjectRow[]) => void, onError?: (err: unknown) => void) => {
+  let publicRows: AdminProjectRow[] = []
+  let privateRows: AdminProjectRow[] = []
+  const row = (d: { id: string; ref: DocumentReference; data: () => Record<string, unknown> }, ownerUid: string | null): AdminProjectRow => {
+    const data = d.data()
+    return {
+      key: d.ref.path,
+      id: d.id,
+      name: typeof data.name === "string" ? data.name : "Untitled",
+      ownerUid,
+      summary: (data.summary as WallSummary | undefined) ?? null,
+      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : null,
+      ref: d.ref,
+    }
+  }
+  const emit = () => onData([...publicRows, ...privateRows])
+  const fail = (err: unknown) => {
+    console.error("Listing every retaining wall project failed", err)
+    onError?.(err)
+  }
+  const stopPublic = onSnapshot(
+    collection(firestore, PUBLIC),
+    (snap) => {
+      publicRows = snap.docs.map((d) => row(d, null))
+      emit()
+    },
+    fail,
+  )
+  const stopPrivate = onSnapshot(
+    collectionGroup(firestore, PRIVATE),
+    (snap) => {
+      privateRows = snap.docs.map((d) => row(d, d.ref.parent.parent?.id ?? "unknown"))
+      emit()
+    },
+    fail,
+  )
+  return () => {
+    stopPublic()
+    stopPrivate()
+  }
+}
+
+/** Admin delete of any project, public or someone's private one. */
+export const adminDeleteProject = (ref: DocumentReference) => deleteDoc(ref)

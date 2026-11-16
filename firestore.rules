@@ -298,7 +298,9 @@ service cloud.firestore {
     // Retaining wall calculator projects. Same private/public split as the
     // weatherboard projects above: private ones live under the owner's
     // account; public ones have no owner — anyone can view, create, or
-    // edit one with no login, but never delete. `wall` is the whole wall
+    // edit one with no login, but only an admin can delete one. An admin
+    // can also list and delete every account's private projects (the
+    // collection-group rule below), to clear out duplicates. `wall` is the whole wall
     // (plan, inputs, hand-set levels, calc settings snapshot); `summary`
     // is the brief figures the projects page shows on each card.
     match /users/{userId}/retainingWallProjects/{projectId} {
@@ -322,7 +324,11 @@ service cloud.firestore {
         && request.resource.data.wall is map
         && request.resource.data.summary is map
         && request.resource.data.updatedAt is timestamp;
-      allow delete: if false;
+      allow delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    match /{path=**}/retainingWallProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }
 
     // Default: deny all other access

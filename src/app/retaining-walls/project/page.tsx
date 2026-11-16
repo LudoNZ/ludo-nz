@@ -7,7 +7,7 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
-import { deleteProject, loadProject, ProjectLocation, saveProject } from "@/components/retainingWall/wallProjectStore"
+import { deleteProject, loadProject, makeProjectPublic, ProjectLocation, saveProject } from "@/components/retainingWall/wallProjectStore"
 import RetainingWallEditor from "../retainingWallEditor"
 
 const SAVE_DELAY_MS = 1000
@@ -66,6 +66,8 @@ const ProjectEditor = () => {
   // saves handed to Firestore that the server hasn't confirmed yet
   const [unsynced, setUnsynced] = useState(0)
   const [failed, setFailed] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishError, setPublishError] = useState(false)
 
   // latest values for the debounced / unmount save to read
   const latest = useRef<{ location: ProjectLocation | null; wall: WallProject | null; name: string }>({
@@ -182,6 +184,37 @@ const ProjectEditor = () => {
     else window.location.assign("/retaining-walls")
   }
 
+  /** Moves this private project to the public ones (same id, same link). */
+  const makePublic = async () => {
+    const wall = latest.current.wall
+    if (!location || location.kind !== "private" || !wall) return
+    if (
+      !window.confirm(
+        `Make "${name}" public? Anyone with the link will be able to see and edit it, and it will be listed under public projects. It can't be made private again.`,
+      )
+    )
+      return
+    // the move writes the latest wall itself, so drop any save still waiting
+    pending.current = false
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setDirty(false)
+    setPublishing(true)
+    setPublishError(false)
+    try {
+      await makeProjectPublic(location.uid, projectId, name, wall)
+      // the editor remounts for the new location — start it from the wall as it is now
+      setInitial(wall)
+      setLocation({ kind: "public" })
+    } catch (err) {
+      console.error("Making retaining wall project public failed", err)
+      pending.current = true
+      setPublishError(true)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   if (loadState !== "ready" || !initial || !location) {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "3rem 1rem", textAlign: "center" }}>
@@ -191,7 +224,11 @@ const ProjectEditor = () => {
     )
   }
 
-  const statusText = failed
+  const statusText = publishing
+    ? "Making public…"
+    : publishError
+      ? "Couldn't make it public — check your connection and try again"
+      : failed
     ? "Couldn't save — your changes will retry on the next edit"
     : dirty
       ? "Unsaved changes…"
@@ -222,9 +259,14 @@ const ProjectEditor = () => {
           }
           actions={
             location.kind === "private" ? (
-              <Button size="small" variant="danger" onClick={remove}>
-                Delete project
-              </Button>
+              <>
+                <Button size="small" variant="secondary" onClick={makePublic} disabled={!online || publishing}>
+                  {publishing ? "Making public…" : "Make public"}
+                </Button>
+                <Button size="small" variant="danger" onClick={remove} disabled={publishing}>
+                  Delete project
+                </Button>
+              </>
             ) : undefined
           }
         />
