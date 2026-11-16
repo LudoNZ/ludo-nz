@@ -94,19 +94,14 @@
 // Course joints are kept faint since there's one per row, potentially
 // many; top board/cap joints are bolder, matching their own fill colour,
 // since there's at most one per post and it's more structurally notable
-.jointMarkCourse {
-  stroke: var(--foreground);
-  opacity: 0.35;
-}
-
-.jointMarkTopBoard {
-  stroke: #4a2f14;
-  opacity: 0.9;
-}
-
+// board joins: a vertical line on the post where a board is cut. Light,
+// so it shows against the post it's drawn on in either theme.
+.jointMarkCourse,
+.jointMarkTopBoard,
 .jointMarkTopCap {
-  stroke: #8b5a2b;
-  opacity: 0.9;
+  stroke: #fff;
+  opacity: 0.95;
+  pointer-events: none;
 }
 
 .selectedRing {
@@ -173,10 +168,11 @@
 }
 
 .jointTickSwatch {
-  width: 14px;
-  height: 2px;
+  // a slice of post with the join line down it
+  width: 8px;
+  height: 14px;
   display: inline-block;
-  background-color: #4a2f14;
+  background: linear-gradient(to right, #8b5a2b 0 3px, #fff 3px 5px, #8b5a2b 5px);
   flex-shrink: 0;
 }
 
@@ -226,4 +222,23 @@
     fill: var(--foreground);
     opacity: 0.85;
   }
+}
+
+// hand-set hole depths, marked at the bottom of the hole
+.depthDotRake {
+  fill: #2a78d6;
+  stroke: var(--background);
+}
+
+.depthDotLone {
+  fill: #8e44ad;
+  stroke: var(--background);
+}
+
+.depthRakeSwatch {
+  background-color: #2a78d6;
+}
+
+.depthLoneSwatch {
+  background-color: #8e44ad;
 }

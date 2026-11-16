@@ -177,6 +177,15 @@ const WallProfileDiagram: React.FC<{
               {p.isControlPoint && (
                 <circle cx={px} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
               )}
+              {p.depthSet && (
+                <circle
+                  cx={px}
+                  cy={y(p.groundLevelM - p.embedmentM)}
+                  r={strokeW * 3}
+                  strokeWidth={strokeW * 0.5}
+                  className={p.depthSet === "rake" ? styles.depthDotRake : styles.depthDotLone}
+                />
+              )}
               {p.isCorner && (
                 <rect
                   x={px - strokeW * 3}
@@ -229,17 +238,26 @@ const WallProfileDiagram: React.FC<{
         {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].filter((j) => inView(j.postIndex)).map((j, idx) => {
           const p = allPosts[j.postIndex]
           const px = X(p.xM)
-          const tickHalfW = p.widthM * 0.9
+          const ch = settings.boardCourseHeightM
+          // a vertical line on the post, the height of the board that's
+          // cut there: a course is centred on its level, the top board
+          // hangs down from the top of the wall, the cap sits above it
+          const [fromM, toM] =
+            j.layer === "course"
+              ? [j.levelM - ch / 2, j.levelM + ch / 2]
+              : j.layer === "topBoard"
+                ? [j.levelM - ch, j.levelM]
+                : [j.levelM - ch * 0.25, j.levelM]
           const cls = j.layer === "course" ? styles.jointMarkCourse : j.layer === "topBoard" ? styles.jointMarkTopBoard : styles.jointMarkTopCap
           return (
             <line
               key={`joint-${j.layer}-${j.postIndex}-${idx}`}
-              x1={px - tickHalfW}
-              x2={px + tickHalfW}
-              y1={y(j.levelM)}
-              y2={y(j.levelM)}
+              x1={px}
+              x2={px}
+              y1={y(fromM)}
+              y2={y(toM)}
               className={cls}
-              strokeWidth={strokeW * (j.layer === "course" ? 0.35 : 0.5)}
+              strokeWidth={strokeW * (j.layer === "course" ? 0.6 : 0.8)}
             />
           )
         })}
@@ -326,6 +344,17 @@ const WallProfileDiagram: React.FC<{
         <span>
           <span className={styles.controlDotSwatch} /> Set by hand — others rake between these
         </span>
+        {profile.posts.some((p) => p.depthSet === "rake") && (
+          <span>
+            <span className={`${styles.controlDotSwatch} ${styles.depthRakeSwatch}`} /> Hole depth set — holes between
+            rake to the next set depth
+          </span>
+        )}
+        {profile.posts.some((p) => p.depthSet === "lone") && (
+          <span>
+            <span className={`${styles.controlDotSwatch} ${styles.depthLoneSwatch}`} /> Hole depth set for this post only
+          </span>
+        )}
         <span>
           <span className={styles.cornerMarkSwatch} /> Corner post — boards break here, never run through
         </span>
@@ -340,7 +369,7 @@ const WallProfileDiagram: React.FC<{
         )}
       </div>
       <p className={styles.hint}>
-        Dimensions along the bottom are post centres in mm. Tap a post to set its ground level and top level by hand.
+        Dimensions along the bottom are post centres in mm. Tap a post to set its ground level, top level or hole depth by hand.
       </p>
     </div>
   )

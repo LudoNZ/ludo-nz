@@ -5,7 +5,7 @@
  * you because a preset was edited later). */
 
 import { CalcSettings, DEFAULT_CALC_SETTINGS } from "./calcSettings"
-import { buildWallProfile, ControlPoints, legacyPlan, ProfileOverrides, RunSpacing } from "./postProfile"
+import { buildWallProfile, ControlPoints, DepthPoints, legacyPlan, ProfileOverrides, RunSpacing } from "./postProfile"
 import { SavedWallDesign } from "./retainingWallData"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
 import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
@@ -31,6 +31,8 @@ export interface WallProject {
   boardOrderFixed: Record<string, number>
   /** keyed by post index */
   controlPoints: ControlPoints
+  /** hole depths set by hand on individual posts, keyed by post index */
+  depthPoints: DepthPoints
   topCapEnabled: boolean
   /** top board laid on the rake as a full board, with the level boards
    * under it cut down to suit */
@@ -67,6 +69,7 @@ export const newBlankWall = (): WallProject => ({
   runSpacing: [],
   boardOrderFixed: {},
   controlPoints: {},
+  depthPoints: {},
   topCapEnabled: false,
   rakedTopBoard: false,
   calcSettings: DEFAULT_CALC_SETTINGS,
@@ -109,6 +112,11 @@ export const wallFromData = (data: unknown): WallProject => {
       )
     ),
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
+    depthPoints: Object.fromEntries(
+      Object.entries(typeof d.depthPoints === "object" && d.depthPoints !== null ? d.depthPoints : {})
+        .filter(([, v]) => typeof v === "object" && v !== null && typeof v.depthM === "number" && v.depthM > 0)
+        .map(([k, v]) => [k, { depthM: v.depthM, mode: v.mode === "rake" ? "rake" : "lone" }])
+    ) as DepthPoints,
     topCapEnabled: Boolean(d.topCapEnabled),
     rakedTopBoard: Boolean(d.rakedTopBoard),
     calcSettings:
@@ -135,9 +143,10 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard" | "depthPoints">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
   rakedTopBoard: wall.rakedTopBoard,
+  depthPoints: wall.depthPoints,
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,

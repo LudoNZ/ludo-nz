@@ -17,6 +17,24 @@ export interface ControlPoint {
 /** Keyed by post index. */
 export type ControlPoints = Record<number, ControlPoint>
 
+/** A post whose hole depth (below its own ground level, gravel base pad
+ * included) has been set by hand.
+ *
+ * - "lone": just this post — one that has to go deeper than its
+ *   neighbours, say. Nothing else changes.
+ * - "rake": a point on the line of hole bottoms, the same way a hand-set
+ *   top is a point on the top of the wall. Every post between two rake
+ *   points has its hole bottom on the straight line between them; the two
+ *   end posts anchor the line at their own worked-out depth unless they've
+ *   been set too. */
+export interface DepthPoint {
+  depthM: number
+  mode: "lone" | "rake"
+}
+
+/** Keyed by post index. */
+export type DepthPoints = Record<number, DepthPoint>
+
 /** Keyed by post index; presence (true) marks that post as a corner.
  * Corners now come from the plan (every interior plan vertex gets a
  * shared corner post — see buildWallProfile), so this is only still
@@ -65,6 +83,9 @@ export interface ProfilePost {
   /** m, how deep the hole is drilled below this post's ground level —
    * structural embedment plus the gravel base pad */
   embedmentM: number
+  /** how this post's depth was set by hand, or null if it's worked out
+   * (from the table, a uniform depth, or raked between "rake" posts) */
+  depthSet: DepthPoint["mode"] | null
   /** what the reference table alone would give this post — the same as
    * sizeLabel/embedmentM unless a uniform override is in force */
   tableSizeLabel: string
@@ -187,6 +208,8 @@ export interface ProfileOverrides {
   /** m — every hole is drilled this deep below its post's ground level,
    * gravel base pad included */
   holeDepthM?: number | null
+  /** hole depths set by hand on individual posts — see DepthPoint */
+  depthPoints?: DepthPoints | null
   /** build option rather than an override: the top board is a full board
    * laid on the rake, with the level courses under it cut down to suit —
    * see bayCourseLayout */
@@ -650,6 +673,7 @@ export function buildWallProfile(
       sizeLabel,
       widthM,
       embedmentM,
+      depthSet: null,
       tableSizeLabel,
       tableEmbedmentM,
       holeDiameterM,
@@ -657,6 +681,44 @@ export function buildWallProfile(
       concreteVolumeM3,
     }
   })
+
+  // hand-set hole depths, applied over the worked-out ones above
+  const depthPoints = overrides.depthPoints ?? {}
+  const setDepth = (p: ProfilePost, depthM: number, depthSet: ProfilePost["depthSet"]) => {
+    p.embedmentM = Math.max(0.05, depthM)
+    p.depthSet = depthSet
+    p.holeVolumeM3 = calcHoleVolumeM3(p.holeDiameterM, p.embedmentM)
+    const concreteDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
+    p.concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(p.holeDiameterM, concreteDepthM) - postSectionAreaM2(p.sizeLabel) * concreteDepthM)
+  }
+  const validDepth = (i: number) => {
+    const d = depthPoints[i]
+    return d && d.depthM > 0 ? d : null
+  }
+  const rakeIndices = posts.map((p) => p.index).filter((i) => validDepth(i)?.mode === "rake")
+  if (rakeIndices.length > 0) {
+    // the line of hole bottoms: through every rake point, anchored at
+    // each end of the wall on that end post's own worked-out bottom
+    const anchor = new Map<number, number>() // post index -> bottom level, m
+    anchor.set(0, posts[0].groundLevelM - posts[0].embedmentM)
+    anchor.set(lastIndex, posts[lastIndex].groundLevelM - posts[lastIndex].embedmentM)
+    for (const i of rakeIndices) anchor.set(i, posts[i].groundLevelM - depthPoints[i].depthM)
+    const anchorIndices = Array.from(anchor.keys()).sort((a, b) => a - b)
+    for (const p of posts) {
+      if (anchor.has(p.index)) continue
+      const before = [...anchorIndices].reverse().find((i) => i < p.index)!
+      const after = anchorIndices.find((i) => i > p.index)!
+      const span = posts[after].xM - posts[before].xM
+      const t = span > 0 ? (p.xM - posts[before].xM) / span : 0
+      const bottomM = anchor.get(before)! + (anchor.get(after)! - anchor.get(before)!) * t
+      setDepth(p, p.groundLevelM - bottomM, null)
+    }
+    for (const i of rakeIndices) setDepth(posts[i], depthPoints[i].depthM, "rake")
+  }
+  for (const p of posts) {
+    const d = validDepth(p.index)
+    if (d?.mode === "lone") setDepth(p, d.depthM, "lone")
+  }
 
   const bays: ProfileBay[] = []
   for (let i = 0; i < posts.length - 1; i++) {

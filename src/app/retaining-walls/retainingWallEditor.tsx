@@ -10,7 +10,7 @@ import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
-import { buildWallProfile, ControlPoints, RunSpacing, segmentBayCounts } from "@/components/retainingWall/postProfile"
+import { buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts } from "@/components/retainingWall/postProfile"
 import { overridesForWall, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
@@ -79,6 +79,9 @@ const RetainingWallEditor: React.FC<{
   // Reshaping the plan only resets these when it actually changes how
   // many posts a run gets — see handlePlanChange.
   const [controlPoints, setControlPoints] = useState<ControlPoints>(initial.controlPoints)
+  // hole depths set by hand, keyed by post index the same way — so they
+  // are reset and shifted along with the hand-set levels
+  const [depthPoints, setDepthPoints] = useState<DepthPoints>(initial.depthPoints)
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
   const [topCapEnabled, setTopCapEnabled] = useState(initial.topCapEnabled)
@@ -88,6 +91,8 @@ const RetainingWallEditor: React.FC<{
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
+  const depthInputRef = useRef<HTMLInputElement>(null)
+  const depthModeRef = useRef<HTMLSelectElement>(null)
 
   useEffect(() => {
     const unsubscribe = subscribeToCalcSettingsList(setPresets, () => {})
@@ -103,7 +108,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints })
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
@@ -127,6 +132,7 @@ const RetainingWallEditor: React.FC<{
       runSpacing,
       boardOrderFixed,
       controlPoints,
+      depthPoints,
       topCapEnabled,
       rakedTopBoard,
       calcSettings,
@@ -137,10 +143,11 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
+    setDepthPoints({})
     setSelectedIndex(null)
   }
 
@@ -212,15 +219,17 @@ const RetainingWallEditor: React.FC<{
     const newBays = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, nextSpacing)[segmentIndex]
     setRunSpacing(nextSpacing)
     if (newBays === oldBays) return
-    setControlPoints((cp) => {
-      const next: ControlPoints = {}
-      for (const [key, value] of Object.entries(cp)) {
+    const shift = <T,>(points: Record<number, T>): Record<number, T> => {
+      const next: Record<number, T> = {}
+      for (const [key, value] of Object.entries(points)) {
         const i = Number(key)
-        if (i <= seg.startPostIndex) next[i] = value
-        else if (i >= seg.endPostIndex) next[i + newBays - oldBays] = value
+        if (i <= seg.startPostIndex) next[i] = value as T
+        else if (i >= seg.endPostIndex) next[i + newBays - oldBays] = value as T
       }
       return next
-    })
+    }
+    setControlPoints(shift)
+    setDepthPoints(shift)
     setSelectedIndex(null)
   }
 
@@ -237,7 +246,21 @@ const RetainingWallEditor: React.FC<{
     const groundAbs = parseFloat(groundInputRef.current.value)
     const topAbs = parseFloat(topInputRef.current.value)
     if (isNaN(groundAbs) || isNaN(topAbs)) return
-    setControlPoints((cp) => ({ ...cp, [selectedIndex]: { groundLevelM: groundAbs - rlDatumM, topLevelM: topAbs - rlDatumM } }))
+    const post = profile?.posts[selectedIndex]
+    // only a level that was actually changed makes this a hand-set post
+    const levelsChanged =
+      !post || Math.abs(groundAbs - rlDatumM - post.groundLevelM) > 0.0005 || Math.abs(topAbs - rlDatumM - post.topLevelM) > 0.0005
+    if (levelsChanged || post?.isControlPoint)
+      setControlPoints((cp) => ({ ...cp, [selectedIndex]: { groundLevelM: groundAbs - rlDatumM, topLevelM: topAbs - rlDatumM } }))
+
+    const mode = depthModeRef.current?.value
+    const depthMm = parseFloat(depthInputRef.current?.value ?? "")
+    setDepthPoints((dp) => {
+      const next = { ...dp }
+      if ((mode === "lone" || mode === "rake") && depthMm > 0) next[selectedIndex] = { depthM: depthMm / 1000, mode }
+      else delete next[selectedIndex]
+      return next
+    })
   }
 
   const handleClearControlPoint = () => {
@@ -605,6 +628,40 @@ const RetainingWallEditor: React.FC<{
                   />
                 </div>
               </div>
+              <div className={styles.editFields}>
+                <div className={styles.field}>
+                  <label htmlFor="postDepth">Hole depth below ground (mm)</label>
+                  <input
+                    id="postDepth"
+                    ref={depthInputRef}
+                    type="number"
+                    min={50}
+                    step={50}
+                    inputMode="numeric"
+                    defaultValue={Math.round(selectedPost.embedmentM * 1000)}
+                    onChange={() => {
+                      // typing a depth means setting it — default to just this post
+                      if (depthModeRef.current && depthModeRef.current.value === "auto") depthModeRef.current.value = "lone"
+                    }}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="postDepthMode">Depth applies to</label>
+                  <select id="postDepthMode" ref={depthModeRef} defaultValue={selectedPost.depthSet ?? "auto"}>
+                    <option value="auto">Worked out — not set by hand</option>
+                    <option value="lone">This post only</option>
+                    <option value="rake">Rake point — holes between rake to the next one</option>
+                  </select>
+                </div>
+              </div>
+              <p className={styles.cornerNote}>
+                Depth is from this post&apos;s ground level to the bottom of its hole, gravel base pad included
+                {selectedPost.embedmentM < selectedPost.tableEmbedmentM - 1e-6
+                  ? ` — ⚠ shallower than the ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm the reference table gives for this post.`
+                  : ` (the reference table gives ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm for this post).`}{" "}
+                A rake point works like a hand-set top: the hole bottoms of the posts between two rake points sit on a
+                straight line between them, with the wall&apos;s end posts holding their own worked-out depth.
+              </p>
               {selectedPost.isCorner && (
                 <p className={styles.cornerNote}>
                   Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
