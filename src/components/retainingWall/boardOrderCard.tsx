@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { planBoardOrderDetailed } from "./calcSettings"
 import { WallOrderRows } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
-import { PartialBoardOrder } from "./wallProject"
+import { PartialBoardOrder, PlacedBoardOrder } from "./wallProject"
 import styles from "./boardOrderCard.module.scss"
 
 const m = (n: number, dp = 2) => `${n.toFixed(dp)} m`
@@ -18,7 +18,12 @@ const m = (n: number, dp = 2) => `${n.toFixed(dp)} m`
  * "Partial order" narrows the cut list to chosen walls, and to the first
  * so-many rows of each (counted from the bottom, the top board being the
  * last row) — for ordering a job in stages. It keeps its own pinned
- * counts, so the whole-wall order is still there to come back to. */
+ * counts, so the whole-wall order is still there to come back to.
+ *
+ * "Place order" (partial view) logs what's on the table as an order
+ * placed. Rows already covered by a placed order are left out of the
+ * next one, so the partial view always works out just what's still to
+ * buy — and "Order everything remaining" selects the lot. */
 const BoardOrderCard: React.FC<{
   /** every wall's boards, by row from the bottom up */
   walls: WallOrderRows[]
@@ -28,21 +33,39 @@ const BoardOrderCard: React.FC<{
   onChange: (fixed: Record<string, number>) => void
   partial: PartialBoardOrder
   onPartialChange: (partial: PartialBoardOrder) => void
-}> = ({ walls, stockLengthsM, fixed, onChange, partial, onPartialChange }) => {
+  /** orders already placed, oldest first */
+  placed: PlacedBoardOrder[]
+  onPlacedChange: (placed: PlacedBoardOrder[]) => void
+}> = ({ walls, stockLengthsM, fixed, onChange, partial, onPartialChange, placed, onPlacedChange }) => {
   const isPartial = partial.enabled
   /** rows of this wall in the partial order — all of them until told otherwise */
   const rowsFor = (wall: WallOrderRows) => Math.min(wall.rows.length, partial.wallRows[String(wall.segmentIndex)] ?? wall.rows.length)
 
-  const piecesM = useMemo(
+  /** rows of each wall a placed order already covers, keyed by wall index */
+  const coveredRows = useMemo(() => {
+    const covered = new Map<number, Set<number>>()
+    for (const order of placed)
+      for (const w of order.walls) {
+        const rows = covered.get(w.segmentIndex) ?? new Set<number>()
+        for (let r = w.fromRow; r < w.toRow; r++) rows.add(r)
+        covered.set(w.segmentIndex, rows)
+      }
+    return covered
+  }, [placed])
+  const orderedCount = (wall: WallOrderRows) => wall.rows.filter((_, r) => coveredRows.get(wall.segmentIndex)?.has(r)).length
+
+  /** the rows this order is for: in partial view, each selected wall's
+   * rows up to its chosen count that no placed order has covered yet */
+  const selection = useMemo(
     () =>
-      walls.flatMap((wall) => {
-        const count = partial.enabled
-          ? Math.min(wall.rows.length, partial.wallRows[String(wall.segmentIndex)] ?? wall.rows.length)
-          : wall.rows.length
-        return wall.rows.slice(0, count).flat()
+      walls.map((wall) => {
+        const upTo = partial.enabled ? Math.min(wall.rows.length, partial.wallRows[String(wall.segmentIndex)] ?? wall.rows.length) : wall.rows.length
+        const rows = Array.from({ length: upTo }, (_, r) => r).filter((r) => !partial.enabled || !coveredRows.get(wall.segmentIndex)?.has(r))
+        return { wall, rows }
       }),
-    [walls, partial.enabled, partial.wallRows],
+    [walls, partial.enabled, partial.wallRows, coveredRows],
   )
+  const piecesM = useMemo(() => selection.flatMap(({ wall, rows }) => rows.flatMap((r) => wall.rows[r])), [selection])
   const activeFixed = isPartial ? partial.fixed : fixed
   const setActiveFixed = (next: Record<string, number>) => (isPartial ? onPartialChange({ ...partial, fixed: next }) : onChange(next))
 
@@ -64,6 +87,55 @@ const BoardOrderCard: React.FC<{
       ...partial,
       wallRows: { ...partial.wallRows, [String(wall.segmentIndex)]: Math.max(0, Math.min(wall.rows.length, Math.round(rows))) },
     })
+
+  const totalRows = walls.reduce((t, wall) => t + wall.rows.length, 0)
+  const totalOrdered = walls.reduce((t, wall) => t + orderedCount(wall), 0)
+  const selectEverything = () =>
+    onPartialChange({ ...partial, enabled: true, wallRows: Object.fromEntries(walls.map((wall) => [String(wall.segmentIndex), wall.rows.length])) })
+
+  const placeOrder = () => {
+    // each wall's rows as runs of consecutive rows
+    const ranges: PlacedBoardOrder["walls"] = []
+    for (const { wall, rows } of selection) {
+      for (const r of rows) {
+        const last = ranges[ranges.length - 1]
+        if (last && last.segmentIndex === wall.segmentIndex && last.toRow === r) last.toRow = r + 1
+        else ranges.push({ segmentIndex: wall.segmentIndex, fromRow: r, toRow: r + 1 })
+      }
+    }
+    if (ranges.length === 0) return
+    onPlacedChange([
+      ...placed,
+      {
+        id: Date.now().toString(36),
+        placedAt: new Date().toISOString(),
+        walls: ranges,
+        lines: mine.lines.filter((l) => l.count > 0).map(({ lengthM, count }) => ({ lengthM, count })),
+        boardCount: mine.boardCount,
+        totalLengthM: mine.totalLengthM,
+      },
+    ])
+    // the next order starts from the suggestion again
+    onPartialChange({ ...partial, fixed: {} })
+  }
+
+  const removeOrder = (order: PlacedBoardOrder, number: number) => {
+    if (!window.confirm(`Remove order ${number} from the log? Its rows will count as still to order.`)) return
+    onPlacedChange(placed.filter((o) => o.id !== order.id))
+  }
+
+  const describeRows = (order: PlacedBoardOrder) =>
+    order.walls
+      .map((w) => {
+        const total = walls.find((wall) => wall.segmentIndex === w.segmentIndex)?.rows.length
+        const rows = w.toRow - w.fromRow === 1 ? `row ${w.fromRow + 1}` : `rows ${w.fromRow + 1}–${w.toRow}`
+        return `${walls.length > 1 ? `${segmentLabel(w.segmentIndex)}: ` : ""}${rows}${total !== undefined && w.toRow >= total ? " (incl. top board)" : ""}`
+      })
+      .join(" · ")
+  const when = (iso: string) => {
+    const d = new Date(iso)
+    return isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  }
 
   const selectedWalls = walls.filter((wall) => rowsFor(wall) > 0)
   const title = !isPartial
@@ -135,10 +207,24 @@ const BoardOrderCard: React.FC<{
                     : rows === total
                       ? "all rows, top board included"
                       : `bottom ${rows} row${rows > 1 ? "s" : ""} — top board not included`}
+                  {orderedCount(wall) > 0 &&
+                    ` · ${orderedCount(wall)} already ordered, ${selection.find((sel) => sel.wall === wall)?.rows.length ?? 0} new in this order`}
                 </span>
               </div>
             )
           })}
+          <div className={styles.partialActions}>
+            <button type="button" className={styles.secondaryButton} onClick={selectEverything} disabled={totalOrdered >= totalRows}>
+              Order everything remaining
+            </button>
+            <span className={styles.wallNote}>
+              {totalOrdered === 0
+                ? "No orders placed yet."
+                : totalOrdered >= totalRows
+                  ? "Every row has been ordered."
+                  : `${totalOrdered} of ${totalRows} rows ordered so far — the table below only covers rows not yet ordered.`}
+            </span>
+          </div>
         </div>
       )}
 
@@ -212,6 +298,53 @@ const BoardOrderCard: React.FC<{
           ⚠ This order is short: {mine.uncutCount} piece{mine.uncutCount > 1 ? "s" : ""} ({m(mine.uncutLengthM)}) can&apos;t
           be cut from it. Add boards, or clear a box so that length can make up the difference.
         </p>
+      )}
+      {isPartial && (
+        <div className={styles.placeRow}>
+          <button type="button" className={styles.placeButton} onClick={placeOrder} disabled={piecesM.length === 0}>
+            Place order
+          </button>
+          <span className={styles.wallNote}>
+            {piecesM.length === 0
+              ? "Nothing new to order in this selection."
+              : `Logs your order of ${mine.boardCount} board${mine.boardCount === 1 ? "" : "s"} (${m(mine.totalLengthM)}) below, and takes these rows off what's left to order.`}
+          </span>
+        </div>
+      )}
+      {placed.length > 0 && (
+        <div className={styles.log}>
+          <h4>Orders placed</h4>
+          <ol>
+            {placed.map((order, i) => (
+              <li key={order.id}>
+                <div className={styles.logHead}>
+                  <strong>Order {i + 1}</strong>
+                  <span>{when(order.placedAt)}</span>
+                  <button type="button" className={styles.clear} onClick={() => removeOrder(order, i + 1)}>
+                    Remove
+                  </button>
+                </div>
+                <div className={styles.logLines}>
+                  {order.lines.map((l) => `${l.count} × ${m(l.lengthM, 1)}`).join(", ") || "no boards"} — {order.boardCount} board
+                  {order.boardCount === 1 ? "" : "s"}, {m(order.totalLengthM)}
+                </div>
+                <div className={styles.logRows}>{describeRows(order)}</div>
+              </li>
+            ))}
+          </ol>
+          <p className={styles.logTotal}>
+            Ordered in total: {placed.reduce((t, o) => t + o.boardCount, 0)} boards, {m(placed.reduce((t, o) => t + o.totalLengthM, 0))} ·{" "}
+            {totalOrdered} of {totalRows} rows covered
+            {totalOrdered < totalRows && !isPartial && (
+              <>
+                {" · "}
+                <button type="button" className={styles.clear} onClick={selectEverything}>
+                  Order everything remaining
+                </button>
+              </>
+            )}
+          </p>
+        </div>
       )}
       <p className={styles.note}>
         {isPartial ? "This part of the job" : "The wall"} needs {m(neededM)} of board fixed in place. Worked out longest

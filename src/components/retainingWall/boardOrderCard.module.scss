@@ -208,3 +208,93 @@
   font-size: 0.8rem;
   opacity: 0.65;
 }
+
+.partialActions,
+.placeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.9rem;
+}
+
+.partialActions {
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.placeRow {
+  margin-top: 0.8rem;
+}
+
+.secondaryButton,
+.placeButton {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.placeButton {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.log {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(127, 127, 127, 0.35);
+
+  h4 {
+    margin-bottom: 0.4rem;
+    font-size: 0.95rem;
+    color: var(--color-primary);
+  }
+
+  ol {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+}
+
+.logHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.7rem;
+  font-size: 0.9rem;
+
+  span {
+    opacity: 0.65;
+    font-size: 0.82rem;
+  }
+}
+
+.logLines {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.logRows {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.logTotal {
+  margin-top: 0.6rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+}

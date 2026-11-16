@@ -16,6 +16,35 @@ export interface PartialBoardOrder {
   fixed: Record<string, number>
 }
 
+/** A board order that's been placed — logged from the partial order
+ * view, so the next order only has to cover what's left. */
+export interface PlacedBoardOrder {
+  id: string
+  /** ISO date-time */
+  placedAt: string
+  /** the rows it covered, per wall: fromRow up to (not including) toRow,
+   * counted from 0 at the bottom, the top board being the last row */
+  walls: { segmentIndex: number; fromRow: number; toRow: number }[]
+  /** what was ordered */
+  lines: { lengthM: number; count: number }[]
+  boardCount: number
+  totalLengthM: number
+}
+
+const placedOrdersFromData = (raw: unknown): PlacedBoardOrder[] =>
+  (Array.isArray(raw) ? raw : [])
+    .filter((o) => typeof o === "object" && o !== null && Array.isArray(o.walls) && Array.isArray(o.lines))
+    .map((o) => ({
+      id: String(o.id ?? ""),
+      placedAt: typeof o.placedAt === "string" ? o.placedAt : "",
+      walls: (o.walls as PlacedBoardOrder["walls"]).filter(
+        (w) => typeof w?.segmentIndex === "number" && typeof w.fromRow === "number" && typeof w.toRow === "number"
+      ),
+      lines: (o.lines as PlacedBoardOrder["lines"]).filter((l) => typeof l?.lengthM === "number" && typeof l.count === "number"),
+      boardCount: typeof o.boardCount === "number" ? o.boardCount : 0,
+      totalLengthM: typeof o.totalLengthM === "number" ? o.totalLengthM : 0,
+    }))
+
 const numberMap = (raw: unknown): Record<string, number> =>
   Object.fromEntries(
     Object.entries(typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {}).filter(
@@ -48,6 +77,8 @@ export interface WallProject {
    * with all its rows, 0 leaves it out. `fixed` pins counts per stock
    * length for this partial order, separately from the whole-wall one. */
   boardOrderPartial: PartialBoardOrder
+  /** the log of orders placed, oldest first */
+  boardOrdersPlaced: PlacedBoardOrder[]
   /** keyed by post index */
   controlPoints: ControlPoints
   /** hole depths set by hand on individual posts, keyed by post index */
@@ -94,6 +125,7 @@ export const newBlankWall = (): WallProject => ({
   runSpacing: [],
   boardOrderFixed: {},
   boardOrderPartial: { enabled: false, wallRows: {}, fixed: {} },
+  boardOrdersPlaced: [],
   controlPoints: {},
   depthPoints: {},
   topCapEnabled: false,
@@ -144,6 +176,7 @@ export const wallFromData = (data: unknown): WallProject => {
       wallRows: numberMap(d.boardOrderPartial?.wallRows),
       fixed: numberMap(d.boardOrderPartial?.fixed),
     },
+    boardOrdersPlaced: placedOrdersFromData(d.boardOrdersPlaced),
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     depthPoints: Object.fromEntries(
       Object.entries(typeof d.depthPoints === "object" && d.depthPoints !== null ? d.depthPoints : {})

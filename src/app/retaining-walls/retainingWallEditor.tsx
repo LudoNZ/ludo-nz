@@ -11,7 +11,7 @@ import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
 import { boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
-import { overridesForWall, PartialBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
+import { overridesForWall, PartialBoardOrder, PlacedBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
   RetainedSide,
@@ -67,6 +67,7 @@ const RetainingWallEditor: React.FC<{
   const [boardOrderFixed, setBoardOrderFixed] = useState<Record<string, number>>(initial.boardOrderFixed)
   // an order for part of the job — chosen walls and rows — see BoardOrderCard
   const [boardOrderPartial, setBoardOrderPartial] = useState<PartialBoardOrder>(initial.boardOrderPartial)
+  const [boardOrdersPlaced, setBoardOrdersPlaced] = useState<PlacedBoardOrder[]>(initial.boardOrdersPlaced)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -139,6 +140,7 @@ const RetainingWallEditor: React.FC<{
       runSpacing,
       boardOrderFixed,
       boardOrderPartial,
+      boardOrdersPlaced,
       controlPoints,
       depthPoints,
       topCapEnabled,
@@ -153,7 +155,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -839,6 +841,8 @@ const RetainingWallEditor: React.FC<{
                 onChange={setBoardOrderFixed}
                 partial={boardOrderPartial}
                 onPartialChange={setBoardOrderPartial}
+                placed={boardOrdersPlaced}
+                onPlacedChange={setBoardOrdersPlaced}
               />
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
