@@ -242,3 +242,16 @@
 .depthLoneSwatch {
   background-color: #8e44ad;
 }
+
+// boards picked out from the order card (those cut from a chosen length)
+.boardHighlight {
+  fill: #2a78d6;
+  opacity: 0.55;
+  stroke: none;
+  pointer-events: none;
+}
+
+.boardHighlightSwatch {
+  background-color: #2a78d6;
+  opacity: 0.75;
+}

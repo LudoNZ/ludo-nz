@@ -10,7 +10,7 @@ import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
-import { boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
+import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
 import { overridesForWall, PartialBoardOrder, PlacedBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
@@ -67,6 +67,8 @@ const RetainingWallEditor: React.FC<{
   const [boardOrderFixed, setBoardOrderFixed] = useState<Record<string, number>>(initial.boardOrderFixed)
   // an order for part of the job — chosen walls and rows — see BoardOrderCard
   const [boardOrderPartial, setBoardOrderPartial] = useState<PartialBoardOrder>(initial.boardOrderPartial)
+  // boards picked out on the elevation from the order card (not saved)
+  const [boardHighlight, setBoardHighlight] = useState<BoardHighlight[]>([])
   const [boardOrdersPlaced, setBoardOrdersPlaced] = useState<PlacedBoardOrder[]>(initial.boardOrdersPlaced)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -668,6 +670,7 @@ const RetainingWallEditor: React.FC<{
               onSelectPost={setSelectedIndex}
               segmentIndex={shownSegment}
               mirrored={mirrored}
+              highlight={boardHighlight}
             />
             <p className={styles.viewNote}>
               Seen from the low side, facing the retained ground
@@ -843,6 +846,7 @@ const RetainingWallEditor: React.FC<{
                 onPartialChange={setBoardOrderPartial}
                 placed={boardOrdersPlaced}
                 onPlacedChange={setBoardOrdersPlaced}
+                onHighlight={setBoardHighlight}
               />
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground

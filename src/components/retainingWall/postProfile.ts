@@ -884,12 +884,23 @@ export function buildWallProfile(
   }
 }
 
+/** A board piece as the order card needs it: the bay lengths it spans,
+ * the post it starts on (it runs on to startPost + baysM.length), and
+ * which board it is in the elevation — a level course (courseRow counts
+ * up from 0 at the bottom of its bay) or the top board. */
+export interface WallOrderPiece {
+  baysM: number[]
+  startPost: number
+  layer: "course" | "topBoard"
+  courseRow: number
+}
+
 /** One wall's boards for ordering: its rows from the bottom up — every
  * level course, then the top board as the last row — each row a list of
- * pieces, each piece the bay lengths it spans. */
+ * pieces. */
 export interface WallOrderRows {
   segmentIndex: number
-  rows: number[][][]
+  rows: WallOrderPiece[][]
 }
 
 /** The facing boards and top board of every wall, split up by wall and
@@ -898,16 +909,27 @@ export interface WallOrderRows {
 export function boardRowsByWall(profile: WallProfile): WallOrderRows[] {
   const segmentOf = (postIndex: number) =>
     profile.segments.find((seg) => postIndex >= seg.startPostIndex && postIndex < seg.endPostIndex)?.index ?? profile.segments.length - 1
-  const courses = profile.segments.map(() => [] as number[][][])
-  const tops = profile.segments.map(() => [] as number[][])
+  const courses = profile.segments.map(() => [] as WallOrderPiece[][])
+  const tops = profile.segments.map(() => [] as WallOrderPiece[])
   profile.boards.pieceInfo.forEach((info, i) => {
     const rows = courses[segmentOf(info.postIndex)]
-    ;(rows[info.row] ??= []).push(profile.boards.pieceBaysM[i])
+    ;(rows[info.row] ??= []).push({ baysM: profile.boards.pieceBaysM[i], startPost: info.postIndex, layer: "course", courseRow: info.row })
   })
-  profile.topBoard.pieceInfo.forEach((info, i) => tops[segmentOf(info.postIndex)].push(profile.topBoard.pieceBaysM[i]))
+  profile.topBoard.pieceInfo.forEach((info, i) =>
+    tops[segmentOf(info.postIndex)].push({ baysM: profile.topBoard.pieceBaysM[i], startPost: info.postIndex, layer: "topBoard", courseRow: -1 })
+  )
   return profile.segments.map((seg) => ({
     segmentIndex: seg.index,
     // a sparse row (no bay on this wall tall enough for it) is dropped
     rows: [...Array.from(courses[seg.index], (row) => row ?? []).filter((row) => row.length > 0), ...(tops[seg.index].length ? [tops[seg.index]] : [])],
   }))
+}
+
+/** A board to pick out on the elevation: the posts it runs between and
+ * which board it is there. */
+export interface BoardHighlight {
+  startPost: number
+  endPost: number
+  layer: "course" | "topBoard"
+  courseRow: number
 }

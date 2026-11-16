@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useMemo } from "react"
-import { bayCourseLayout, WallProfile } from "./postProfile"
+import { bayCourseLayout, BoardHighlight, WallProfile } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
 import { CalcSettings } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
@@ -30,7 +30,9 @@ const WallProfileDiagram: React.FC<{
   onSelectPost: (index: number) => void
   segmentIndex?: number | null
   mirrored?: boolean
-}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false }) => {
+  /** boards to pick out — the ones cut from a chosen length on the order */
+  highlight?: BoardHighlight[]
+}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false, highlight = [] }) => {
   const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
@@ -125,6 +127,22 @@ const WallProfileDiagram: React.FC<{
                     strokeWidth={strokeW * 0.4}
                   />
                 ))}
+                {/* tint over the boards picked out from the order */}
+                {Array.from({ length: layout.courseCount }, (_, k) => (
+                  <rect
+                    key={`hl-${k}`}
+                    x={Math.min(ax, bx)}
+                    y={y(baseLevelM + (k + 1) * ch)}
+                    width={Math.abs(bx - ax)}
+                    height={ch}
+                    className={styles.boardHighlight}
+                    visibility={
+                      highlight.some((h) => h.layer === "course" && h.courseRow === k && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost)
+                        ? "visible"
+                        : "hidden"
+                    }
+                  />
+                ))}
               </g>
               {/* top/perimeter board — the piece that follows the rake:
                   cut to it on top only, or (raked) a full board on the slope */}
@@ -133,6 +151,12 @@ const WallProfileDiagram: React.FC<{
                 className={styles.topBoardFill}
                 strokeWidth={strokeW * 0.4}
               />
+              {highlight.some((h) => h.layer === "topBoard" && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost) && (
+                <polygon
+                  points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
+                  className={styles.boardHighlight}
+                />
+              )}
               {topCapEnabled && (
                 <polygon
                   points={`${ax},${y(capTopAM)} ${bx},${y(capTopBM)} ${bx},${y(capTopBM + capThicknessM)} ${ax},${y(capTopAM + capThicknessM)}`}
@@ -339,6 +363,12 @@ const WallProfileDiagram: React.FC<{
         {topCapEnabled && (
           <span>
             <span className={`${styles.swatch} ${styles.topCapFillSwatch}`} /> Top cap
+          </span>
+        )}
+        {highlight.length > 0 && (
+          <span>
+            <span className={`${styles.swatch} ${styles.boardHighlightSwatch}`} /> Boards cut from the length picked in the
+            board order
           </span>
         )}
         <span>

@@ -132,8 +132,37 @@ export interface BoardOrderLine {
   usedCount: number
 }
 
-export interface BoardOrderPlan {
+/** A piece to cut, for the order planner: the bay lengths it spans, and
+ * optionally where it goes — the post it starts on (so a piece that has
+ * to be split can say where each part lands) and anything else the
+ * caller wants handed back with it. */
+export interface OrderPiece<T = unknown> {
+  baysM: number[]
+  startPost?: number
+  tag?: T
+}
+
+/** One piece as cut from a board on the order. */
+export interface BoardCut<T = unknown> {
+  lengthM: number
+  /** post it starts on / ends on, when the piece said where it starts */
+  startPost: number | null
+  endPost: number | null
+  tag: T | undefined
+}
+
+/** One bought board and what's cut out of it, in cutting order. */
+export interface OrderedBoard<T = unknown> {
+  lengthM: number
+  cuts: BoardCut<T>[]
+  /** m left over */
+  leftM: number
+}
+
+export interface BoardOrderPlan<T = unknown> {
   lines: BoardOrderLine[]
+  /** every board on the order with its cuts — the cut list */
+  boards: OrderedBoard<T>[]
   boardCount: number
   totalLengthM: number
   /** m of the order that ends up as offcuts or spare boards */
@@ -157,22 +186,32 @@ export interface BoardOrderPlan {
  * order, otherwise from a new board of the shortest length (among those
  * not pinned) it fits in. A piece too long for anything left is split at
  * a post into parts that do fit. Saw cuts aren't allowed for. */
-export function planBoardOrderDetailed(
-  piecesM: number[][],
+export function planBoardOrderDetailed<T = unknown>(
+  piecesM: (number[] | OrderPiece<T>)[],
   stockLengthsM: number[],
   fixedCounts: Record<string, number> = {}
-): BoardOrderPlan {
+): BoardOrderPlan<T> {
   const stocks = [...stockLengthsM].sort((a, b) => a - b)
   const isFixed = (l: number) => Number.isFinite(fixedCounts[String(l)]) && fixedCounts[String(l)] >= 0
   const autoStocks = stocks.filter((l) => !isFixed(l))
   const longestAuto = autoStocks.length ? autoStocks[autoStocks.length - 1] : 0
-  const boards: { lengthM: number; leftM: number; used: boolean }[] = []
+  const boards: { lengthM: number; leftM: number; used: boolean; cuts: BoardCut<T>[] }[] = []
   for (const l of stocks) {
-    if (isFixed(l)) for (let i = 0; i < Math.min(5000, Math.floor(fixedCounts[String(l)])); i++) boards.push({ lengthM: l, leftM: l, used: false })
+    if (isFixed(l))
+      for (let i = 0; i < Math.min(5000, Math.floor(fixedCounts[String(l)])); i++) boards.push({ lengthM: l, leftM: l, used: false, cuts: [] })
   }
 
   const sum = (bays: number[]) => bays.reduce((t, w) => t + w, 0)
-  const queue = piecesM.filter((p) => p.length > 0).map((bays) => ({ bays, lengthM: sum(bays) }))
+  const queue = piecesM
+    .map((p): OrderPiece<T> => (Array.isArray(p) ? { baysM: p } : p))
+    .filter((p) => p.baysM.length > 0)
+    .map((p) => ({ bays: p.baysM, lengthM: sum(p.baysM), startPost: p.startPost ?? null, tag: p.tag }))
+  const cutOf = (piece: (typeof queue)[number]): BoardCut<T> => ({
+    lengthM: piece.lengthM,
+    startPost: piece.startPost,
+    endPost: piece.startPost === null ? null : piece.startPost + piece.bays.length,
+    tag: piece.tag,
+  })
   queue.sort((a, b) => a.lengthM - b.lengthM) // longest last, so pop() takes it
   let extraJoins = 0
   let uncutCount = 0
@@ -187,11 +226,12 @@ export function planBoardOrderDetailed(
     if (best) {
       best.leftM = Math.max(0, best.leftM - piece.lengthM)
       best.used = true
+      best.cuts.push(cutOf(piece))
       continue
     }
     const lengthM = autoStocks.find((l) => l + 1e-6 >= piece.lengthM)
     if (lengthM !== undefined) {
-      boards.push({ lengthM, leftM: Math.max(0, lengthM - piece.lengthM), used: true })
+      boards.push({ lengthM, leftM: Math.max(0, lengthM - piece.lengthM), used: true, cuts: [cutOf(piece)] })
       continue
     }
     // nothing long enough: split at a post into a part that fits the
@@ -206,7 +246,15 @@ export function planBoardOrderDetailed(
       continue
     }
     extraJoins++
-    queue.push({ bays: piece.bays.slice(0, take), lengthM: takenM }, { bays: piece.bays.slice(take), lengthM: piece.lengthM - takenM })
+    queue.push(
+      { ...piece, bays: piece.bays.slice(0, take), lengthM: takenM },
+      {
+        ...piece,
+        bays: piece.bays.slice(take),
+        lengthM: piece.lengthM - takenM,
+        startPost: piece.startPost === null ? null : piece.startPost + take,
+      }
+    )
     queue.sort((a, b) => a.lengthM - b.lengthM)
   }
 
@@ -218,6 +266,9 @@ export function planBoardOrderDetailed(
   const totalLengthM = boards.reduce((t, b) => t + b.lengthM, 0)
   return {
     lines,
+    boards: boards
+      .map(({ lengthM, cuts, leftM }) => ({ lengthM, cuts, leftM }))
+      .sort((a, b) => a.lengthM - b.lengthM || b.cuts.length - a.cuts.length),
     boardCount: boards.length,
     totalLengthM,
     wasteM: boards.reduce((t, b) => t + b.leftM, 0),

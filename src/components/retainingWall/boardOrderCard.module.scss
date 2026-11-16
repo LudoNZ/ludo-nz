@@ -298,3 +298,67 @@
   font-size: 0.86rem;
   font-weight: 600;
 }
+
+.lengthPick,
+.lengthPicked {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lengthPicked {
+  border-color: #2a78d6;
+  background-color: #2a78d6;
+  color: #fff;
+}
+
+.pickedRow td {
+  background-color: rgba(42, 120, 214, 0.08);
+}
+
+.pickHint {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+.cutList {
+  margin-top: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: var(--borderRadius);
+  max-height: 24rem;
+  overflow-y: auto;
+
+  h4 {
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--color-primary);
+  }
+
+  ol {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: 0.6rem 1.2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  ul {
+    margin: 0.15rem 0 0;
+    padding-left: 1rem;
+    font-size: 0.86rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cutBoard {
+  font-weight: 700;
+  font-size: 0.9rem;
+}

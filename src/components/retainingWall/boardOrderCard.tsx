@@ -1,13 +1,22 @@
 "use client"
 
-import { useMemo } from "react"
-import { planBoardOrderDetailed } from "./calcSettings"
-import { WallOrderRows } from "./postProfile"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { OrderPiece, planBoardOrderDetailed } from "./calcSettings"
+import { BoardHighlight, WallOrderRows } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
 import { PartialBoardOrder, PlacedBoardOrder } from "./wallProject"
 import styles from "./boardOrderCard.module.scss"
 
 const m = (n: number, dp = 2) => `${n.toFixed(dp)} m`
+
+/** where a piece goes, carried through the order planner with it */
+interface PieceTag {
+  segmentIndex: number
+  /** row in its wall, from 0 at the bottom */
+  row: number
+  layer: "course" | "topBoard"
+  courseRow: number
+}
 
 /** The board order, worked out live from the wall's cut list. "Suggested"
  * is what to buy with every length freely available. "Your order" starts
@@ -36,7 +45,10 @@ const BoardOrderCard: React.FC<{
   /** orders already placed, oldest first */
   placed: PlacedBoardOrder[]
   onPlacedChange: (placed: PlacedBoardOrder[]) => void
-}> = ({ walls, stockLengthsM, fixed, onChange, partial, onPartialChange, placed, onPlacedChange }) => {
+  /** the boards cut from the length picked in the table (none = []), for
+   * the elevation to pick out */
+  onHighlight: (boards: BoardHighlight[]) => void
+}> = ({ walls, stockLengthsM, fixed, onChange, partial, onPartialChange, placed, onPlacedChange, onHighlight }) => {
   const isPartial = partial.enabled
   /** rows of this wall in the partial order — all of them until told otherwise */
   const rowsFor = (wall: WallOrderRows) => Math.min(wall.rows.length, partial.wallRows[String(wall.segmentIndex)] ?? wall.rows.length)
@@ -65,14 +77,67 @@ const BoardOrderCard: React.FC<{
       }),
     [walls, partial.enabled, partial.wallRows, coveredRows],
   )
-  const piecesM = useMemo(() => selection.flatMap(({ wall, rows }) => rows.flatMap((r) => wall.rows[r])), [selection])
+  const piecesM = useMemo(
+    () =>
+      selection.flatMap(({ wall, rows }) =>
+        rows.flatMap((r) =>
+          wall.rows[r].map(
+            (piece): OrderPiece<PieceTag> => ({
+              baysM: piece.baysM,
+              startPost: piece.startPost,
+              tag: { segmentIndex: wall.segmentIndex, row: r, layer: piece.layer, courseRow: piece.courseRow },
+            }),
+          ),
+        ),
+      ),
+    [selection],
+  )
   const activeFixed = isPartial ? partial.fixed : fixed
   const setActiveFixed = (next: Record<string, number>) => (isPartial ? onPartialChange({ ...partial, fixed: next }) : onChange(next))
 
   const suggested = useMemo(() => planBoardOrderDetailed(piecesM, stockLengthsM), [piecesM, stockLengthsM])
   const mine = useMemo(() => planBoardOrderDetailed(piecesM, stockLengthsM, activeFixed), [piecesM, stockLengthsM, activeFixed])
   const anyFixed = mine.lines.some((l) => l.fixed)
-  const neededM = piecesM.reduce((t, p) => t + p.reduce((a, w) => a + w, 0), 0)
+  const neededM = piecesM.reduce((t, p) => t + p.baysM.reduce((a, w) => a + w, 0), 0)
+
+  // the length picked in the table: its boards are picked out on the
+  // elevation and listed, cut by cut, under the table
+  const [pickedLength, setPickedLength] = useState<number | null>(null)
+  const [showAllCuts, setShowAllCuts] = useState(false)
+  const picked = pickedLength !== null && stockLengthsM.includes(pickedLength) ? pickedLength : null
+  const highlight = useMemo(
+    () =>
+      picked === null
+        ? []
+        : mine.boards
+            .filter((board) => board.lengthM === picked)
+            .flatMap((board) => board.cuts)
+            .filter((cut) => cut.startPost !== null && cut.endPost !== null && cut.tag)
+            .map((cut): BoardHighlight => ({ startPost: cut.startPost!, endPost: cut.endPost!, layer: cut.tag!.layer, courseRow: cut.tag!.courseRow })),
+    [mine, picked],
+  )
+  const lastHighlight = useRef("[]")
+  useEffect(() => {
+    const json = JSON.stringify(highlight)
+    if (json === lastHighlight.current) return
+    lastHighlight.current = json
+    onHighlight(highlight)
+  }, [highlight, onHighlight])
+  const whereOf = (tag: PieceTag | undefined, startPost: number | null, endPost: number | null) =>
+    !tag
+      ? ""
+      : `${walls.length > 1 ? `Wall ${segmentLabel(tag.segmentIndex)}, ` : ""}${tag.layer === "topBoard" ? "top board" : `row ${tag.row + 1}`}${
+          startPost !== null && endPost !== null ? `, posts #${startPost + 1}–#${endPost + 1}` : ""
+        }`
+  // each board numbered within its own length: "5.4 m board 3"
+  const cutListBoards = useMemo(() => {
+    const seen = new Map<number, number>()
+    return mine.boards.map((board) => {
+      const number = (seen.get(board.lengthM) ?? 0) + 1
+      seen.set(board.lengthM, number)
+      return { board, number }
+    })
+  }, [mine]).filter(({ board }) => showAllCuts || board.lengthM === picked)
 
   const setCount = (lengthM: number, raw: string) => {
     const next = { ...activeFixed }
@@ -240,8 +305,18 @@ const BoardOrderCard: React.FC<{
           {mine.lines.map((line, i) => {
             const spare = line.count - line.usedCount
             return (
-              <tr key={line.lengthM}>
-                <td>{m(line.lengthM, 1)}</td>
+              <tr key={line.lengthM} className={picked === line.lengthM ? styles.pickedRow : undefined}>
+                <td>
+                  <button
+                    type="button"
+                    className={picked === line.lengthM ? styles.lengthPicked : styles.lengthPick}
+                    aria-pressed={picked === line.lengthM}
+                    title="Show these boards on the elevation, and their cuts below"
+                    onClick={() => setPickedLength(picked === line.lengthM ? null : line.lengthM)}
+                  >
+                    {m(line.lengthM, 1)}
+                  </button>
+                </td>
                 <td>{suggested.lines[i].count}</td>
                 <td>
                   <input
@@ -286,6 +361,44 @@ const BoardOrderCard: React.FC<{
           </tr>
         </tfoot>
       </table>
+      <p className={styles.pickHint}>
+        {picked === null
+          ? "Tap a length to pick out its boards on the elevation and list its cuts. "
+          : `${m(picked, 1)} boards are picked out in blue on the elevation above. `}
+        <button type="button" className={styles.clear} onClick={() => setShowAllCuts((v) => !v)}>
+          {showAllCuts ? "Hide the full cut list" : "Show the full cut list"}
+        </button>
+      </p>
+      {(showAllCuts || picked !== null) && (
+        <div className={styles.cutList}>
+          <h4>{showAllCuts ? "Cut list — every board on your order" : `Cut list — ${m(picked!, 1)} boards`}</h4>
+          {cutListBoards.length === 0 ? (
+            <p className={styles.wallNote}>No boards of this length on your order.</p>
+          ) : (
+            <ol>
+              {cutListBoards.map(({ board, number }) => (
+                <li key={`${board.lengthM}-${number}`}>
+                  <span className={styles.cutBoard}>
+                    {m(board.lengthM, 1)} board {number}
+                  </span>
+                  {board.cuts.length === 0 ? (
+                    <span className={styles.wallNote}>spare — not cut</span>
+                  ) : (
+                    <ul>
+                      {board.cuts.map((cut, k) => (
+                        <li key={k}>
+                          <strong>{Math.round(cut.lengthM * 1000)} mm</strong> — {whereOf(cut.tag, cut.startPost, cut.endPost)}
+                        </li>
+                      ))}
+                      <li className={styles.wallNote}>{board.leftM > 0.0005 ? `offcut ${Math.round(board.leftM * 1000)} mm` : "no offcut"}</li>
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
       {mine.extraJoins > 0 && (
         <p className={styles.warn}>
           ⚠ {mine.extraJoins} board{mine.extraJoins > 1 ? "s" : ""} had to be split into shorter pieces at a post, because
