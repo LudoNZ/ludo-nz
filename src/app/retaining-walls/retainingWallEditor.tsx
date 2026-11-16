@@ -1,12 +1,13 @@
 "use client"
 
-import { ReactNode, useEffect, useRef, useState } from "react"
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import SpecCard from "@/components/structures/specCard"
 import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
 import { SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
+import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
 import { buildWallProfile, ControlPoints, RunSpacing, segmentBayCounts } from "@/components/retainingWall/postProfile"
@@ -61,6 +62,8 @@ const RetainingWallEditor: React.FC<{
   const [holeDepth, setHoleDepth] = useState(initial.holeDepthOverrideMm ? String(initial.holeDepthOverrideMm) : "")
   // per wall: a hand-set post count or spacing; null = the table's
   const [runSpacing, setRunSpacing] = useState<(RunSpacing | null)[]>(initial.runSpacing)
+  // the board order as actually placed: counts pinned per stock length
+  const [boardOrderFixed, setBoardOrderFixed] = useState<Record<string, number>>(initial.boardOrderFixed)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -122,6 +125,7 @@ const RetainingWallEditor: React.FC<{
       postSizeOverride: postSizeOverride || null,
       holeDepthOverrideMm,
       runSpacing,
+      boardOrderFixed,
       controlPoints,
       topCapEnabled,
       rakedTopBoard,
@@ -133,7 +137,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, controlPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
@@ -143,6 +147,13 @@ const RetainingWallEditor: React.FC<{
   const profile = !isNaN(retainedHeightM)
     ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, overrides)
     : null
+
+  const boardStocks = useMemo(() => boardStockLengths(calcSettings), [calcSettings])
+  // every facing and top-board piece on the whole wall, for the order.
+  // Keyed on the pieces themselves, so the order card only re-plans when
+  // the cut list really changes.
+  const orderPiecesJson = profile ? JSON.stringify([...profile.boards.pieceBaysM, ...profile.topBoard.pieceBaysM]) : "[]"
+  const orderPieces = useMemo(() => JSON.parse(orderPiecesJson) as number[][], [orderPiecesJson])
 
   // a run that no longer exists (corner removed, design swapped) falls
   // back to the whole-wall view rather than pointing at nothing
@@ -663,8 +674,8 @@ const RetainingWallEditor: React.FC<{
                       label: "Total fixed length, all layers",
                       value: formatM(totals.boards.totalLengthM + totals.topBoard.totalLengthM + (totals.topCap?.totalLengthM ?? 0)),
                     },
-                    ...totals.boardOrder.map((o) => ({ label: `To order — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
-                    ...totals.topCapOrder.map((o) => ({ label: `Top cap, to order — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
+                    ...totals.boardOrder.map((o) => ({ label: `Suggested order — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
+                    ...totals.topCapOrder.map((o) => ({ label: `Top cap, suggested — ${formatM(o.lengthM, 1)} lengths`, value: `${o.count}` })),
                     {
                       label: "Lengths available",
                       value: boardStockLengths(calcSettings)
@@ -686,6 +697,7 @@ const RetainingWallEditor: React.FC<{
                   hideSetup={shownSegment !== null}
                 />
               </div>
+              <BoardOrderCard piecesM={orderPieces} stockLengthsM={boardStocks} fixed={boardOrderFixed} onChange={setBoardOrderFixed} />
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
                 conditions vary a lot in practice; if in doubt, especially near a boundary, driveway, or structure,

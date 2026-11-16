@@ -156,6 +156,9 @@ export interface BoardLayerSummary {
   rakeCutCount: number
   /** m, each piece's length (post centre to post centre), in no order */
   pieceLengthsM: number[]
+  /** the same pieces, each as the bay lengths it spans — where it could
+   * be split at a post if a board that long can't be had */
+  pieceBaysM: number[][]
   joints: BoardJoint[]
 }
 
@@ -341,7 +344,7 @@ function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { sta
   return pieces
 }
 
-type LayerAgg = { totalLengthM: number; rakeCutCount: number; pieceLengthsM: number[]; joints: BoardJoint[] }
+type LayerAgg = { totalLengthM: number; rakeCutCount: number; pieceLengthsM: number[]; pieceBaysM: number[][]; joints: BoardJoint[] }
 
 /** Folds a planned piece list into running totals plus the joints between
  * consecutive pieces that butt up on a shared post. `levelAtPost` gives
@@ -358,12 +361,15 @@ function accumulatePieces(
   pieces.forEach((p, idx) => {
     let lengthM = 0
     let rakeCut = false
+    const baysM: number[] = []
     for (let i = p.start; i <= p.end; i++) {
+      baysM.push(lengthOf(bays[i]))
       lengthM += lengthOf(bays[i])
       if (isRakeCut(bays[i])) rakeCut = true
     }
     if (rakeCut) agg.rakeCutCount++
     agg.pieceLengthsM.push(lengthM)
+    agg.pieceBaysM.push(baysM)
     agg.totalLengthM += lengthM
     const next = pieces[idx + 1]
     if (next && bays[next.start].leftIndex === bays[p.end].rightIndex) {
@@ -387,7 +393,7 @@ function planBoardLayers(
   topCapEnabled: boolean,
   rakedTopBoard: boolean
 ): { boards: BoardLayerSummary; topBoard: BoardLayerSummary; topCap: BoardLayerSummary | null } {
-  const newAgg = (): LayerAgg => ({ totalLengthM: 0, rakeCutCount: 0, pieceLengthsM: [], joints: [] })
+  const newAgg = (): LayerAgg => ({ totalLengthM: 0, rakeCutCount: 0, pieceLengthsM: [], pieceBaysM: [], joints: [] })
   const courseAgg = newAgg()
   const topBoardAgg = newAgg()
   const topCapAgg = newAgg()
@@ -447,6 +453,7 @@ function planBoardLayers(
     totalLengthM: agg.totalLengthM,
     rakeCutCount: agg.rakeCutCount,
     pieceLengthsM: agg.pieceLengthsM,
+    pieceBaysM: agg.pieceBaysM,
     joints: agg.joints,
   })
 
@@ -682,8 +689,8 @@ export function buildWallProfile(
       boards,
       topBoard,
       topCap,
-      boardOrder: planBoardOrder([...boards.pieceLengthsM, ...topBoard.pieceLengthsM], boardStockLengths(settings)),
-      topCapOrder: topCap ? planBoardOrder(topCap.pieceLengthsM, boardStockLengths(settings)) : [],
+      boardOrder: planBoardOrder([...boards.pieceBaysM, ...topBoard.pieceBaysM], boardStockLengths(settings)),
+      topCapOrder: topCap ? planBoardOrder(topCap.pieceBaysM, boardStockLengths(settings)) : [],
       totalBackfillVolumeM3,
       labor: {
         setupHours,

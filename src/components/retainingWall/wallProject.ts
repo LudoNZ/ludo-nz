@@ -25,6 +25,10 @@ export interface WallProject {
   /** hand-set post count/spacing per wall, in step with the plan's runs;
    * null (or missing) = that wall uses the table's spacing */
   runSpacing: (RunSpacing | null)[]
+  /** the board order as actually placed: boards per stock length pinned
+   * by hand, keyed by the length in metres as text ("6", "5.4"). A
+   * length with no entry is worked out to cover whatever's left. */
+  boardOrderFixed: Record<string, number>
   /** keyed by post index */
   controlPoints: ControlPoints
   topCapEnabled: boolean
@@ -61,6 +65,7 @@ export const newBlankWall = (): WallProject => ({
   postSizeOverride: null,
   holeDepthOverrideMm: null,
   runSpacing: [],
+  boardOrderFixed: {},
   controlPoints: {},
   topCapEnabled: false,
   rakedTopBoard: false,
@@ -98,6 +103,11 @@ export const wallFromData = (data: unknown): WallProject => {
     postSizeOverride: typeof d.postSizeOverride === "string" && d.postSizeOverride ? d.postSizeOverride : null,
     holeDepthOverrideMm: typeof d.holeDepthOverrideMm === "number" && d.holeDepthOverrideMm > 0 ? d.holeDepthOverrideMm : null,
     runSpacing: Array.isArray(d.runSpacing) ? d.runSpacing.map(runSpacingFromData) : [],
+    boardOrderFixed: Object.fromEntries(
+      Object.entries(typeof d.boardOrderFixed === "object" && d.boardOrderFixed !== null ? d.boardOrderFixed : {}).filter(
+        ([, n]) => typeof n === "number" && n >= 0
+      )
+    ),
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     topCapEnabled: Boolean(d.topCapEnabled),
     rakedTopBoard: Boolean(d.rakedTopBoard),
