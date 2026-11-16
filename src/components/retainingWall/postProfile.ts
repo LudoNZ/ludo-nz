@@ -304,42 +304,68 @@ function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBa
   return runs
 }
 
-/** Plans one ordered list of bays into pieces. A piece runs on across as
- * many bays as the longest board allows (`maxLengthM`) — fewer joints is
- * stronger and quicker — and only ever ends on a post. A stretch of wall
- * that fits in one board is never joined. Where joints can't be avoided,
- * `phase` 1 starts with a piece about half as long as it could be, which
- * moves every joint in that row onto different posts than a phase 0 row
- * — alternating phase row to row staggers the joints like coursed
- * brickwork instead of stacking them all on one post. */
+/** Plans one ordered list of bays into pieces. Joins are the weak points
+ * of a retaining wall, so every row uses as few pieces as will cover it:
+ * a piece runs on across as many bays as the longest board allows
+ * (`maxLengthM`) and only ever ends on a post, and a stretch of wall that
+ * fits in one board is never joined.
+ *
+ * `phase` staggers the joins that are left, like coursed brickwork, so
+ * they don't all stack on one post. Phase 0 lays full-length boards from
+ * the start of the stretch, leaving the short piece at the far end;
+ * phase 1 lays them from the far end back, leaving the short piece at
+ * the start — the same number of pieces, with every join on a different
+ * post. Only when that can't move the joins (the stretch is an exact
+ * number of full boards) does a phase 1 row take one extra piece,
+ * starting with a board about half the full length. */
 function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { start: number; end: number }[] {
   const pieces: { start: number; end: number }[] = []
-  // how far a piece starting at bay `from` can reach without leaving the
-  // unbroken stretch that ends at bay `last`
-  const reach = (from: number, last: number): number => {
-    let end = from
-    let length = bays[from].widthM
-    while (end < last && length + bays[end + 1].widthM <= maxLengthM + 1e-6) {
-      end++
-      length += bays[end].widthM
+  const fits = (lengthM: number) => lengthM <= maxLengthM + 1e-6
+  // full-length boards from bay `first`, working toward bay `last`
+  const fromStart = (first: number, last: number) => {
+    const out: { start: number; end: number }[] = []
+    let i = first
+    while (i <= last) {
+      let end = i
+      let length = bays[i].widthM
+      while (end < last && fits(length + bays[end + 1].widthM)) length += bays[++end].widthM
+      out.push({ start: i, end })
+      i = end + 1
     }
-    return end
+    return out
   }
+  // the same, from bay `last` working back toward bay `first`
+  const fromEnd = (first: number, last: number) => {
+    const out: { start: number; end: number }[] = []
+    let i = last
+    while (i >= first) {
+      let start = i
+      let length = bays[i].widthM
+      while (start > first && fits(length + bays[start - 1].widthM)) length += bays[--start].widthM
+      out.unshift({ start, end: i })
+      i = start - 1
+    }
+    return out
+  }
+
   let i = 0
   while (i < bays.length) {
     // the unbroken stretch starting here (the row may skip bays that are
     // too low to have this course)
     let last = i
     while (last + 1 < bays.length && bays[last + 1].leftIndex === bays[last].rightIndex) last++
-    let end = reach(i, last)
-    if (end < last && phase === 1) end = i + Math.max(1, Math.floor((end - i + 1) / 2)) - 1
-    pieces.push({ start: i, end })
-    i = end + 1
-    while (i <= last) {
-      end = reach(i, last)
-      pieces.push({ start: i, end })
-      i = end + 1
+    const forward = fromStart(i, last)
+    if (phase === 0 || forward.length === 1) pieces.push(...forward)
+    else {
+      const backward = fromEnd(i, last)
+      const moved = backward.length !== forward.length || backward.some((p, k) => p.end !== forward[k].end)
+      if (moved) pieces.push(...backward)
+      else {
+        const half = Math.max(1, Math.floor((forward[0].end - i + 1) / 2))
+        pieces.push({ start: i, end: i + half - 1 }, ...fromStart(i + half, last))
+      }
     }
+    i = last + 1
   }
   return pieces
 }
