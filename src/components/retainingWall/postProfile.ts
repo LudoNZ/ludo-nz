@@ -115,8 +115,17 @@ export interface ProfileBay {
    * full height; any above that are cut down to fit under a raked top
    * board */
   fullCourseCount: number
+  /** m, how far a board covering this bay runs past the bay's own post
+   * centres: half the end post's width where the bay is the first or
+   * last of an unbroken run (a wall end, a corner, or the edge of an
+   * excluded stretch), since a board there runs to the post's outside
+   * face rather than stopping at its centre. 0 for a bay mid-run. */
+  boardOverrunM: number
+  /** m, a level course's board length across this bay: post centre to
+   * post centre, plus boardOverrunM */
+  boardLengthM: number
   /** m, the top board's length across this bay — along the slope when
-   * it's raked */
+   * it's raked — including boardOverrunM */
   topBoardLengthM: number
   /** rise over run of the top of the wall across this bay */
   topSlope: number
@@ -208,6 +217,10 @@ export interface ProfileOverrides {
   /** m — every hole is drilled this deep below its post's ground level,
    * gravel base pad included */
   holeDepthM?: number | null
+  /** build option: boards run to the outside face of the post at each
+   * end of a wall (the default) rather than stopping at its centre —
+   * see ProfileBay.boardOverrunM. Only `false` turns it off. */
+  boardsToPostOutside?: boolean
   /** hole depths set by hand on individual posts — see DepthPoint */
   depthPoints?: DepthPoints | null
   /** build option rather than an override: the top board is a full board
@@ -341,7 +354,12 @@ function groupIntoRuns(validBays: ProfileBay[], posts: ProfilePost[]): ProfileBa
  * post. Only when that can't move the joins (the stretch is an exact
  * number of full boards) does a phase 1 row take one extra piece,
  * starting with a board about half the full length. */
-function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { start: number; end: number }[] {
+function planPieces(
+  bays: ProfileBay[],
+  maxLengthM: number,
+  phase: 0 | 1,
+  lengthOf: (bay: ProfileBay) => number = (bay) => bay.boardLengthM
+): { start: number; end: number }[] {
   const pieces: { start: number; end: number }[] = []
   const fits = (lengthM: number) => lengthM <= maxLengthM + 1e-6
   // full-length boards from bay `first`, working toward bay `last`
@@ -350,8 +368,8 @@ function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { sta
     let i = first
     while (i <= last) {
       let end = i
-      let length = bays[i].widthM
-      while (end < last && fits(length + bays[end + 1].widthM)) length += bays[++end].widthM
+      let length = lengthOf(bays[i])
+      while (end < last && fits(length + lengthOf(bays[end + 1]))) length += lengthOf(bays[++end])
       out.push({ start: i, end })
       i = end + 1
     }
@@ -363,8 +381,8 @@ function planPieces(bays: ProfileBay[], maxLengthM: number, phase: 0 | 1): { sta
     let i = last
     while (i >= first) {
       let start = i
-      let length = bays[i].widthM
-      while (start > first && fits(length + bays[start - 1].widthM)) length += bays[--start].widthM
+      let length = lengthOf(bays[i])
+      while (start > first && fits(length + lengthOf(bays[start - 1]))) length += lengthOf(bays[--start])
       out.unshift({ start, end: i })
       i = start - 1
     }
@@ -404,7 +422,7 @@ function accumulatePieces(
   pieces: { start: number; end: number }[],
   levelAtPost: (postIndex: number) => number,
   layer: BoardJoint["layer"],
-  lengthOf: (bay: ProfileBay) => number = (bay) => bay.widthM,
+  lengthOf: (bay: ProfileBay) => number = (bay) => bay.boardLengthM,
   isRakeCut: (bay: ProfileBay) => boolean = () => false
 ) {
   pieces.forEach((p, idx) => {
@@ -483,7 +501,7 @@ function planBoardLayers(
       else stretches.push([bay])
     }
     stretches.forEach((stretch, idx) => {
-      const topBoardPieces = planPieces(stretch, maxLengthM, (maxCourses % 2) as 0 | 1)
+      const topBoardPieces = planPieces(stretch, maxLengthM, (maxCourses % 2) as 0 | 1, (bay) => bay.topBoardLengthM)
       accumulatePieces(topBoardAgg, stretch, topBoardPieces, (postIndex) => posts[postIndex].topLevelM, "topBoard", (bay) => bay.topBoardLengthM)
       if (idx < stretches.length - 1) {
         const postIndex = stretch[stretch.length - 1].rightIndex
@@ -738,9 +756,27 @@ export function buildWallProfile(
       levelCourseCount,
       levelBoardLengthM: needsEngineer ? 0 : widthM * levelCourseCount,
       fullCourseCount: needsEngineer ? 0 : layout.fullCourseCount,
+      boardOverrunM: 0,
+      boardLengthM: widthM,
       topBoardLengthM: layout.topBoardLengthM,
       topSlope: widthM > 0 ? (b.topLevelM - a.topLevelM) / widthM : 0,
     })
+  }
+
+  // boards run to the outside face of the post at each end of an
+  // unbroken run, not just to its centre (unless that's switched off)
+  const endRuns = overrides.boardsToPostOutside === false ? [] : groupIntoRuns(bays.filter((b) => !b.needsEngineer), posts)
+  for (const run of endRuns) {
+    const first = run[0]
+    const last = run[run.length - 1]
+    for (const [bay, overrunM] of [
+      [first, posts[first.leftIndex].widthM / 2],
+      [last, posts[last.rightIndex].widthM / 2],
+    ] as const) {
+      bay.boardOverrunM += overrunM
+      bay.boardLengthM += overrunM
+      bay.topBoardLengthM += overrunM
+    }
   }
 
   const totalsFor = (countedPosts: ProfilePost[], countedBays: ProfileBay[], setupHours: number): ProfileTotals => {

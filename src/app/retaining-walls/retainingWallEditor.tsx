@@ -23,6 +23,7 @@ import {
 import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
+import BoardEndsModal from "./boardEndsModal"
 import ReferenceTableModal from "./referenceTableModal"
 import SettingsPanel from "./settingsPanel"
 import styles from "./retainingWallEditor.module.scss"
@@ -88,6 +89,10 @@ const RetainingWallEditor: React.FC<{
   // whole-wall option: the top board goes on as a full board following
   // the rake, and the level boards under it are cut down to suit
   const [rakedTopBoard, setRakedTopBoard] = useState(initial.rakedTopBoard)
+  // whole-wall option: end boards measured to the outside face of the end
+  // post, or to its centre — chosen in its own modal (see BoardEndsModal)
+  const [boardsToPostOutside, setBoardsToPostOutside] = useState(initial.boardsToPostOutside)
+  const [showBoardEnds, setShowBoardEnds] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
@@ -108,7 +113,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside })
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
@@ -135,6 +140,7 @@ const RetainingWallEditor: React.FC<{
       depthPoints,
       topCapEnabled,
       rakedTopBoard,
+      boardsToPostOutside,
       calcSettings,
       calcSettingsName,
     }
@@ -143,7 +149,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
@@ -430,6 +436,14 @@ const RetainingWallEditor: React.FC<{
         referenceTable={calcSettings.referenceTable}
         activeRow={referenceRow}
       />
+      <BoardEndsModal
+        isOpen={showBoardEnds}
+        onClose={() => setShowBoardEnds(false)}
+        toOutside={boardsToPostOutside}
+        onChange={setBoardsToPostOutside}
+        endPostWidthM={profile?.posts[0]?.widthM ?? null}
+        wallCount={profile?.segments.length ?? 1}
+      />
       <SettingsPanel
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
@@ -484,6 +498,9 @@ const RetainingWallEditor: React.FC<{
                     : "Elevation"}
               </h3>
               <div className={styles.elevationOptions}>
+                <button type="button" className={styles.optionButton} onClick={() => setShowBoardEnds(true)}>
+                  Board ends: {boardsToPostOutside ? "outside of post" : "post centre"}
+                </button>
                 <label className={styles.topCapToggle}>
                   <input type="checkbox" checked={rakedTopBoard} onChange={(e) => setRakedTopBoard(e.target.checked)} />
                   <span>Rake the top board</span>
@@ -740,7 +757,7 @@ const RetainingWallEditor: React.FC<{
                         .join(" / ") + " m",
                     },
                   ]}
-                  note={`${rakedTopBoard ? "The top board is a full board laid on the rake of the wall; the level boards run up to its underside and the ones that meet it are cut down along their length to suit. It's measured along the slope, and joined at any post where the rake changes. " : ""}Every layer is planned as real cut pieces. A board runs on over as many posts as the longest available length allows and only ever ends on a post; it always breaks at a corner or an excluded bay. Where a wall is too long for one board, each row's joins are staggered onto different posts than the row below — see the join marks on the elevation. The order is worked out with longest pieces first, cutting shorter pieces from offcuts where they fit, and no allowance for saw cuts or waste.${shownSegment !== null ? " Ordered wall by wall, offcuts can't be shared between walls, so the walls' orders can add up to more than the whole-wall order." : ""} Change the available lengths in the calculation settings.`}
+                  note={`${rakedTopBoard ? "The top board is a full board laid on the rake of the wall; the level boards run up to its underside and the ones that meet it are cut down along their length to suit. It's measured along the slope, and joined at any post where the rake changes. " : ""}Every layer is planned as real cut pieces. A board runs on over as many posts as the longest available length allows and only ever ends on a post; it always breaks at a corner or an excluded bay. ${boardsToPostOutside ? "Lengths are post centre to post centre, except at the two ends of each wall, where the board runs on to the outside face of the end post" : "Lengths are post centre to post centre, including at the ends of each wall"} — change that under “Board ends” above the elevation. Where a wall is too long for one board, each row's joins are staggered onto different posts than the row below — see the join marks on the elevation. The order is worked out with longest pieces first, cutting shorter pieces from offcuts where they fit, and no allowance for saw cuts or waste.${shownSegment !== null ? " Ordered wall by wall, offcuts can't be shared between walls, so the walls' orders can add up to more than the whole-wall order." : ""} Change the available lengths in the calculation settings.`}
                 />
                 <SpecCard
                   title={`Drainage backfill${forWall}`}
