@@ -214,3 +214,16 @@
   opacity: 0.7;
   font-weight: 600;
 }
+
+// post-centre dimension line under the holes
+.spacingDim {
+  line {
+    stroke: var(--foreground);
+    opacity: 0.55;
+  }
+
+  text {
+    fill: var(--foreground);
+    opacity: 0.85;
+  }
+}

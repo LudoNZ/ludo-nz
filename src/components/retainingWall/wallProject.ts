@@ -5,7 +5,7 @@
  * you because a preset was edited later). */
 
 import { CalcSettings, DEFAULT_CALC_SETTINGS } from "./calcSettings"
-import { buildWallProfile, ControlPoints, legacyPlan, ProfileOverrides } from "./postProfile"
+import { buildWallProfile, ControlPoints, legacyPlan, ProfileOverrides, RunSpacing } from "./postProfile"
 import { SavedWallDesign } from "./retainingWallData"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
 import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
@@ -22,6 +22,9 @@ export interface WallProject {
   postSizeOverride: string | null
   /** mm, drilled depth below ground; null = worked out per post */
   holeDepthOverrideMm: number | null
+  /** hand-set post count/spacing per wall, in step with the plan's runs;
+   * null (or missing) = that wall uses the table's spacing */
+  runSpacing: (RunSpacing | null)[]
   /** keyed by post index */
   controlPoints: ControlPoints
   topCapEnabled: boolean
@@ -54,6 +57,7 @@ export const newBlankWall = (): WallProject => ({
   augerDiameterMm: null,
   postSizeOverride: null,
   holeDepthOverrideMm: null,
+  runSpacing: [],
   controlPoints: {},
   topCapEnabled: false,
   calcSettings: DEFAULT_CALC_SETTINGS,
@@ -64,6 +68,13 @@ export const DEFAULT_WALL: WallProject = newBlankWall()
 
 const isPoint = (p: unknown): p is PlanPoint =>
   typeof p === "object" && p !== null && Number.isFinite((p as PlanPoint).xM) && Number.isFinite((p as PlanPoint).yM)
+
+const runSpacingFromData = (raw: unknown): RunSpacing | null => {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as RunSpacing
+  if (typeof r.bayCount === "number" && r.bayCount >= 1) return { bayCount: Math.round(r.bayCount) }
+  if (typeof r.maxSpacingM === "number" && r.maxSpacingM > 0) return { maxSpacingM: r.maxSpacingM }
+  return null
+}
 
 /** Reads a stored wall defensively — anything missing or malformed falls
  * back to the blank wall's value, so a document saved by an older (or
@@ -82,6 +93,7 @@ export const wallFromData = (data: unknown): WallProject => {
     augerDiameterMm: typeof d.augerDiameterMm === "number" && d.augerDiameterMm > 0 ? d.augerDiameterMm : null,
     postSizeOverride: typeof d.postSizeOverride === "string" && d.postSizeOverride ? d.postSizeOverride : null,
     holeDepthOverrideMm: typeof d.holeDepthOverrideMm === "number" && d.holeDepthOverrideMm > 0 ? d.holeDepthOverrideMm : null,
+    runSpacing: Array.isArray(d.runSpacing) ? d.runSpacing.map(runSpacingFromData) : [],
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     topCapEnabled: Boolean(d.topCapEnabled),
     calcSettings:
@@ -108,7 +120,8 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing">): ProfileOverrides => ({
+  runSpacing: wall.runSpacing,
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,

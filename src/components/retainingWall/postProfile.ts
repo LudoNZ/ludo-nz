@@ -36,6 +36,12 @@ export interface ProfileSegment {
   lengthM: number
   /** m, this run's own even post centres */
   postSpacingM: number
+  /** m, the widest centres the reference table allows here */
+  tableMaxSpacingM: number
+  /** bays the table alone would give this run */
+  tableBayCount: number
+  /** true when the post count or spacing was set by hand for this run */
+  spacingOverridden: boolean
 }
 
 export interface ProfilePost {
@@ -115,7 +121,22 @@ export interface BoardLayerSummary {
 /** Hand-picked values that replace what the reference table would work
  * out post by post — each one applies to every post on the wall. Leave
  * one out (or null) to keep that part calculated. */
+/** A hand-set post layout for one run, replacing the reference table's
+ * spacing: either a fixed number of bays (posts thrown in or taken out —
+ * always re-spaced evenly), or the widest centres to allow, which the
+ * bay count is then worked out from as the run's length changes. */
+export interface RunSpacing {
+  bayCount?: number
+  maxSpacingM?: number
+}
+
+/** most bays a single run can be given by hand */
+const MAX_RUN_BAYS = 200
+
 export interface ProfileOverrides {
+  /** per run, in step with the segment lengths passed in; a missing or
+   * null entry keeps that run on the table's spacing */
+  runSpacing?: (RunSpacing | null | undefined)[] | null
   /** m — the auger the holes are actually being drilled with. Without
    * it, each hole is sized off its own post
    * (settings.holeDiameterMultiplier). */
@@ -363,13 +384,28 @@ function planBoardLayers(
  * spacing from tipping into one extra bay on floating-point noise. */
 const bayCountFor = (lengthM: number, maxSpacingM: number): number => Math.max(1, Math.ceil(lengthM / maxSpacingM - 1e-9))
 
+const resolveBayCount = (lengthM: number, tableMaxSpacingM: number, spacing: RunSpacing | null | undefined): number => {
+  if (spacing?.bayCount && spacing.bayCount >= 1) return Math.min(MAX_RUN_BAYS, Math.round(spacing.bayCount))
+  if (spacing?.maxSpacingM && spacing.maxSpacingM > 0) return Math.min(MAX_RUN_BAYS, bayCountFor(lengthM, spacing.maxSpacingM))
+  return bayCountFor(lengthM, tableMaxSpacingM)
+}
+
 /** Bay count per run for a given shape — two shapes with the same counts
  * have the same post indices, so hand-set post levels (keyed by index)
  * stay valid when moving between them. */
-export function segmentBayCounts(segmentLengthsM: number[], retainedHeightM: number, soil: SoilType, settings: CalcSettings): number[] {
+export function segmentBayCounts(
+  segmentLengthsM: number[],
+  retainedHeightM: number,
+  soil: SoilType,
+  settings: CalcSettings,
+  runSpacing: (RunSpacing | null | undefined)[] | null = null
+): number[] {
   if (!(retainedHeightM > 0)) return []
   const { maxSpacingM } = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
-  return segmentLengthsM.filter((l) => l > 0).map((l) => bayCountFor(l, maxSpacingM))
+  return segmentLengthsM
+    .map((l, i) => ({ l, spacing: runSpacing?.[i] }))
+    .filter((r) => r.l > 0)
+    .map((r) => resolveBayCount(r.l, maxSpacingM, r.spacing))
 }
 
 /** Rebuilds a plan for a design saved before plans existed: a straight
@@ -426,7 +462,8 @@ export function buildWallProfile(
   const augerDiameterM = overrides.augerDiameterM && overrides.augerDiameterM > 0 ? overrides.augerDiameterM : null
   const postSizeOverride = overrides.postSizeLabel || null
   const holeDepthOverrideM = overrides.holeDepthM && overrides.holeDepthM > 0 ? overrides.holeDepthM : null
-  const runLengthsM = segmentLengthsM.filter((l) => l > 0)
+  const runsIn = segmentLengthsM.map((l, i) => ({ l, spacing: overrides.runSpacing?.[i] })).filter((r) => r.l > 0)
+  const runLengthsM = runsIn.map((r) => r.l)
   if (runLengthsM.length === 0 || !(retainedHeightM > 0)) return null
 
   const layoutRow = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
@@ -439,11 +476,18 @@ export function buildWallProfile(
   const segments: ProfileSegment[] = []
   let runStartXM = 0
   runLengthsM.forEach((lengthM, index) => {
-    const bayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
+    const spacing = runsIn[index].spacing
+    const tableBayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
+    const bayCount = resolveBayCount(lengthM, layoutRow.maxSpacingM, spacing)
     const startPostIndex = postXs.length - 1
     for (let k = 1; k <= bayCount; k++) postXs.push(runStartXM + (lengthM * k) / bayCount)
     const endPostIndex = postXs.length - 1
-    segments.push({ index, startPostIndex, endPostIndex, startXM: runStartXM, endXM: runStartXM + lengthM, lengthM, postSpacingM: lengthM / bayCount })
+    segments.push({ index, startPostIndex, endPostIndex, startXM: runStartXM, endXM: runStartXM + lengthM, lengthM,
+      postSpacingM: lengthM / bayCount,
+      tableMaxSpacingM: layoutRow.maxSpacingM,
+      tableBayCount,
+      spacingOverridden: Boolean((spacing?.bayCount && spacing.bayCount >= 1) || (spacing?.maxSpacingM && spacing.maxSpacingM > 0)),
+    })
     if (index < runLengthsM.length - 1) cornerIndices.add(endPostIndex)
     runStartXM += lengthM
   })

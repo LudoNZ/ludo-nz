@@ -9,7 +9,7 @@ import { SettingsIcon } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import NumField from "@/components/weatherboards/numField"
-import { buildWallProfile, ControlPoints, segmentBayCounts } from "@/components/retainingWall/postProfile"
+import { buildWallProfile, ControlPoints, RunSpacing, segmentBayCounts } from "@/components/retainingWall/postProfile"
 import { overridesForWall, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
@@ -59,6 +59,8 @@ const RetainingWallEditor: React.FC<{
   // reference table would work out post by post; blank = calculated
   const [postSizeOverride, setPostSizeOverride] = useState(initial.postSizeOverride ?? "")
   const [holeDepth, setHoleDepth] = useState(initial.holeDepthOverrideMm ? String(initial.holeDepthOverrideMm) : "")
+  // per wall: a hand-set post count or spacing; null = the table's
+  const [runSpacing, setRunSpacing] = useState<(RunSpacing | null)[]>(initial.runSpacing)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -95,7 +97,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing })
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
@@ -116,6 +118,7 @@ const RetainingWallEditor: React.FC<{
       augerDiameterMm,
       postSizeOverride: postSizeOverride || null,
       holeDepthOverrideMm,
+      runSpacing,
       controlPoints,
       topCapEnabled,
       calcSettings,
@@ -126,7 +129,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, controlPoints, topCapEnabled, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, controlPoints, topCapEnabled, calcSettings, calcSettingsName])
 
   const resetProfile = () => {
     setControlPoints({})
@@ -157,12 +160,53 @@ const RetainingWallEditor: React.FC<{
   }
 
   const handlePlanChange = (next: PlanPoint[]) => {
-    const before = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings)
-    const after = segmentBayCounts(segmentLengths(next), retainedHeightM, soil, calcSettings)
+    // keep each wall's hand-set spacing with its own wall when a corner
+    // is added (the wall it splits goes back to the table) or removed
+    // (the two walls it joined merge into one on the table's spacing)
+    let nextSpacing = runSpacing
+    if (next.length !== planPoints.length && runSpacing.some(Boolean)) {
+      const changed = next.findIndex((p, i) => !planPoints[i] || p.xM !== planPoints[i].xM || p.yM !== planPoints[i].yM)
+      const at = changed === -1 ? next.length : changed
+      const seg = Math.max(0, at - 1)
+      nextSpacing =
+        next.length > planPoints.length
+          ? [...runSpacing.slice(0, seg), null, null, ...runSpacing.slice(seg + 1)]
+          : at === 0
+            ? runSpacing.slice(1)
+            : [...runSpacing.slice(0, seg), null, ...runSpacing.slice(seg + 2)]
+      nextSpacing = nextSpacing.slice(0, next.length - 1)
+      setRunSpacing(nextSpacing)
+    }
+    const before = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing)
+    const after = segmentBayCounts(segmentLengths(next), retainedHeightM, soil, calcSettings, nextSpacing)
     // hand-set levels are keyed by post index, so they only survive a
     // reshape that leaves every run with the same number of posts
     if (before.join(",") !== after.join(",")) resetProfile()
     setPlanPoints(next)
+  }
+
+  /** Sets (or, with null, clears) one wall's hand-set spacing. Hand-set
+   * levels are keyed by post index, so the ones before this wall stay
+   * put, the ones after it shift along with their posts, and the ones
+   * on posts inside this wall — which all move — are dropped. */
+  const applyRunSpacing = (segmentIndex: number, spacing: RunSpacing | null) => {
+    if (!profile) return
+    const seg = profile.segments[segmentIndex]
+    const nextSpacing = Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? spacing : (runSpacing[i] ?? null)))
+    const oldBays = seg.endPostIndex - seg.startPostIndex
+    const newBays = segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, nextSpacing)[segmentIndex]
+    setRunSpacing(nextSpacing)
+    if (newBays === oldBays) return
+    setControlPoints((cp) => {
+      const next: ControlPoints = {}
+      for (const [key, value] of Object.entries(cp)) {
+        const i = Number(key)
+        if (i <= seg.startPostIndex) next[i] = value
+        else if (i >= seg.endPostIndex) next[i + newBays - oldBays] = value
+      }
+      return next
+    })
+    setSelectedIndex(null)
   }
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
@@ -430,6 +474,69 @@ const RetainingWallEditor: React.FC<{
                 ))}
               </div>
             )}
+            <div className={styles.spacingRows}>
+              {(shownSegment !== null ? [profile.segments[shownSegment]] : profile.segments).map((seg) => {
+                const bays = seg.endPostIndex - seg.startPostIndex
+                const tooWide = seg.postSpacingM > seg.tableMaxSpacingM + 1e-6
+                const setSpacing = runSpacing[seg.index]?.maxSpacingM
+                return (
+                  <div key={seg.index} className={styles.spacingRow}>
+                    <span className={styles.spacingName}>
+                      {profile.segments.length > 1 ? `Wall ${segmentLabel(seg.index)}` : "Posts"}
+                    </span>
+                    <span className={styles.stepper}>
+                      <button
+                        type="button"
+                        aria-label={`One post fewer${profile.segments.length > 1 ? ` on wall ${segmentLabel(seg.index)}` : ""}`}
+                        disabled={bays <= 1}
+                        onClick={() => applyRunSpacing(seg.index, { bayCount: bays - 1 })}
+                      >
+                        −
+                      </button>
+                      <span>{bays + 1} posts</span>
+                      <button
+                        type="button"
+                        aria-label={`One post more${profile.segments.length > 1 ? ` on wall ${segmentLabel(seg.index)}` : ""}`}
+                        onClick={() => applyRunSpacing(seg.index, { bayCount: bays + 1 })}
+                      >
+                        +
+                      </button>
+                    </span>
+                    <span className={tooWide ? styles.spacingWarn : undefined}>
+                      at {Math.round(seg.postSpacingM * 1000)}mm centres
+                      {tooWide ? ` ⚠ over the table’s ${Math.round(seg.tableMaxSpacingM * 1000)}mm max` : ""}
+                    </span>
+                    <label className={styles.spacingField}>
+                      Max spacing (mm)
+                      <input
+                        key={`${seg.index}-${setSpacing ?? "auto"}`}
+                        type="number"
+                        min={200}
+                        step={50}
+                        inputMode="numeric"
+                        placeholder={`Auto — ${Math.round(seg.tableMaxSpacingM * 1000)}`}
+                        defaultValue={setSpacing ? Math.round(setSpacing * 1000) : ""}
+                        onBlur={(e) => {
+                          const mm = parseFloat(e.target.value)
+                          if (mm >= 200) {
+                            if (mm / 1000 !== setSpacing) applyRunSpacing(seg.index, { maxSpacingM: mm / 1000 })
+                          } else if (setSpacing) applyRunSpacing(seg.index, null)
+                          else e.target.value = ""
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur()
+                        }}
+                      />
+                    </label>
+                    {seg.spacingOverridden && (
+                      <button type="button" className={styles.inlineLink} onClick={() => applyRunSpacing(seg.index, null)}>
+                        Clear — back to the table ({seg.tableBayCount + 1} posts)
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
             <WallProfileDiagram
               profile={profile}
               settings={calcSettings}

@@ -76,7 +76,8 @@ const WallProfileDiagram: React.FC<{
 
     const padX = Math.max(...posts.map((p) => p.holeDiameterM / 2)) + fontSize * 8
     const padTop = fontSize * 2.5
-    const padBottom = fontSize * 2.5
+    // room under the deepest hole for the post-spacing dimension line
+    const padBottom = fontSize * 3.2
 
     const vbMinX = (mirrored ? -posts[posts.length - 1].xM : posts[0].xM) - padX
     const vbMinY = -(maxTop + padTop)
@@ -260,6 +261,37 @@ const WallProfileDiagram: React.FC<{
           strokeWidth={strokeW * 0.7}
         />
 
+        {/* post centres, dimensioned under the deepest hole: a tick at
+            every post and each bay's spacing in mm. The text shrinks to
+            fit its own bay, so a long wall's dimensions stay apart. */}
+        {(() => {
+          const dimY = y(geometry.minBottom) + fontSize * 0.9
+          const tick = fontSize * 0.35
+          return (
+            <g className={styles.spacingDim}>
+              <line x1={X(posts[0].xM)} x2={X(posts[posts.length - 1].xM)} y1={dimY} y2={dimY} strokeWidth={strokeW * 0.5} />
+              {posts.map((p) => (
+                <line key={`dim-tick-${p.index}`} x1={X(p.xM)} x2={X(p.xM)} y1={dimY - tick} y2={dimY + tick} strokeWidth={strokeW * 0.5} />
+              ))}
+              {bays.map((bay) => {
+                const label = `${Math.round(bay.widthM * 1000)}`
+                const size = Math.min(fontSize * 0.8, bay.widthM / (label.length * 0.68))
+                return (
+                  <text
+                    key={`dim-${bay.leftIndex}`}
+                    x={X((allPosts[bay.leftIndex].xM + allPosts[bay.rightIndex].xM) / 2)}
+                    y={dimY + tick + size}
+                    fontSize={size}
+                    textAnchor="middle"
+                  >
+                    {label}
+                  </text>
+                )
+              })}
+            </g>
+          )
+        })()}
+
         {/* whole-wall view of a wall with corners: name each run above it,
             matching the plan's labels */}
         {!segment &&
@@ -312,7 +344,9 @@ const WallProfileDiagram: React.FC<{
           </span>
         )}
       </div>
-      <p className={styles.hint}>Tap a post to set its ground level and top level by hand.</p>
+      <p className={styles.hint}>
+        Dimensions along the bottom are post centres in mm. Tap a post to set its ground level and top level by hand.
+      </p>
     </div>
   )
 }
