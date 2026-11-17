@@ -79,6 +79,12 @@ export interface WallProject {
   boardOrderPartial: PartialBoardOrder
   /** the log of orders placed, oldest first */
   boardOrdersPlaced: PlacedBoardOrder[]
+  /** per wall, in step with the plan's runs: the top of that wall steps at
+   * the posts (whole courses per bay) instead of following the rake */
+  steppedWalls: boolean[]
+  /** hand-set courses per bay of a stepped wall, keyed by the bay's left
+   * post index; a wall with none is worked out from the rake */
+  bayCourses: Record<string, number>
   /** keyed by post index */
   controlPoints: ControlPoints
   /** hole depths set by hand on individual posts, keyed by post index */
@@ -126,6 +132,8 @@ export const newBlankWall = (): WallProject => ({
   boardOrderFixed: {},
   boardOrderPartial: { enabled: false, wallRows: {}, fixed: {} },
   boardOrdersPlaced: [],
+  steppedWalls: [],
+  bayCourses: {},
   controlPoints: {},
   depthPoints: {},
   topCapEnabled: false,
@@ -177,6 +185,8 @@ export const wallFromData = (data: unknown): WallProject => {
       fixed: numberMap(d.boardOrderPartial?.fixed),
     },
     boardOrdersPlaced: placedOrdersFromData(d.boardOrdersPlaced),
+    steppedWalls: Array.isArray(d.steppedWalls) ? d.steppedWalls.map(Boolean) : [],
+    bayCourses: Object.fromEntries(Object.entries(numberMap(d.bayCourses)).filter(([, n]) => n >= 1).map(([k, n]) => [k, Math.round(n)])),
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     depthPoints: Object.fromEntries(
       Object.entries(typeof d.depthPoints === "object" && d.depthPoints !== null ? d.depthPoints : {})
@@ -211,10 +221,12 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
   rakedTopBoard: wall.rakedTopBoard,
   boardsToPostOutside: wall.boardsToPostOutside,
+  steppedWalls: wall.steppedWalls,
+  bayCourses: wall.bayCourses,
   depthPoints: wall.depthPoints,
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,

@@ -1,0 +1,147 @@
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 899;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+// slides out from the left edge: only the handle shows until opened
+.rail {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  z-index: 900;
+  display: flex;
+  align-items: stretch;
+  transform: translate(calc(-100% + 22px), -50%);
+  transition: transform 0.28s ease;
+  background-color: var(--background);
+  color: var(--foreground);
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-left: none;
+  border-radius: 0 14px 14px 0;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.railOpen {
+  transform: translate(0, -50%);
+}
+
+.list {
+  order: -1; // the list sits to the left of the handle, which stays on the edge
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.5rem 0.3rem 0.5rem 0.5rem;
+  list-style: none;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.item,
+.itemActive {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-width: 10.5rem;
+  padding: 0.55rem 0.8rem 0.55rem 0.6rem;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(127, 127, 127, 0.14);
+  }
+}
+
+.itemActive {
+  background-color: rgba(42, 120, 214, 0.14);
+  color: #2a78d6;
+  font-weight: 700;
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+.label {
+  white-space: nowrap;
+}
+
+// the strip left showing on the edge when closed
+.handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 22px;
+  padding: 0.7rem 0;
+  border: none;
+  border-radius: 0 14px 14px 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.dot,
+.dotActive {
+  display: block;
+  border-radius: 50%;
+  background-color: currentColor;
+  transition: all 0.2s ease;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  opacity: 0.4;
+}
+
+.dotActive {
+  width: 8px;
+  height: 8px;
+  background-color: #2a78d6;
+}
+
+.chevron {
+  width: 14px;
+  height: 14px;
+  opacity: 0.55;
+  transition: transform 0.28s ease;
+
+  .railOpen & {
+    transform: rotate(180deg);
+  }
+}
+
+@media print {
+  .rail,
+  .scrim {
+    display: none;
+  }
+}

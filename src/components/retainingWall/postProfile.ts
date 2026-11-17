@@ -12,6 +12,11 @@ import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
 export interface ControlPoint {
   groundLevelM: number
   topLevelM: number
+  /** corner posts only: the level the wall *after* the corner starts at,
+   * when it isn't the same as the wall before it (`topLevelM`). The
+   * change happens at the corner post, which stands at the taller of the
+   * two. Left out when both walls meet at the same height. */
+  topAfterLevelM?: number
 }
 
 /** Keyed by post index. */
@@ -60,6 +65,12 @@ export interface ProfileSegment {
   tableBayCount: number
   /** true when the post count or spacing was set by hand for this run */
   spacingOverridden: boolean
+  /** true when this run's top steps down/up at the posts, a whole number
+   * of board courses per bay, instead of following the rake in a line */
+  stepped: boolean
+  /** true when its bay heights were set by hand (otherwise they're
+   * worked out from the rake) */
+  stepsEdited: boolean
 }
 
 export interface ProfilePost {
@@ -68,7 +79,14 @@ export interface ProfilePost {
   xM: number
   /** m, relative to the RL datum */
   groundLevelM: number
+  /** the top of the post itself — the taller of the two sides at a corner
+   * where the walls meet at different heights */
   topLevelM: number
+  /** the level the wall on this post's left (before it) comes up to, and
+   * the wall on its right goes on from. Equal to topLevelM everywhere but
+   * at a corner whose two walls meet at different heights. */
+  topBeforeM: number
+  topAfterM: number
   /** topLevelM - groundLevelM */
   retainedHeightM: number
   isControlPoint: boolean
@@ -129,6 +147,13 @@ export interface ProfileBay {
   topBoardLengthM: number
   /** rise over run of the top of the wall across this bay */
   topSlope: number
+  /** m — for a bay in a stepped run, the level top of its boards: the
+   * bay is `levelCourseCount` whole courses high, every one of them a
+   * level course (there's no separate top board). null otherwise. */
+  stepTopM: number | null
+  /** courses high, for a bay in a stepped run (even if it's excluded for
+   * needing an engineer, when levelCourseCount is 0); null otherwise */
+  stepCourseCount: number | null
 }
 
 /** How one bay's boards stack between posts `a` and `b`. Level courses
@@ -144,19 +169,24 @@ export interface ProfileBay {
  * down to suit. */
 export function bayCourseLayout(a: ProfilePost, b: ProfilePost, boardCourseHeightM: number, rakedTopBoard: boolean) {
   const widthM = Math.abs(b.xM - a.xM)
-  const riseM = b.topLevelM - a.topLevelM
+  // this bay's own tops: the left post's right-hand side, the right
+  // post's left-hand side (they differ from the post's own top only at a
+  // corner where the walls meet at different heights)
+  const topAM = a.topAfterM
+  const topBM = b.topBeforeM
+  const riseM = topBM - topAM
   const baseLevelM = Math.min(a.groundLevelM, b.groundLevelM)
   const ch = boardCourseHeightM
   if (!rakedTopBoard) {
-    const fullCourseCount = Math.max(0, Math.floor((Math.min(a.topLevelM, b.topLevelM) - baseLevelM) / ch + 1e-9))
+    const fullCourseCount = Math.max(0, Math.floor((Math.min(topAM, topBM) - baseLevelM) / ch + 1e-9))
     const levelTopM = baseLevelM + fullCourseCount * ch
     return { baseLevelM, courseCount: fullCourseCount, fullCourseCount, undersideAM: levelTopM, undersideBM: levelTopM, topBoardLengthM: widthM }
   }
   const slopeLengthM = Math.hypot(widthM, riseM)
   // a board `ch` wide laid on the slope is taller than `ch` measured plumb
   const dropM = widthM > 0 ? (ch * slopeLengthM) / widthM : ch
-  const undersideAM = a.topLevelM - dropM
-  const undersideBM = b.topLevelM - dropM
+  const undersideAM = topAM - dropM
+  const undersideBM = topBM - dropM
   const courseCount = Math.max(0, Math.ceil((Math.max(undersideAM, undersideBM) - baseLevelM) / ch - 1e-9))
   const fullCourseCount = Math.min(courseCount, Math.max(0, Math.floor((Math.min(undersideAM, undersideBM) - baseLevelM) / ch + 1e-9)))
   return { baseLevelM, courseCount, fullCourseCount, undersideAM, undersideBM, topBoardLengthM: slopeLengthM }
@@ -209,6 +239,13 @@ export interface RunSpacing {
 const MAX_RUN_BAYS = 200
 
 export interface ProfileOverrides {
+  /** per run, in step with the segment lengths passed in: true = the top
+   * of that run steps at the posts instead of following the rake */
+  steppedWalls?: (boolean | null | undefined)[] | null
+  /** hand-set courses per bay of a stepped run, keyed by the bay's left
+   * post index. A run with none of its bays here is worked out from the
+   * rake — the nearest whole number of courses to its height mid-bay. */
+  bayCourses?: Record<number, number> | null
   /** per run, in step with the segment lengths passed in; a missing or
    * null entry keeps that run on the table's spacing */
   runSpacing?: (RunSpacing | null | undefined)[] | null
@@ -295,19 +332,35 @@ export interface WallProfile extends ProfileTotals {
 
 const DEFAULT_LEVEL = (retainedHeightM: number): ControlPoint => ({ groundLevelM: 0, topLevelM: retainedHeightM })
 
+/** A post's resolved levels: ground, and the top as the wall before it
+ * (topLevelM) and after it (topAfterLevelM) see it. */
+interface ResolvedLevel {
+  groundLevelM: number
+  topLevelM: number
+  topAfterLevelM: number
+}
+
 /** Resolves post `i`'s ground/top level: its own control point if it has
  * one, else linearly interpolated between the nearest control points
  * bracketing it, else held flat at whichever single control point is
  * nearest, else the uniform default if there are no control points at
- * all yet. `sortedCpIndices` must be sorted ascending. */
+ * all yet. `sortedCpIndices` must be sorted ascending.
+ *
+ * A control point on a corner can carry a second top (topAfterLevelM):
+ * posts before it rake up to its own top, and posts after it rake on from
+ * the second one. */
 function resolveLevel(
   i: number,
   controlPoints: ControlPoints,
   sortedCpIndices: number[],
   retainedHeightM: number
-): ControlPoint {
-  if (controlPoints[i]) return controlPoints[i]
-  if (sortedCpIndices.length === 0) return DEFAULT_LEVEL(retainedHeightM)
+): ResolvedLevel {
+  const same = (c: ControlPoint): ResolvedLevel => ({ groundLevelM: c.groundLevelM, topLevelM: c.topLevelM, topAfterLevelM: c.topLevelM })
+  if (controlPoints[i]) {
+    const cp = controlPoints[i]
+    return { groundLevelM: cp.groundLevelM, topLevelM: cp.topLevelM, topAfterLevelM: cp.topAfterLevelM ?? cp.topLevelM }
+  }
+  if (sortedCpIndices.length === 0) return same(DEFAULT_LEVEL(retainedHeightM))
 
   let before: number | undefined
   let after: number | undefined
@@ -315,17 +368,22 @@ function resolveLevel(
     if (ci <= i) before = ci
     if (ci >= i && after === undefined) after = ci
   }
-  if (before === undefined) return controlPoints[after!]
-  if (after === undefined) return controlPoints[before]
-  if (before === after) return controlPoints[before]
+  // a post past the last control point carries on from its far side;
+  // one before the first reaches back to its near side
+  if (before === undefined) return same(controlPoints[after!])
+  if (after === undefined) {
+    const cp = controlPoints[before]
+    return same({ ...cp, topLevelM: cp.topAfterLevelM ?? cp.topLevelM })
+  }
 
   const t = (i - before) / (after - before)
   const cpBefore = controlPoints[before]
   const cpAfter = controlPoints[after]
-  return {
+  const fromTop = cpBefore.topAfterLevelM ?? cpBefore.topLevelM
+  return same({
     groundLevelM: cpBefore.groundLevelM + (cpAfter.groundLevelM - cpBefore.groundLevelM) * t,
-    topLevelM: cpBefore.topLevelM + (cpAfter.topLevelM - cpBefore.topLevelM) * t,
-  }
+    topLevelM: fromTop + (cpAfter.topLevelM - fromTop) * t,
+  })
 }
 
 /** Groups bays into unbroken runs: contiguous, and not separated by a
@@ -532,7 +590,9 @@ function planBoardLayers(
     // there. Otherwise the top board is cut to the rake bay by bay and
     // can run straight through.
     const stretches: ProfileBay[][] = []
-    for (const bay of run) {
+    // a stepped bay has no separate top board — its top course is just
+    // another level course — so only the other bays have one
+    for (const bay of run.filter((b) => b.stepTopM === null)) {
       const stretch = stretches[stretches.length - 1]
       const sameRake = stretch && Math.abs(stretch[stretch.length - 1].topSlope - bay.topSlope) < 1e-4
       if (stretch && (!rakedTopBoard || sameRake)) stretch.push(bay)
@@ -541,15 +601,29 @@ function planBoardLayers(
     stretches.forEach((stretch, idx) => {
       const topBoardPieces = planPieces(stretch, maxLengthM, (maxCourses % 2) as 0 | 1, (bay) => bay.topBoardLengthM)
       accumulatePieces(topBoardAgg, stretch, topBoardPieces, (postIndex) => posts[postIndex].topLevelM, "topBoard", (bay) => bay.topBoardLengthM)
-      if (idx < stretches.length - 1) {
+      const nextStretch = stretches[idx + 1]
+      // a rake change forces a join at the post where two stretches meet —
+      // unless a stepped bay sits between them, where there's no board
+      if (nextStretch && nextStretch[0].leftIndex === stretch[stretch.length - 1].rightIndex) {
         const postIndex = stretch[stretch.length - 1].rightIndex
         topBoardAgg.joints.push({ postIndex, levelM: posts[postIndex].topLevelM, layer: "topBoard" })
       }
     })
 
     if (topCapEnabled) {
-      const capPieces = planPieces(run, maxLengthM, ((maxCourses + 1) % 2) as 0 | 1)
-      accumulatePieces(topCapAgg, run, capPieces, (postIndex) => posts[postIndex].topLevelM + capThicknessM, "topCap")
+      // the cap is one flat board, so it can't carry on across a step
+      const capStretches: ProfileBay[][] = []
+      for (const bay of run) {
+        const stretch = capStretches[capStretches.length - 1]
+        const last = stretch?.[stretch.length - 1]
+        const stepsApart = last && (last.stepTopM !== null || bay.stepTopM !== null) && !(last.stepTopM !== null && bay.stepTopM !== null && Math.abs(last.stepTopM - bay.stepTopM) < 1e-6)
+        if (stretch && !stepsApart) stretch.push(bay)
+        else capStretches.push([bay])
+      }
+      for (const stretch of capStretches) {
+        const capPieces = planPieces(stretch, maxLengthM, ((maxCourses + 1) % 2) as 0 | 1)
+        accumulatePieces(topCapAgg, stretch, capPieces, (postIndex) => posts[postIndex].topLevelM + capThicknessM, "topCap")
+      }
     }
   }
 
@@ -652,7 +726,9 @@ export function buildWallProfile(
   const postSizeOverride = overrides.postSizeLabel || null
   const holeDepthOverrideM = overrides.holeDepthM && overrides.holeDepthM > 0 ? overrides.holeDepthM : null
   const rakedTopBoard = Boolean(overrides.rakedTopBoard)
-  const runsIn = segmentLengthsM.map((l, i) => ({ l, spacing: overrides.runSpacing?.[i] })).filter((r) => r.l > 0)
+  const runsIn = segmentLengthsM
+    .map((l, i) => ({ l, spacing: overrides.runSpacing?.[i], stepped: overrides.steppedWalls?.[i] }))
+    .filter((r) => r.l > 0)
   const runLengthsM = runsIn.map((r) => r.l)
   if (runLengthsM.length === 0 || !(retainedHeightM > 0)) return null
 
@@ -667,6 +743,7 @@ export function buildWallProfile(
   let runStartXM = 0
   runLengthsM.forEach((lengthM, index) => {
     const spacing = runsIn[index].spacing
+    const stepped = Boolean(runsIn[index].stepped)
     const tableBayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
     const bayCount = resolveBayCount(lengthM, layoutRow.maxSpacingM, spacing)
     const startPostIndex = postXs.length - 1
@@ -677,6 +754,8 @@ export function buildWallProfile(
       tableMaxSpacingM: layoutRow.maxSpacingM,
       tableBayCount,
       spacingOverridden: Boolean((spacing?.bayCount && spacing.bayCount >= 1) || (spacing?.maxSpacingM && spacing.maxSpacingM > 0)),
+      stepped,
+      stepsEdited: false,
     })
     if (index < runLengthsM.length - 1) cornerIndices.add(endPostIndex)
     runStartXM += lengthM
@@ -691,6 +770,11 @@ export function buildWallProfile(
   // still reflects just what the user actually set.
   const lastIndex = postCount - 1
   const effectiveControlPoints: ControlPoints = { ...controlPoints }
+  // a second top only means something on a corner — if the corner has
+  // since gone, that post is just a post
+  for (const [key, cp] of Object.entries(effectiveControlPoints)) {
+    if (cp.topAfterLevelM !== undefined && !cornerIndices.has(Number(key))) effectiveControlPoints[Number(key)] = { groundLevelM: cp.groundLevelM, topLevelM: cp.topLevelM }
+  }
   if (effectiveControlPoints[0] === undefined) effectiveControlPoints[0] = DEFAULT_LEVEL(retainedHeightM)
   if (effectiveControlPoints[lastIndex] === undefined) effectiveControlPoints[lastIndex] = DEFAULT_LEVEL(retainedHeightM)
 
@@ -700,7 +784,12 @@ export function buildWallProfile(
     .sort((a, b) => a - b)
 
   const posts: ProfilePost[] = Array.from({ length: postCount }, (_, i) => {
-    const { groundLevelM, topLevelM } = resolveLevel(i, effectiveControlPoints, sortedCpIndices, retainedHeightM)
+    const resolved = resolveLevel(i, effectiveControlPoints, sortedCpIndices, retainedHeightM)
+    const groundLevelM = resolved.groundLevelM
+    const topBeforeM = resolved.topLevelM
+    const topAfterM = cornerIndices.has(i) ? resolved.topAfterLevelM : resolved.topLevelM
+    // a corner pile has to cater for the taller of the walls it joins
+    const topLevelM = Math.max(topBeforeM, topAfterM)
     const localHeightM = topLevelM - groundLevelM
     const needsEngineer = localHeightM > ENGINEER_HEIGHT_LIMIT_M || localHeightM <= 0
     // clamp purely for the lookup/drawing below — a post over the limit
@@ -723,6 +812,8 @@ export function buildWallProfile(
       xM: postXs[i],
       groundLevelM,
       topLevelM,
+      topBeforeM,
+      topAfterM,
       retainedHeightM: localHeightM,
       isControlPoint: Boolean(controlPoints[i]),
       isCorner: cornerIndices.has(i),
@@ -777,14 +868,70 @@ export function buildWallProfile(
     if (d?.mode === "lone") setDepth(p, d.depthM, "lone")
   }
 
+  // Stepped runs: every bay is a whole number of courses high, so the top
+  // of the wall is a staircase with its steps at the posts. Worked out
+  // from the rake unless the run's bay heights were set by hand.
+  const ch = settings.boardCourseHeightM
+  const MAX_STEP_COURSES = 80
+  const stepCourses = new Map<number, number>() // bay left post index -> courses
+  for (const seg of segments) {
+    if (!seg.stepped) continue
+    const manual = Array.from({ length: seg.endPostIndex - seg.startPostIndex }, (_, k) => overrides.bayCourses?.[seg.startPostIndex + k])
+    seg.stepsEdited = manual.some((c) => typeof c === "number" && c >= 1)
+    for (let i = seg.startPostIndex; i < seg.endPostIndex; i++) {
+      const a = posts[i]
+      const b = posts[i + 1]
+      const base = Math.min(a.groundLevelM, b.groundLevelM)
+      const auto = Math.round(((a.topAfterM + b.topBeforeM) / 2 - base) / ch)
+      const set = overrides.bayCourses?.[i]
+      stepCourses.set(i, Math.min(MAX_STEP_COURSES, Math.max(1, seg.stepsEdited && typeof set === "number" && set >= 1 ? Math.round(set) : auto)))
+    }
+  }
+  const stepTopOf = (i: number): number | null => {
+    const courses = stepCourses.get(i)
+    return courses === undefined ? null : Math.min(posts[i].groundLevelM, posts[i + 1].groundLevelM) + courses * ch
+  }
+  // a post stands as high as the tallest bay beside it — a stepped bay's
+  // flat top, or, beside one that isn't stepped, that wall's own rake
+  if (stepCourses.size > 0) {
+    for (const p of posts) {
+      const sides: number[] = []
+      let anyStepped = false
+      if (p.index > 0) {
+        const top = stepTopOf(p.index - 1)
+        anyStepped = anyStepped || top !== null
+        sides.push(top ?? p.topBeforeM)
+      }
+      if (p.index < posts.length - 1) {
+        const top = stepTopOf(p.index)
+        anyStepped = anyStepped || top !== null
+        sides.push(top ?? p.topAfterM)
+      }
+      if (!anyStepped) continue
+      p.topLevelM = Math.max(...sides)
+      p.retainedHeightM = p.topLevelM - p.groundLevelM
+      p.needsEngineer = p.retainedHeightM > ENGINEER_HEIGHT_LIMIT_M || p.retainedHeightM <= 0
+    }
+  }
+
   const bays: ProfileBay[] = []
   for (let i = 0; i < posts.length - 1; i++) {
     const a = posts[i]
     const b = posts[i + 1]
     const needsEngineer = a.needsEngineer || b.needsEngineer
-    const heightM = Math.max(a.retainedHeightM, b.retainedHeightM)
     const widthM = b.xM - a.xM
-    const layout = bayCourseLayout(a, b, settings.boardCourseHeightM, rakedTopBoard)
+    const stepTopM = stepTopOf(i)
+    // how tall the wall is across this bay — its own side of each post,
+    // not the taller pile a corner may stand on
+    const heightM = stepTopM !== null ? stepTopM - Math.min(a.groundLevelM, b.groundLevelM) : Math.max(a.topAfterM - a.groundLevelM, b.topBeforeM - b.groundLevelM)
+    const layout =
+      stepTopM === null
+        ? bayCourseLayout(a, b, settings.boardCourseHeightM, rakedTopBoard)
+        : {
+            courseCount: stepCourses.get(i)!,
+            fullCourseCount: stepCourses.get(i)!,
+            topBoardLengthM: 0,
+          }
     const levelCourseCount = needsEngineer ? 0 : layout.courseCount
     bays.push({
       leftIndex: a.index,
@@ -798,7 +945,9 @@ export function buildWallProfile(
       boardOverrunM: 0,
       boardLengthM: widthM,
       topBoardLengthM: layout.topBoardLengthM,
-      topSlope: widthM > 0 ? (b.topLevelM - a.topLevelM) / widthM : 0,
+      topSlope: widthM > 0 ? (b.topBeforeM - a.topAfterM) / widthM : 0,
+      stepTopM,
+      stepCourseCount: stepCourses.get(i) ?? null,
     })
   }
 

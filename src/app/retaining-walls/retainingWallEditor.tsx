@@ -5,7 +5,16 @@ import Button from "@/components/button/button"
 import SpecCard from "@/components/structures/specCard"
 import LaborSummary from "@/components/structures/laborSummary"
 import { formatM, formatM3 } from "@/components/structures/format"
-import { SettingsIcon } from "@/components/icons/icons"
+import {
+  ElevationIcon,
+  MaterialsIcon,
+  OrderIcon,
+  PlanViewIcon,
+  PostHoleIcon,
+  SettingsIcon,
+  SlidersIcon,
+  TopIcon,
+} from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
@@ -24,6 +33,8 @@ import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } 
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import BoardEndsModal from "./boardEndsModal"
+import StepEditor from "./stepEditor"
+import SectionRail, { RailSection } from "./sectionRail"
 import ReferenceTableModal from "./referenceTableModal"
 import SettingsPanel from "./settingsPanel"
 import styles from "./retainingWallEditor.module.scss"
@@ -69,6 +80,9 @@ const RetainingWallEditor: React.FC<{
   const [boardOrderPartial, setBoardOrderPartial] = useState<PartialBoardOrder>(initial.boardOrderPartial)
   // boards picked out on the elevation from the order card (not saved)
   const [boardHighlight, setBoardHighlight] = useState<BoardHighlight[]>([])
+  // walls whose top steps at the posts, by wall; and the bay heights set by hand
+  const [steppedWalls, setSteppedWalls] = useState<boolean[]>(initial.steppedWalls)
+  const [bayCourses, setBayCourses] = useState<Record<string, number>>(initial.bayCourses)
   const [boardOrdersPlaced, setBoardOrdersPlaced] = useState<PlacedBoardOrder[]>(initial.boardOrdersPlaced)
   const [showReferenceTable, setShowReferenceTable] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -101,6 +115,7 @@ const RetainingWallEditor: React.FC<{
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
+  const topAfterInputRef = useRef<HTMLInputElement>(null)
   const depthInputRef = useRef<HTMLInputElement>(null)
   const depthModeRef = useRef<HTMLSelectElement>(null)
 
@@ -118,7 +133,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
@@ -143,6 +158,8 @@ const RetainingWallEditor: React.FC<{
       boardOrderFixed,
       boardOrderPartial,
       boardOrdersPlaced,
+      steppedWalls,
+      bayCourses,
       controlPoints,
       depthPoints,
       topCapEnabled,
@@ -157,7 +174,7 @@ const RetainingWallEditor: React.FC<{
     lastReported.current = json
     if (previous === null || previous === json) return
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -203,6 +220,17 @@ const RetainingWallEditor: React.FC<{
     }
     setControlPoints(follow)
     setDepthPoints(follow)
+    // bay heights are keyed by the bay's left post, so the last bay of
+    // the unchanged walls at the start is the one *before* keepUpTo
+    setBayCourses((counts) => {
+      const next: Record<string, number> = {}
+      for (const [key, value] of Object.entries(counts)) {
+        const i = Number(key)
+        if (i < keepUpTo) next[key] = value
+        else if (i >= keepFrom) next[String(i + shiftBy)] = value
+      }
+      return next
+    })
     setSelectedIndex(null)
   }, [bayCountsKey, heightEditing])
 
@@ -237,22 +265,23 @@ const RetainingWallEditor: React.FC<{
   }
 
   const handlePlanChange = (next: PlanPoint[]) => {
-    // keep each wall's hand-set spacing with its own wall when a corner
-    // is added (the wall it splits goes back to the table) or removed
-    // (the two walls it joined merge into one on the table's spacing)
-    let nextSpacing = runSpacing
-    if (next.length !== planPoints.length && runSpacing.some(Boolean)) {
+    // keep each wall's own settings (hand-set spacing, stepping) with that
+    // wall when a corner is added (the wall it splits goes back to the
+    // table / unstepped) or removed (the two walls it joined merge into
+    // one on the defaults)
+    if (next.length !== planPoints.length) {
       const changed = next.findIndex((p, i) => !planPoints[i] || p.xM !== planPoints[i].xM || p.yM !== planPoints[i].yM)
       const at = changed === -1 ? next.length : changed
       const seg = Math.max(0, at - 1)
-      nextSpacing =
-        next.length > planPoints.length
-          ? [...runSpacing.slice(0, seg), null, null, ...runSpacing.slice(seg + 1)]
+      const remap = <T,>(list: T[], blank: T): T[] =>
+        (next.length > planPoints.length
+          ? [...list.slice(0, seg), blank, blank, ...list.slice(seg + 1)]
           : at === 0
-            ? runSpacing.slice(1)
-            : [...runSpacing.slice(0, seg), null, ...runSpacing.slice(seg + 2)]
-      nextSpacing = nextSpacing.slice(0, next.length - 1)
-      setRunSpacing(nextSpacing)
+            ? list.slice(1)
+            : [...list.slice(0, seg), blank, ...list.slice(seg + 2)]
+        ).slice(0, next.length - 1)
+      if (runSpacing.some(Boolean)) setRunSpacing(remap(runSpacing, null))
+      if (steppedWalls.some(Boolean)) setSteppedWalls(remap(steppedWalls, false))
     }
     setPlanPoints(next)
   }
@@ -264,7 +293,37 @@ const RetainingWallEditor: React.FC<{
     setRunSpacing(Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? spacing : (runSpacing[i] ?? null))))
   }
 
+  // stepping: per wall, or every wall at once from the whole-wall view
+  const stepTarget = profile ? (shownSegment !== null ? shownSegment : profile.segments.length === 1 ? 0 : null) : null
+  const setSteppedFor = (segmentIndex: number | null, on: boolean) => {
+    if (!profile) return
+    setSteppedWalls(Array.from({ length: profile.segments.length }, (_, i) => (segmentIndex === null || i === segmentIndex ? on : Boolean(steppedWalls[i]))))
+  }
+  const steppedCount = profile ? profile.segments.filter((seg) => seg.stepped).length : 0
+  const setStepCounts = (segmentIndex: number, counts: number[]) => {
+    if (!profile) return
+    const seg = profile.segments[segmentIndex]
+    setBayCourses((current) => {
+      const next = { ...current }
+      counts.forEach((c, j) => {
+        next[String(seg.startPostIndex + j)] = c
+      })
+      return next
+    })
+  }
+  const resetStepCounts = (segmentIndex: number) => {
+    if (!profile) return
+    const seg = profile.segments[segmentIndex]
+    setBayCourses((current) => {
+      const next = { ...current }
+      for (let i = seg.startPostIndex; i < seg.endPostIndex; i++) delete next[String(i)]
+      return next
+    })
+  }
+
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
+  // for a corner post: the wall that ends on it (the one after it is the next letter)
+  const cornerBefore = selectedPost?.isCorner && profile ? profile.segments.find((seg) => seg.endPostIndex === selectedPost.index)?.index ?? null : null
   const allBlocked = profile ? profile.posts.length === profile.engineerPostIndices.length : false
   const someBlocked = profile ? profile.engineerPostIndices.length > 0 : false
 
@@ -278,11 +337,25 @@ const RetainingWallEditor: React.FC<{
     const topAbs = parseFloat(topInputRef.current.value)
     if (isNaN(groundAbs) || isNaN(topAbs)) return
     const post = profile?.posts[selectedIndex]
+    // a corner can have a different top for the wall on each side of it
+    const afterAbs = post?.isCorner && topAfterInputRef.current ? parseFloat(topAfterInputRef.current.value) : NaN
+    const topAfterM = isNaN(afterAbs) ? null : afterAbs - rlDatumM
+    const split = topAfterM !== null && Math.abs(topAfterM - (topAbs - rlDatumM)) > 0.0005
     // only a level that was actually changed makes this a hand-set post
     const levelsChanged =
-      !post || Math.abs(groundAbs - rlDatumM - post.groundLevelM) > 0.0005 || Math.abs(topAbs - rlDatumM - post.topLevelM) > 0.0005
+      !post ||
+      Math.abs(groundAbs - rlDatumM - post.groundLevelM) > 0.0005 ||
+      Math.abs(topAbs - rlDatumM - post.topBeforeM) > 0.0005 ||
+      (topAfterM !== null && Math.abs(topAfterM - post.topAfterM) > 0.0005)
     if (levelsChanged || post?.isControlPoint)
-      setControlPoints((cp) => ({ ...cp, [selectedIndex]: { groundLevelM: groundAbs - rlDatumM, topLevelM: topAbs - rlDatumM } }))
+      setControlPoints((cp) => ({
+        ...cp,
+        [selectedIndex]: {
+          groundLevelM: groundAbs - rlDatumM,
+          topLevelM: topAbs - rlDatumM,
+          ...(split ? { topAfterLevelM: topAfterM as number } : {}),
+        },
+      }))
 
     const mode = depthModeRef.current?.value
     const depthMm = parseFloat(depthInputRef.current?.value ?? "")
@@ -309,8 +382,21 @@ const RetainingWallEditor: React.FC<{
     setCalcSettingsName(name)
   }
 
+  // where the side panel can jump to — it leaves out any that aren't on
+  // the page right now (no results until the wall has a height, say)
+  const railSections: RailSection[] = [
+    { id: "rw-top", label: "Top", icon: <TopIcon /> },
+    { id: "rw-inputs", label: "Wall & ground", icon: <SlidersIcon /> },
+    { id: "rw-posts-holes", label: "Posts & holes", icon: <PostHoleIcon /> },
+    { id: "rw-plan", label: "Plan", icon: <PlanViewIcon /> },
+    { id: "rw-elevation", label: "Elevation", icon: <ElevationIcon /> },
+    { id: "rw-materials", label: "Materials", icon: <MaterialsIcon /> },
+    { id: "rw-order", label: "Board order", icon: <OrderIcon /> },
+  ]
+
   return (
-    <div className={styles.retainingWallsPage}>
+    <div className={styles.retainingWallsPage} id="rw-top">
+      <SectionRail sections={railSections} />
       {header}
       <div className={styles.headerRow}>
         <div>
@@ -347,7 +433,7 @@ const RetainingWallEditor: React.FC<{
         </button>
       </p>
 
-      <fieldset disabled={locked} className={styles.lockable}>
+      <fieldset disabled={locked} className={styles.lockable} id="rw-inputs">
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
           <label htmlFor="wallLength">{planPoints.length > 2 ? "Total wall length (m)" : "Wall length (m)"}</label>
@@ -428,7 +514,9 @@ const RetainingWallEditor: React.FC<{
       </form>
       </fieldset>
 
-      <h3 className={styles.overridesHeading}>Posts and holes</h3>
+      <h3 className={styles.overridesHeading} id="rw-posts-holes">
+        Posts and holes
+      </h3>
       <p className={styles.overridesHint}>
         Leave a box on Auto to have it worked out post by post from the reference table and each post&apos;s own
         height, or set it to use the same value for every post on the wall.
@@ -513,7 +601,7 @@ const RetainingWallEditor: React.FC<{
         onApply={handleApplySettings}
       />
 
-      <div className={styles.diagramCard}>
+      <div className={styles.diagramCard} id="rw-plan">
         <div className={styles.diagramCardHeader}>
           <h3>Plan</h3>
         </div>
@@ -549,7 +637,7 @@ const RetainingWallEditor: React.FC<{
             </div>
           )}
 
-          <div className={styles.diagramCard}>
+          <div className={styles.diagramCard} id="rw-elevation">
             <div className={styles.diagramCardHeader}>
               <h3>
                 {shownSegment !== null
@@ -562,6 +650,21 @@ const RetainingWallEditor: React.FC<{
                 <button type="button" className={styles.optionButton} onClick={() => setShowBoardEnds(true)}>
                   Board ends: {boardsToPostOutside ? "outside of post" : "post centre"}
                 </button>
+                {stepTarget === null ? (
+                  <button
+                    type="button"
+                    className={styles.optionButton}
+                    title="Step the top at the posts, on every wall at once — or pick a wall to do it for that one"
+                    onClick={() => setSteppedFor(null, steppedCount < profile.segments.length)}
+                  >
+                    Step the top: {steppedCount === 0 ? "off" : steppedCount === profile.segments.length ? "all walls" : `${steppedCount} of ${profile.segments.length} walls`}
+                  </button>
+                ) : (
+                  <label className={styles.topCapToggle} title="Step the boards at the posts instead of cutting them to the rake">
+                    <input type="checkbox" checked={profile.segments[stepTarget].stepped} onChange={(e) => setSteppedFor(stepTarget, e.target.checked)} />
+                    <span>Step the top{profile.segments.length > 1 ? ` (wall ${segmentLabel(stepTarget)})` : ""}</span>
+                  </label>
+                )}
                 <label className={styles.topCapToggle}>
                   <input type="checkbox" checked={rakedTopBoard} onChange={(e) => setRakedTopBoard(e.target.checked)} />
                   <span>Rake the top board</span>
@@ -662,6 +765,23 @@ const RetainingWallEditor: React.FC<{
                 )
               })}
             </fieldset>
+            {stepTarget !== null && profile.segments[stepTarget].stepped && (
+              <fieldset disabled={locked} className={styles.lockable}>
+                <StepEditor
+                  wallName={profile.segments.length > 1 ? `wall ${segmentLabel(stepTarget)}` : "the wall"}
+                  bays={profile.bays
+                    .filter((bay) => bay.leftIndex >= profile.segments[stepTarget].startPostIndex && bay.rightIndex <= profile.segments[stepTarget].endPostIndex)
+                    .map((bay) => ({ leftPost: bay.leftIndex + 1, rightPost: bay.rightIndex + 1, courses: bay.stepCourseCount ?? 0 }))}
+                  courseHeightMm={Math.round(calcSettings.boardCourseHeightM * 1000)}
+                  edited={profile.segments[stepTarget].stepsEdited}
+                  onSetCounts={(counts) => setStepCounts(stepTarget, counts)}
+                  onReset={() => resetStepCounts(stepTarget)}
+                />
+              </fieldset>
+            )}
+            {profile.segments.length > 1 && shownSegment === null && steppedCount > 0 && (
+              <p className={styles.viewNote}>Pick a wall above to move its steps or set its bay heights.</p>
+            )}
             <WallProfileDiagram
               profile={profile}
               settings={calcSettings}
@@ -698,15 +818,32 @@ const RetainingWallEditor: React.FC<{
                   />
                 </div>
                 <div className={styles.field}>
-                  <label>Top of post {rlDatumM !== 0 ? "(RL)" : "(m)"}</label>
+                  <label>
+                    {selectedPost.isCorner ? `Top — wall ${segmentLabel(cornerBefore ?? 0)} comes up to` : "Top of post"}{" "}
+                    {rlDatumM !== 0 ? "(RL)" : "(m)"}
+                  </label>
                   <input
                     ref={topInputRef}
                     type="number"
                     step={0.001}
                     inputMode="decimal"
-                    defaultValue={(rlDatumM + selectedPost.topLevelM).toFixed(3)}
+                    defaultValue={(rlDatumM + selectedPost.topBeforeM).toFixed(3)}
                   />
                 </div>
+                {selectedPost.isCorner && (
+                  <div className={styles.field}>
+                    <label>
+                      Top — wall {segmentLabel((cornerBefore ?? 0) + 1)} starts at {rlDatumM !== 0 ? "(RL)" : "(m)"}
+                    </label>
+                    <input
+                      ref={topAfterInputRef}
+                      type="number"
+                      step={0.001}
+                      inputMode="decimal"
+                      defaultValue={(rlDatumM + selectedPost.topAfterM).toFixed(3)}
+                    />
+                  </div>
+                )}
               </div>
               <div className={styles.editFields}>
                 <div className={styles.field}>
@@ -746,7 +883,11 @@ const RetainingWallEditor: React.FC<{
               {selectedPost.isCorner && (
                 <p className={styles.cornerNote}>
                   Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
-                  in the plan.
+                  in the plan. The two walls can meet at different heights: set a different top on each side and the
+                  step happens at this post, which stands at the taller of the two
+                  {Math.abs(selectedPost.topBeforeM - selectedPost.topAfterM) > 0.0005
+                    ? ` — ${Math.round((selectedPost.topLevelM - selectedPost.groundLevelM) * 1000)} mm of post above ground here.`
+                    : "."}
                 </p>
               )}
               <div className={styles.editActions}>
@@ -774,7 +915,7 @@ const RetainingWallEditor: React.FC<{
                     : "Materials below are for the whole wall. Pick a wall above (or tap it in the plan) to see just that wall’s share."}
                 </p>
               )}
-              <div className={styles.resultsGrid}>
+              <div className={styles.resultsGrid} id="rw-materials">
                 <SpecCard
                   title={`Posts${forWall}`}
                   rows={[
@@ -837,6 +978,7 @@ const RetainingWallEditor: React.FC<{
               </div>
               {/* deliberately not locked: the order is worked on after the
                   wall is set up, which is exactly when it's locked */}
+              <div id="rw-order">
               <BoardOrderCard
                 walls={orderWalls}
                 stockLengthsM={boardStocks}
@@ -848,6 +990,7 @@ const RetainingWallEditor: React.FC<{
                 onPlacedChange={setBoardOrdersPlaced}
                 onHighlight={setBoardHighlight}
               />
+              </div>
               <p className={styles.disclaimer}>
                 Rule-of-thumb estimate for straightforward ground and access — not an engineered design. Ground
                 conditions vary a lot in practice; if in doubt, especially near a boundary, driveway, or structure,

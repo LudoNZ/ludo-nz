@@ -1,0 +1,121 @@
+.editor {
+  margin: 0 0 0.9rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(42, 120, 214, 0.5);
+  border-radius: var(--borderRadius);
+  background-color: rgba(42, 120, 214, 0.05);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.8rem;
+
+  h4 {
+    margin: 0;
+    font-size: 0.98rem;
+    color: #2a78d6;
+  }
+}
+
+.state {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hint,
+.none {
+  margin: 0.35rem 0 0.6rem;
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0 0 0.7rem;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.9rem;
+    font-size: 0.9rem;
+  }
+}
+
+.stepName {
+  min-width: 5.5rem;
+  font-weight: 600;
+}
+
+.up {
+  color: #2a78d6;
+  font-weight: 700;
+  min-width: 8.5rem;
+}
+
+.down {
+  color: #c0392b;
+  font-weight: 700;
+  min-width: 8.5rem;
+}
+
+.move,
+.bay {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  button {
+    min-width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-primary);
+    border-radius: 999px;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+  }
+}
+
+.bays {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.4rem 0.8rem;
+}
+
+.bay {
+  font-size: 0.88rem;
+
+  strong {
+    min-width: 1.5rem;
+    text-align: center;
+  }
+}
+
+.bayName {
+  min-width: 4.4rem;
+  opacity: 0.7;
+}

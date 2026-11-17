@@ -83,6 +83,20 @@ const WallProfileDiagram: React.FC<{
   // draw higher on screen — flip every level into draw-space once here
   const y = (levelM: number) => -levelM
 
+  // the top of the wall: straight between post tops, or — through a
+  // stepped bay — a level run with a vertical at each post it steps at
+  const topLinePoints = (() => {
+    const pts: string[] = []
+    posts.forEach((p, k) => {
+      const before = bays.find((bay) => bay.rightIndex === p.index)
+      const after = bays.find((bay) => bay.leftIndex === p.index)
+      const x = X(p.xM)
+      if (k > 0) pts.push(`${x},${y(before && before.stepTopM !== null ? before.stepTopM : p.topBeforeM)}`)
+      if (k < posts.length - 1) pts.push(`${x},${y(after && after.stepTopM !== null ? after.stepTopM : p.topAfterM)}`)
+    })
+    return pts.join(" ")
+  })()
+
   return (
     <div className={styles.diagramRoot}>
       <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Wall elevation profile, to scale">
@@ -94,14 +108,24 @@ const WallProfileDiagram: React.FC<{
           const ax = X(a.xM)
           const bx = X(b.xM)
           if (bay.needsEngineer) {
-            const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topLevelM)} ${ax},${y(a.topLevelM)}`
+            const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topBeforeM)} ${ax},${y(a.topAfterM)}`
             return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
           }
           const ch = settings.boardCourseHeightM
-          const layout = bayCourseLayout(a, b, ch, profile.rakedTopBoard)
+          // a stepped bay is whole level courses to a flat top; any other
+          // bay follows the rake (cut to it, or with a raked top board)
+          const layout =
+            bay.stepTopM !== null
+              ? {
+                  baseLevelM: Math.min(a.groundLevelM, b.groundLevelM),
+                  courseCount: bay.levelCourseCount,
+                  undersideAM: bay.stepTopM,
+                  undersideBM: bay.stepTopM,
+                }
+              : bayCourseLayout(a, b, ch, profile.rakedTopBoard)
           const { baseLevelM, undersideAM, undersideBM } = layout
-          const capTopAM = a.topLevelM
-          const capTopBM = b.topLevelM
+          const capTopAM = bay.stepTopM ?? a.topAfterM
+          const capTopBM = bay.stepTopM ?? b.topBeforeM
           // purely a schematic sliver on top of the top board — real
           // thickness isn't tracked (no calc setting for it), just enough
           // to read as a distinct capping layer at any wall scale
@@ -293,10 +317,30 @@ const WallProfileDiagram: React.FC<{
           strokeWidth={strokeW}
         />
         <polyline
-          points={posts.map((p) => `${X(p.xM)},${y(p.topLevelM)}`).join(" ")}
+          points={topLinePoints}
           className={styles.topLine}
           strokeWidth={strokeW * 0.7}
         />
+        {/* how far each step goes up (+) or down (−), in courses, over its post */}
+        {posts.map((p) => {
+          const before = bays.find((bay) => bay.rightIndex === p.index)
+          const after = bays.find((bay) => bay.leftIndex === p.index)
+          if (!before || !after || before.stepTopM === null || after.stepTopM === null) return null
+          const delta = after.levelCourseCount - before.levelCourseCount
+          if (delta === 0) return null
+          return (
+            <text
+              key={`step-${p.index}`}
+              x={X(p.xM)}
+              y={y(Math.max(before.stepTopM, after.stepTopM)) - fontSize * 0.55}
+              fontSize={fontSize * 0.8}
+              textAnchor="middle"
+              className={styles.stepLabel}
+            >
+              {delta > 0 ? `+${delta}` : `−${-delta}`}
+            </text>
+          )
+        })}
 
         {/* post centres, dimensioned under the deepest hole: a tick at
             every post and each bay's spacing in mm. The text shrinks to
@@ -383,6 +427,12 @@ const WallProfileDiagram: React.FC<{
         {profile.posts.some((p) => p.depthSet === "lone") && (
           <span>
             <span className={`${styles.controlDotSwatch} ${styles.depthLoneSwatch}`} /> Hole depth set for this post only
+          </span>
+        )}
+        {bays.some((bay) => bay.stepTopM !== null) && (
+          <span>
+            <span className={`${styles.swatch} ${styles.stepSwatch}`} /> Step in the top of the wall — courses up (+) or
+            down (−) at the post
           </span>
         )}
         <span>

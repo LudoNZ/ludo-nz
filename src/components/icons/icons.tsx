@@ -79,3 +79,67 @@ export const WandIcon: React.FC<IconProps> = ({ className }) => (
     <path d="M4.5 5v1.6M4.5 5l.9.9M4.5 5l-.9.9" />
   </svg>
 )
+
+export const TopIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M10 16V4.5" />
+    <path d="M5 9.5 10 4.5l5 5" />
+  </svg>
+)
+
+export const SlidersIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M3 6h14M3 14h14" />
+    <circle cx="7" cy="6" r="1.8" fill="var(--background, #fff)" />
+    <circle cx="13" cy="14" r="1.8" fill="var(--background, #fff)" />
+  </svg>
+)
+
+/** a post standing in its hole */
+export const PostHoleIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M8.5 2.5v11M11.5 2.5v11" />
+    <path d="M5.5 8.5v6.2a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V8.5" />
+    <path d="M2.5 8.5h3M14.5 8.5h3" />
+  </svg>
+)
+
+/** a wall seen from above, turning a corner */
+export const PlanViewIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M3.5 15.5h9v-10" />
+    <circle cx="3.5" cy="15.5" r="1.3" />
+    <circle cx="12.5" cy="15.5" r="1.3" />
+    <circle cx="12.5" cy="5.5" r="1.3" />
+  </svg>
+)
+
+/** a wall from the front: posts and board courses */
+export const ElevationIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M3 5h14M3 9h14M3 13h14" />
+    <path d="M5.5 3.5v13M14.5 3.5v13" />
+  </svg>
+)
+
+/** a stack of boxes, for the materials */
+export const MaterialsIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6Z" />
+    <path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" />
+  </svg>
+)
+
+export const OrderIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M7 3.5h6a1 1 0 0 1 1 1V5H6v-.5a1 1 0 0 1 1-1Z" />
+    <path d="M6 4.5H5a1 1 0 0 0-1 1V16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5.5a1 1 0 0 0-1-1h-1" />
+    <path d="M7 9.5h6M7 12.5h4" />
+  </svg>
+)
+
+export const ChevronRightIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M7.5 4.5 13 10l-5.5 5.5" />
+  </svg>
+)
