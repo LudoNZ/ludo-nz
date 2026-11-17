@@ -114,6 +114,14 @@ export const PlanViewIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 )
 
+/** a wall in 3D: a box seen from above and to one side */
+export const Render3DIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M2.5 8.5 7 5.5h10.5L13 8.5Z" />
+    <path d="M2.5 8.5v7H13v-7M13 15.5l4.5-3v-7" />
+  </svg>
+)
+
 /** a wall from the front: posts and board courses */
 export const ElevationIcon: React.FC<IconProps> = ({ className }) => (
   <svg {...base} className={className}>

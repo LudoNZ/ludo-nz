@@ -11,6 +11,7 @@ import {
   OrderIcon,
   PlanViewIcon,
   PostHoleIcon,
+  Render3DIcon,
   SettingsIcon,
   SlidersIcon,
   TopIcon,
@@ -18,6 +19,7 @@ import {
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
+import WallRenderView from "@/components/retainingWall/wallRenderView"
 import NumField from "@/components/weatherboards/numField"
 import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
 import { overridesForWall, PartialBoardOrder, PlacedBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
@@ -390,6 +392,7 @@ const RetainingWallEditor: React.FC<{
     { id: "rw-posts-holes", label: "Posts & holes", icon: <PostHoleIcon /> },
     { id: "rw-plan", label: "Plan", icon: <PlanViewIcon /> },
     { id: "rw-elevation", label: "Elevation", icon: <ElevationIcon /> },
+    { id: "rw-3d", label: "3D view", icon: <Render3DIcon /> },
     { id: "rw-materials", label: "Materials", icon: <MaterialsIcon /> },
     { id: "rw-order", label: "Board order", icon: <OrderIcon /> },
   ]
@@ -800,6 +803,20 @@ const RetainingWallEditor: React.FC<{
                   : ` — walls ${mirrored ? "run right to left" : "run left to right"} from A, each corner flattened out.`)}
               {profile.segments.length === 1 && "."}
             </p>
+          </div>
+
+          <div className={styles.diagramCard} id="rw-3d">
+            <div className={styles.diagramCardHeader}>
+              <h3>3D view</h3>
+            </div>
+            <WallRenderView
+              profile={profile}
+              planPoints={planPoints}
+              retainedSide={retainedSide}
+              settings={calcSettings}
+              topCapEnabled={topCapEnabled}
+              caption={`${profile.segments.length > 1 ? `${profile.segments.length} walls, ` : ""}${totalLength(planPoints).toFixed(1)} m long, retaining up to ${Math.max(...profile.posts.map((p) => p.retainedHeightM)).toFixed(2)} m`}
+            />
           </div>
 
           {selectedPost && (
