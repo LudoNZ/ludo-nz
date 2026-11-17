@@ -92,6 +92,41 @@ interface Face {
   color: string
 }
 
+type V2 = [number, number]
+/** convex hull of some points, anticlockwise */
+const hull2 = (pts: V2[]): V2[] => {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  if (p.length < 3) return p
+  const turn = (o: V2, a: V2, b: V2) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+  const half = (list: V2[]) => {
+    const h: V2[] = []
+    list.forEach((q) => {
+      while (h.length >= 2 && turn(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop()
+      h.push(q)
+    })
+    h.pop()
+    return h
+  }
+  return [...half(p), ...half([...p].reverse())]
+}
+/** two convex outlines overlap by more than tol (separating-axis test) */
+const hullsOverlap = (a: V2[], b: V2[], tol: number) => {
+  if (a.length < 3 || b.length < 3) return false
+  for (const poly of [a, b])
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i]
+      const q = poly[(i + 1) % poly.length]
+      const len = Math.hypot(q[0] - p[0], q[1] - p[1])
+      if (len < 1e-12) continue
+      const ax: V2 = [(p[1] - q[1]) / len, (q[0] - p[0]) / len]
+      const proj = (poly2: V2[]) => poly2.map((r) => r[0] * ax[0] + r[1] * ax[1])
+      const pa = proj(a)
+      const pb = proj(b)
+      if (Math.max(...pa) - tol <= Math.min(...pb) || Math.max(...pb) - tol <= Math.min(...pa)) return false
+    }
+  return true
+}
+
 /** One thing drawn as a unit: a convex solid (its faces facing away
  * from the camera are dropped, so what's left never overlaps itself) or
  * a single double-sided sheet (ground, earth). */
@@ -581,7 +616,132 @@ export function buildRenderScene(
     if (behind) w.item.layer = LAYER.backWall
   })
   items.forEach((it) => (it.key = depth(centroid(it.faces.flatMap((f) => f.pts))) + it.key * 1e-6))
-  const all = [...items, ...wallItems.map((w) => w.item)].sort((a, b) => a.layer - b.layer || a.key - b.key)
+  const byLayer = (a: Item, b: Item) => a.layer - b.layer || a.key - b.key
+
+  // The layers put the retained ground under every wall seen from the
+  // front, which is right for the ground behind that wall, but not for
+  // high ground nearer the camera (where the wall doubles back): that
+  // hides the wall's foot. So: a patch of high ground goes after a wall
+  // piece when a vertical plane square to one of the runs has the ground
+  // wholly on the camera's side and the piece wholly on the other.
+  const axes = runs.map((r) => scale(r.normal, backFacing(r) ? 1 : -1))
+  const across = (ax: V3, p: V3) => ax[0] * p[0] + ax[1] * p[1]
+  const isGround = (it: Item) => it.layer === LAYER.high || it.layer === LAYER.skirt
+  const frontWall = new Set(wallItems.filter((w) => w.item.layer === LAYER.wall).map((w) => w.item))
+  const bbox2 = (pts: V3[]) => {
+    const p2 = pts.map(project)
+    return {
+      x0: Math.min(...p2.map((p) => p[0])),
+      x1: Math.max(...p2.map((p) => p[0])),
+      y0: Math.min(...p2.map((p) => p[1])),
+      y1: Math.max(...p2.map((p) => p[1])),
+    }
+  }
+  type Box = ReturnType<typeof bbox2>
+  const overlaps = (A: Box, B: Box) => !(A.x1 < B.x0 || B.x1 < A.x0 || A.y1 < B.y0 || B.y1 < A.y0)
+  // a patch of high ground straddling the camera-side face of a run it
+  // overlaps is cut along it, so each part can be ordered on its own
+  {
+    const cutters: { box: Box; ax: V3; at: number }[] = []
+    runs.forEach((r, ri) => {
+      const pts = wallItems
+        .filter((w) => {
+          const ks = w.bay !== undefined ? [w.bay] : [w.post! - 1, w.post!].filter((k) => k >= 0 && k < bays.length)
+          return ks.some((k) => runOfBay(bays[k].leftIndex) === r)
+        })
+        .flatMap((w) => w.item.faces.flatMap((f) => f.pts))
+      if (pts.length) cutters.push({ box: bbox2(pts), ax: axes[ri], at: Math.max(...pts.map((p) => across(axes[ri], p))) })
+    })
+    let queue = items.filter((it) => isGround(it) && it.faces.length === 1)
+    const keep = items.filter((it) => !(isGround(it) && it.faces.length === 1))
+    cutters.forEach(({ box, ax, at }) => {
+      const nextQueue: Item[] = []
+      queue.forEach((it) => {
+        const pts = it.faces[0].pts
+        const d = pts.map((p) => across(ax, p) - at)
+        if (Math.min(...d) >= -1e-4 || Math.max(...d) <= 1e-4 || !overlaps(box, bbox2(pts))) return nextQueue.push(it)
+        const sides: [V3[], V3[]] = [[], []]
+        pts.forEach((p, i) => {
+          const j = (i + 1) % pts.length
+          if (d[i] <= 0) sides[0].push(p)
+          if (d[i] >= 0) sides[1].push(p)
+          if ((d[i] < 0 && d[j] > 0) || (d[i] > 0 && d[j] < 0)) {
+            const s = d[i] / (d[i] - d[j])
+            const q = add(p, scale(sub(pts[j], p), s))
+            sides[0].push(q)
+            sides[1].push(q)
+          }
+        })
+        sides.forEach((sp) => sp.length >= 3 && nextQueue.push({ ...it, faces: [{ ...it.faces[0], pts: sp }] }))
+      })
+      queue = nextQueue
+    })
+    items.length = 0
+    items.push(...keep, ...queue)
+  }
+  const low = items.filter((it) => it.layer === LAYER.low).sort(byLayer)
+  const rest = [...items.filter((it) => it.layer !== LAYER.low), ...wallItems.map((w) => w.item)].sort(byLayer)
+  // pieces that only touch along an edge don't need ordering
+  const overlapTol = Math.max(...items.map((it) => Math.max(...it.faces.flatMap((f) => f.pts.map((p) => Math.abs(p[0]) + Math.abs(p[1])))))) * 1e-5 + 1e-4
+  const info = rest.map((it) => {
+    const pts3 = it.faces.flatMap((f) => f.pts)
+    const pts2 = pts3.map(project)
+    return {
+      pts3,
+      hull: hull2(pts2),
+      lo: axes.map((ax) => Math.min(...pts3.map((p) => across(ax, p)))),
+      hi: axes.map((ax) => Math.max(...pts3.map((p) => across(ax, p)))),
+      x0: Math.min(...pts2.map((p) => p[0])),
+      x1: Math.max(...pts2.map((p) => p[0])),
+      y0: Math.min(...pts2.map((p) => p[1])),
+      y1: Math.max(...pts2.map((p) => p[1])),
+    }
+  })
+  /** the ground item g is wholly on the camera's side of item w, across some run */
+  const inFront = (g: number, w: number) => axes.some((_, k) => info[g].lo[k] >= info[w].hi[k] - 1e-4)
+  // draw-before edges between items that overlap on screen, then a
+  // topological sort that otherwise keeps the layer order
+  const n = rest.length
+  const after: number[][] = rest.map(() => [])
+  const indeg = new Array<number>(n).fill(0)
+  for (let a = 0; a < n; a++) {
+    for (let b = a + 1; b < n; b++) {
+      const A = info[a]
+      const B = info[b]
+      if (A.x1 < B.x0 || B.x1 < A.x0 || A.y1 < B.y0 || B.y1 < A.y0) continue
+      if (!hullsOverlap(A.hull, B.hull, overlapTol)) continue
+      const ga = isGround(rest[a])
+      const gb = isGround(rest[b])
+      // among the ground only the top before its cut sides matters (by
+      // depth alone it can loop round through a wall)
+      if (ga && gb && rest[a].layer === rest[b].layer) continue
+      // a < b in the layer order, so a goes first unless it's ground in front of wall b
+      const flip = ga && frontWall.has(rest[b]) && inFront(a, b)
+      const [first, second] = flip ? [b, a] : [a, b]
+      after[first].push(second)
+      indeg[second]++
+    }
+  }
+  const sorted: Item[] = []
+  const done = new Array<boolean>(n).fill(false)
+  let next = 0
+  for (let count = 0; count < n; count++) {
+    while (done[next]) next++
+    let pick = -1
+    for (let i = next; i < n; i++)
+      if (!done[i] && indeg[i] === 0) {
+        pick = i
+        break
+      }
+    // a loop (shouldn't happen): take what's least held up
+    if (pick < 0) {
+      for (let i = next; i < n; i++) if (!done[i] && (pick < 0 || indeg[i] < indeg[pick])) pick = i
+    }
+    done[pick] = true
+    sorted.push(rest[pick])
+    after[pick].forEach((j) => indeg[j]--)
+  }
+  const all = [...low, ...sorted]
 
   const polygons: RenderPolygon[] = []
   let minX = Infinity
