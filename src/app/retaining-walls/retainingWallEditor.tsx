@@ -794,6 +794,111 @@ const RetainingWallEditor: React.FC<{
               segmentIndex={shownSegment}
               mirrored={mirrored}
               highlight={boardHighlight}
+              belowDrawing={
+                selectedPost && (
+                  <div className={styles.editPanel} key={selectedPost.index}>
+                    <h3>Post #{selectedPost.index + 1}</h3>
+                    <fieldset disabled={locked} className={styles.lockable}>
+                    <div className={styles.editFields}>
+                      <div className={styles.field}>
+                        <label>Ground level {rlDatumM !== 0 ? "(RL)" : "(m)"}</label>
+                        <input
+                          ref={groundInputRef}
+                          type="number"
+                          step={0.001}
+                          inputMode="decimal"
+                          defaultValue={(rlDatumM + selectedPost.groundLevelM).toFixed(3)}
+                        />
+                      </div>
+                      <div className={styles.field}>
+                        <label>
+                          {selectedPost.isCorner ? `Top — wall ${segmentLabel(cornerBefore ?? 0)} comes up to` : "Top of post"}{" "}
+                          {rlDatumM !== 0 ? "(RL)" : "(m)"}
+                        </label>
+                        <input
+                          ref={topInputRef}
+                          type="number"
+                          step={0.001}
+                          inputMode="decimal"
+                          defaultValue={(rlDatumM + selectedPost.topBeforeM).toFixed(3)}
+                        />
+                      </div>
+                      {selectedPost.isCorner && (
+                        <div className={styles.field}>
+                          <label>
+                            Top — wall {segmentLabel((cornerBefore ?? 0) + 1)} starts at {rlDatumM !== 0 ? "(RL)" : "(m)"}
+                          </label>
+                          <input
+                            ref={topAfterInputRef}
+                            type="number"
+                            step={0.001}
+                            inputMode="decimal"
+                            defaultValue={(rlDatumM + selectedPost.topAfterM).toFixed(3)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.editFields}>
+                      <div className={styles.field}>
+                        <label htmlFor="postDepth">Hole depth below ground (mm)</label>
+                        <input
+                          id="postDepth"
+                          ref={depthInputRef}
+                          type="number"
+                          min={50}
+                          step={50}
+                          inputMode="numeric"
+                          defaultValue={Math.round(selectedPost.embedmentM * 1000)}
+                          onChange={() => {
+                            // typing a depth means setting it — default to just this post
+                            if (depthModeRef.current && depthModeRef.current.value === "auto") depthModeRef.current.value = "lone"
+                          }}
+                        />
+                      </div>
+                      <div className={styles.field}>
+                        <label htmlFor="postDepthMode">Depth applies to</label>
+                        <select id="postDepthMode" ref={depthModeRef} defaultValue={selectedPost.depthSet ?? "auto"}>
+                          <option value="auto">Worked out — not set by hand</option>
+                          <option value="lone">This post only</option>
+                          <option value="rake">Rake point — holes between rake to the next one</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className={styles.cornerNote}>
+                      Depth is from this post&apos;s ground level to the bottom of its hole, gravel base pad included
+                      {selectedPost.embedmentM < selectedPost.tableEmbedmentM - 1e-6
+                        ? ` — ⚠ shallower than the ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm the reference table gives for this post.`
+                        : ` (the reference table gives ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm for this post).`}{" "}
+                      A rake point works like a hand-set top: the hole bottoms of the posts between two rake points sit on a
+                      straight line between them, with the wall&apos;s end posts holding their own worked-out depth.
+                    </p>
+                    </fieldset>
+                    {selectedPost.isCorner && (
+                      <p className={styles.cornerNote}>
+                        Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
+                        in the plan. The two walls can meet at different heights: set a different top on each side and the
+                        step happens at this post, which stands at the taller of the two
+                        {Math.abs(selectedPost.topBeforeM - selectedPost.topAfterM) > 0.0005
+                          ? ` — ${Math.round((selectedPost.topLevelM - selectedPost.groundLevelM) * 1000)} mm of post above ground here.`
+                          : "."}
+                      </p>
+                    )}
+                    <div className={styles.editActions}>
+                      <Button size="small" onClick={handleSaveControlPoint} disabled={locked}>
+                        Save
+                      </Button>
+                      {selectedPost.isControlPoint && (
+                        <Button size="small" variant="secondary" onClick={handleClearControlPoint} disabled={locked}>
+                          Reset to raked
+                        </Button>
+                      )}
+                      <Button size="small" variant="secondary" onClick={() => setSelectedIndex(null)}>
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
             />
             <p className={styles.viewNote}>
               Seen from the low side, facing the retained ground
@@ -818,110 +923,6 @@ const RetainingWallEditor: React.FC<{
               caption={`${profile.segments.length > 1 ? `${profile.segments.length} walls, ` : ""}${totalLength(planPoints).toFixed(1)} m long, retaining up to ${Math.max(...profile.posts.map((p) => p.retainedHeightM)).toFixed(2)} m`}
             />
           </div>
-
-          {selectedPost && (
-            <div className={styles.editPanel} key={selectedPost.index}>
-              <h3>Post #{selectedPost.index + 1}</h3>
-              <fieldset disabled={locked} className={styles.lockable}>
-              <div className={styles.editFields}>
-                <div className={styles.field}>
-                  <label>Ground level {rlDatumM !== 0 ? "(RL)" : "(m)"}</label>
-                  <input
-                    ref={groundInputRef}
-                    type="number"
-                    step={0.001}
-                    inputMode="decimal"
-                    defaultValue={(rlDatumM + selectedPost.groundLevelM).toFixed(3)}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label>
-                    {selectedPost.isCorner ? `Top — wall ${segmentLabel(cornerBefore ?? 0)} comes up to` : "Top of post"}{" "}
-                    {rlDatumM !== 0 ? "(RL)" : "(m)"}
-                  </label>
-                  <input
-                    ref={topInputRef}
-                    type="number"
-                    step={0.001}
-                    inputMode="decimal"
-                    defaultValue={(rlDatumM + selectedPost.topBeforeM).toFixed(3)}
-                  />
-                </div>
-                {selectedPost.isCorner && (
-                  <div className={styles.field}>
-                    <label>
-                      Top — wall {segmentLabel((cornerBefore ?? 0) + 1)} starts at {rlDatumM !== 0 ? "(RL)" : "(m)"}
-                    </label>
-                    <input
-                      ref={topAfterInputRef}
-                      type="number"
-                      step={0.001}
-                      inputMode="decimal"
-                      defaultValue={(rlDatumM + selectedPost.topAfterM).toFixed(3)}
-                    />
-                  </div>
-                )}
-              </div>
-              <div className={styles.editFields}>
-                <div className={styles.field}>
-                  <label htmlFor="postDepth">Hole depth below ground (mm)</label>
-                  <input
-                    id="postDepth"
-                    ref={depthInputRef}
-                    type="number"
-                    min={50}
-                    step={50}
-                    inputMode="numeric"
-                    defaultValue={Math.round(selectedPost.embedmentM * 1000)}
-                    onChange={() => {
-                      // typing a depth means setting it — default to just this post
-                      if (depthModeRef.current && depthModeRef.current.value === "auto") depthModeRef.current.value = "lone"
-                    }}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="postDepthMode">Depth applies to</label>
-                  <select id="postDepthMode" ref={depthModeRef} defaultValue={selectedPost.depthSet ?? "auto"}>
-                    <option value="auto">Worked out — not set by hand</option>
-                    <option value="lone">This post only</option>
-                    <option value="rake">Rake point — holes between rake to the next one</option>
-                  </select>
-                </div>
-              </div>
-              <p className={styles.cornerNote}>
-                Depth is from this post&apos;s ground level to the bottom of its hole, gravel base pad included
-                {selectedPost.embedmentM < selectedPost.tableEmbedmentM - 1e-6
-                  ? ` — ⚠ shallower than the ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm the reference table gives for this post.`
-                  : ` (the reference table gives ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm for this post).`}{" "}
-                A rake point works like a hand-set top: the hole bottoms of the posts between two rake points sit on a
-                straight line between them, with the wall&apos;s end posts holding their own worked-out depth.
-              </p>
-              </fieldset>
-              {selectedPost.isCorner && (
-                <p className={styles.cornerNote}>
-                  Corner post — a facing board can&apos;t run through it, so a joint is forced here. Corners are set
-                  in the plan. The two walls can meet at different heights: set a different top on each side and the
-                  step happens at this post, which stands at the taller of the two
-                  {Math.abs(selectedPost.topBeforeM - selectedPost.topAfterM) > 0.0005
-                    ? ` — ${Math.round((selectedPost.topLevelM - selectedPost.groundLevelM) * 1000)} mm of post above ground here.`
-                    : "."}
-                </p>
-              )}
-              <div className={styles.editActions}>
-                <Button size="small" onClick={handleSaveControlPoint} disabled={locked}>
-                  Save
-                </Button>
-                {selectedPost.isControlPoint && (
-                  <Button size="small" variant="secondary" onClick={handleClearControlPoint} disabled={locked}>
-                    Reset to raked
-                  </Button>
-                )}
-                <Button size="small" variant="secondary" onClick={() => setSelectedIndex(null)}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          )}
 
           {!allBlocked && totals && (
             <>

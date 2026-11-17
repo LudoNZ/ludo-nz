@@ -32,7 +32,10 @@ const WallProfileDiagram: React.FC<{
   mirrored?: boolean
   /** boards to pick out — the ones cut from a chosen length on the order */
   highlight?: BoardHighlight[]
-}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false, highlight = [] }) => {
+  /** shown between the drawing and the legend — the selected post's
+   * controls, right where it was picked */
+  belowDrawing?: React.ReactNode
+}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
   const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
@@ -390,6 +393,8 @@ const WallProfileDiagram: React.FC<{
             </text>
           ))}
       </svg>
+
+      {belowDrawing}
 
       <div className={styles.legend}>
         <span>
