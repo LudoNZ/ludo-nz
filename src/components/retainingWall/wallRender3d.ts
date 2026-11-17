@@ -176,60 +176,6 @@ const clipUnder = (poly: [number, number][], u0: number, z0: number, slope: numb
 /** a one-sided cut face, wound to face `outward` so it's culled from behind */
 const facing = (pts: V3[], outward: V3, color: string): Face => ({ pts: dot(faceNormal(pts), outward) < 0 ? [...pts].reverse() : pts, color })
 
-/** even-odd point-in-polygon, plan xy */
-const pointInPolygon = (x: number, y: number, poly: { x: number; y: number }[]) => {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i]
-    const b = poly[j]
-    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside
-  }
-  return inside
-}
-
-/** Ear-clipping triangulation of a simple polygon (either winding), as
- * index triples. An ear with another vertex on or in it is skipped, so
- * a vertex in the middle of a straight edge (a post along a run) always
- * keeps its own level instead of being bridged over. */
-const triangulate = (pts: [number, number][]): [number, number, number][] => {
-  const area2 = (a: [number, number], b: [number, number], c: [number, number]) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-  let signed = 0
-  pts.forEach((p, i) => {
-    const q = pts[(i + 1) % pts.length]
-    signed += p[0] * q[1] - q[0] * p[1]
-  })
-  const sign = signed >= 0 ? 1 : -1
-  const idx = pts.map((_, i) => i)
-  const tris: [number, number, number][] = []
-  let guard = 0
-  while (idx.length > 3 && guard++ < 10000) {
-    let clipped = false
-    for (let k = 0; k < idx.length; k++) {
-      const i = idx[(k + idx.length - 1) % idx.length]
-      const j = idx[k]
-      const l = idx[(k + 1) % idx.length]
-      const a = pts[i]
-      const b = pts[j]
-      const c = pts[l]
-      if (sign * area2(a, b, c) <= 1e-10) continue
-      const blocked = idx.some((m) => {
-        if (m === i || m === j || m === l) return false
-        const p = pts[m]
-        return sign * area2(a, b, p) >= -1e-10 && sign * area2(b, c, p) >= -1e-10 && sign * area2(c, a, p) >= -1e-10
-      })
-      if (blocked) continue
-      tris.push([i, j, l])
-      idx.splice(k, 1)
-      clipped = true
-      break
-    }
-    // nothing left but slivers (a polygon that crosses itself): give up on them
-    if (!clipped) break
-  }
-  if (idx.length === 3) tris.push([idx[0], idx[1], idx[2]])
-  return tris
-}
-
 const isRound = (p: ProfilePost) => /round/i.test(p.sizeLabel)
 
 // ── the scene ──────────────────────────────────────────────────────────
@@ -265,22 +211,6 @@ export function buildRenderScene(
     dir: run.dir,
     normal: run.normal,
   })
-  /** the point `n` across the wall from a post — mitred at a corner, so
-   * the ground and earth strips either side of it meet up */
-  const acrossAt = (postIndex: number, n: number, z: number, run = runOfPost(postIndex)): V3 => {
-    const post = posts[postIndex]
-    let offset = scale(run.normal, n)
-    if (post.isCorner) {
-      const before = runOfBay(postIndex - 1)
-      const after = runOfBay(postIndex)
-      const mid = norm(add(before.normal, after.normal))
-      const cosHalf = Math.max(dot(mid, before.normal), 0.6)
-      offset = scale(mid, n / cosHalf)
-    }
-    const p = add(frameAt(postIndex, run).origin, offset)
-    return [p[0], p[1], z]
-  }
-
   const ch = settings.boardCourseHeightM
   const t = BOARD_THICKNESS_M
   // posts are centred on the wall line; the boards go on their retained
@@ -333,151 +263,189 @@ export function buildRenderScene(
   const project = (p: V3): [number, number] => [dot(p, right), -dot(p, up)]
 
   // ── the ground: one block under the whole wall ───────────────────────
-  // The wall line (along the back of the boards), carried on straight at
-  // each end out to the edge of the block, splits it in two: the low
-  // ground and the retained ground. Each is one surface whose level, at
-  // any point, is the level of the wall nearest it.
+  // A rectangle squared to the wall's face, cut into a fine grid. Every
+  // point in it is on the low side or the retained side of whichever
+  // stretch of wall is nearest it — so however the wall doubles back,
+  // each patch of ground knows which side it's on — and stands at that
+  // stretch's ground level, or just under its top. Grid squares the wall
+  // line runs through are cut along it.
   const earthDrop = 0.02
   /** the retained ground's level at a post: just under the lower of the
    * tops either side of it (so with a stepped top it stays under both) */
   const highAt = (i: number) => Math.min(...[bayTops[i - 1]?.[1], bayTops[i]?.[0]].filter((z): z is number => z !== undefined)) - earthDrop
-  /** the low and high levels at the point on the wall nearest (x, y) */
-  const levelsAt = (x: number, y: number) => {
-    let best = { dist: Infinity, s: 0 }
-    runs.forEach((r) => {
-      const t = Math.min(r.seg.lengthM, Math.max(0, (x - r.start[0]) * r.dir[0] + (y - r.start[1]) * r.dir[1]))
-      const dist = Math.hypot(r.start[0] + r.dir[0] * t - x, r.start[1] + r.dir[1] * t - y)
-      if (dist < best.dist) best = { dist, s: r.seg.startXM + t }
+  const lastRunIndex = runs.length - 1
+  /** about the nearest point on the wall to (x, y): how far it is to the
+   * retained side of the back of the boards (negative = the low side),
+   * whether it's past an end of the wall, and the two levels there */
+  const groundAt = (x: number, y: number) => {
+    let best = { dist: Infinity, side: 0, s: 0, pastEnd: false }
+    runs.forEach((r, i) => {
+      const along = (x - r.start[0]) * r.dir[0] + (y - r.start[1]) * r.dir[1]
+      const t = Math.min(r.seg.lengthM, Math.max(0, along))
+      const qx = r.start[0] + r.dir[0] * t
+      const qy = r.start[1] + r.dir[1] * t
+      const dist = Math.hypot(x - qx, y - qy)
+      if (dist >= best.dist - 1e-12) return
+      // at a corner the nearest point is shared by two runs: which side
+      // of it is the retained side is told by the two normals together
+      let normal = r.normal
+      if (along <= 0 && i > 0) normal = add(r.normal, runs[i - 1].normal)
+      if (along >= r.seg.lengthM && i < lastRunIndex) normal = add(r.normal, runs[i + 1].normal)
+      const side = (x - qx) * normal[0] + (y - qy) * normal[1] >= 0 ? 1 : -1
+      // past an end, the line between the sides carries straight on
+      const pastEnd = (along < 0 && i === 0) || (along > r.seg.lengthM && i === lastRunIndex)
+      const across = pastEnd ? (x - qx) * r.normal[0] + (y - qy) * r.normal[1] : side * dist
+      best = { dist, side: across, s: r.seg.startXM + t, pastEnd }
     })
     let i = 0
     while (i < posts.length - 2 && posts[i + 1].xM < best.s) i++
     const a = posts[i]
     const b = posts[i + 1]
     const k = b.xM > a.xM ? Math.min(1, Math.max(0, (best.s - a.xM) / (b.xM - a.xM))) : 0
-    return { low: a.groundLevelM + (b.groundLevelM - a.groundLevelM) * k, high: highAt(i) + (highAt(i + 1) - highAt(i)) * k }
+    return {
+      g: best.side - earthFrontN,
+      pastEnd: best.pastEnd,
+      low: a.groundLevelM + (b.groundLevelM - a.groundLevelM) * k,
+      high: highAt(i) + (highAt(i + 1) - highAt(i)) * k,
+    }
   }
 
-  // the line splitting the block, post by post: [x, y, low z, high z]
-  const firstRun = runs[0]
-  const lastRun = runs[runs.length - 1]
-  const cut = posts.map((p, i) => {
-    let pt = acrossAt(i, earthFrontN, 0)
-    if (i === 0) pt = add(pt, scale(firstRun.dir, -endReach(i)))
-    if (i === posts.length - 1) pt = add(pt, scale(lastRun.dir, endReach(i)))
-    return { x: pt[0], y: pt[1], low: p.groundLevelM, high: highAt(i) }
-  })
-
-  // the block: a rectangle squared to the wall's face, from the ends of
-  // the wall along it, and GROUND_FRONT_M in front / EARTH_BACK_M behind
   const acrossV: [number, number] = [face[0], face[1]]
   const alongV: [number, number] = [-face[1], face[0]]
-  const toAC = (x: number, y: number): [number, number] => [x * alongV[0] + y * alongV[1], x * acrossV[0] + y * acrossV[1]]
   const fromAC = (a: number, c: number): [number, number] => [a * alongV[0] + c * acrossV[0], a * alongV[1] + c * acrossV[1]]
-  const acs = [...cut.map((p) => toAC(p.x, p.y)), ...posts.map((_, i) => toAC(...(acrossAt(i, 0, 0).slice(0, 2) as [number, number])))]
-  const eps = 1e-3
-  const a0 = Math.min(...acs.map((p) => p[0])) - eps
-  const a1 = Math.max(...acs.map((p) => p[0])) + eps
+  const wallPts = posts.flatMap((p, i) => {
+    const o = frameAt(i).origin
+    const r = endReach(i) + earthFrontN
+    return [
+      [o[0] + r, o[1] + r],
+      [o[0] - r, o[1] - r],
+      [o[0] + r, o[1] - r],
+      [o[0] - r, o[1] + r],
+    ]
+  })
+  const acs = wallPts.map(([x, y]) => [x * alongV[0] + y * alongV[1], x * acrossV[0] + y * acrossV[1]])
+  const a0 = Math.min(...acs.map((p) => p[0]))
+  const a1 = Math.max(...acs.map((p) => p[0]))
   const c0 = Math.min(...acs.map((p) => p[1])) - EARTH_BACK_M
   const c1 = Math.max(...acs.map((p) => p[1])) + GROUND_FRONT_M
-  const perimeter = 2 * (a1 - a0 + c1 - c0)
-  /** how far round the rectangle's edge a point on it is, from (a0, c0) */
-  const perimAt = ([a, c]: [number, number]) => {
-    if (Math.abs(c - c0) < 1e-6) return a - a0
-    if (Math.abs(a - a1) < 1e-6) return a1 - a0 + (c - c0)
-    if (Math.abs(c - c1) < 1e-6) return a1 - a0 + (c1 - c0) + (a1 - a)
-    return 2 * (a1 - a0) + (c1 - c0) + (c1 - c)
+  // ~3000 squares at most, none smaller than 15cm
+  const cell = Math.max(0.15, Math.sqrt(((a1 - a0) * (c1 - c0)) / 3000))
+  const na = Math.max(1, Math.ceil((a1 - a0) / cell))
+  const nc = Math.max(1, Math.ceil((c1 - c0) / cell))
+  type GV = { x: number; y: number; g: number; low: number; high: number; pastEnd: boolean }
+  const gv = (a: number, c: number): GV => {
+    const [x, y] = fromAC(a, c)
+    return { x, y, ...groundAt(x, y) }
   }
-  const corners: [number, number][] = [
-    [a0, c0],
-    [a1, c0],
-    [a1, c1],
-    [a0, c1],
-  ]
-  /** where a ray from a point inside the rectangle leaves it */
-  const exitAC = (from: [number, number], dir: [number, number]): [number, number] => {
-    let t = Infinity
-    if (dir[0] > 1e-9) t = Math.min(t, (a1 - from[0]) / dir[0])
-    if (dir[0] < -1e-9) t = Math.min(t, (a0 - from[0]) / dir[0])
-    if (dir[1] > 1e-9) t = Math.min(t, (c1 - from[1]) / dir[1])
-    if (dir[1] < -1e-9) t = Math.min(t, (c0 - from[1]) / dir[1])
-    t = Math.max(0, t)
-    return [Math.min(a1, Math.max(a0, from[0] + dir[0] * t)), Math.min(c1, Math.max(c0, from[1] + dir[1] * t))]
+  const grid: GV[][] = Array.from({ length: na + 1 }, (_, i) => Array.from({ length: nc + 1 }, (_, j) => gv(a0 + ((a1 - a0) * i) / na, c0 + ((c1 - c0) * j) / nc)))
+  /** where the line between the sides crosses from u to v */
+  const lerp = (u: GV, v: GV): GV => {
+    const t = u.g / (u.g - v.g)
+    const x = u.x + (v.x - u.x) * t
+    const y = u.y + (v.y - u.y) * t
+    return { x, y, ...groundAt(x, y), g: 0 }
   }
-  const startAC = toAC(cut[0].x, cut[0].y)
-  const endAC = toAC(cut[cut.length - 1].x, cut[cut.length - 1].y)
-  const startExit = exitAC(startAC, toAC(-firstRun.dir[0], -firstRun.dir[1]))
-  const endExit = exitAC(endAC, toAC(lastRun.dir[0], lastRun.dir[1]))
-  /** the rectangle's corners met going round its edge from one point to another */
-  const walk = (from: [number, number], to: [number, number]) => {
-    const p0 = perimAt(from)
-    let span = perimAt(to) - p0
-    if (span <= 0) span += perimeter
-    return corners
-      .map((c) => ({ c, d: (perimAt(c) - p0 + perimeter) % perimeter }))
-      .filter(({ d }) => d > 1e-9 && d < span - 1e-9)
-      .sort((x, y) => x.d - y.d)
-      .map(({ c }) => c)
-  }
-  type TV = { x: number; y: number; z: number }
-  const vAC = (ac: [number, number], side: "low" | "high"): TV => {
-    const [x, y] = fromAC(...ac)
-    return { x, y, z: levelsAt(x, y)[side] }
-  }
-  /** one side: the split line one way, then round the edge back to it */
-  const region = (side: "low" | "high", forward: boolean) => {
-    const line: TV[] = cut.map((p) => ({ x: p.x, y: p.y, z: p[side] }))
-    const sExit = { ...vAC(startExit, side), z: cut[0][side] }
-    const eExit = { ...vAC(endExit, side), z: cut[cut.length - 1][side] }
-    const path = forward ? [sExit, ...line, eExit] : [eExit, ...line.reverse(), sExit]
-    const round = (forward ? walk(endExit, startExit) : walk(startExit, endExit)).map((c) => vAC(c, side))
-    return { poly: [...path, ...round], edge: [path[path.length - 1], ...round, path[0]] }
-  }
-  // which way round is the retained side: test a point just behind the first bay
-  const probe = acrossAt(Math.min(1, posts.length - 1), earthFrontN + 0.05, 0)
-  const forwardPoly = region("high", true).poly
-  const highForward = pointInPolygon(probe[0], probe[1], forwardPoly)
-  const high = region("high", highForward)
-  const low = region("low", !highForward)
-
-  const surface = (poly: TV[], color: string, layer: number) =>
-    triangulate(poly.map((v) => [v.x, v.y])).forEach(([i, j, k]) =>
-      items.push({ faces: [{ pts: [poly[i], poly[j], poly[k]].map((v): V3 => [v.x, v.y, v.z]), color }], solid: false, key: 0, layer })
-    )
-  surface(low.poly, COLORS.grass, LAYER.low)
-  surface(high.poly, COLORS.earthTop, LAYER.high)
-
-  // the block's cut sides, all round its edge
+  const zOf = (v: GV, high: boolean) => (high ? v.high : v.low)
   const centre = fromAC((a0 + a1) / 2, (c0 + c1) / 2)
-  ;[low.edge, high.edge].forEach((edge) =>
-    edge.slice(1).forEach((b, k) => {
-      const a = edge[k]
-      if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return
-      const mid: V3 = [(a.x + b.x) / 2 - centre[0], (a.y + b.y) / 2 - centre[1], 0]
-      const pts: V3[] = [
-        [a.x, a.y, a.z],
-        [b.x, b.y, b.z],
-        [b.x, b.y, slabBottom],
-        [a.x, a.y, slabBottom],
-      ]
-      items.push({ faces: [facing(pts, mid, COLORS.soil)], solid: true, key: 0, layer: LAYER.skirt })
+  /** the block's cut sides: along one edge of it, a face from the ground
+   * down to the bottom of the block for each stretch on one side */
+  const skirtAlong = (edge: GV[]) => {
+    const pts: { v: GV; high: boolean; split?: boolean }[] = []
+    edge.forEach((v, k) => {
+      const prev = edge[k - 1]
+      if (prev && prev.g >= 0 !== v.g >= 0) pts.push({ v: lerp(prev, v), high: false, split: true })
+      pts.push({ v, high: v.g >= 0 })
     })
-  )
-  // past each end of the wall, the bank where the ground steps up, cut
-  // straight down to the edge of the block
-  ;[
-    { at: cut[0], exit: startExit, run: firstRun },
-    { at: cut[cut.length - 1], exit: endExit, run: lastRun },
-  ].forEach(({ at, exit, run }) => {
-    const [x, y] = fromAC(...exit)
-    if (Math.hypot(x - at.x, y - at.y) < 1e-3 || at.high - at.low < 1e-3) return
-    const pts: V3[] = [
-      [at.x, at.y, at.low],
-      [x, y, at.low],
-      [x, y, at.high],
-      [at.x, at.y, at.high],
-    ]
-    items.push({ faces: [facing(pts, scale(run.normal, -1), COLORS.soil)], solid: true, key: 0, layer: LAYER.high })
-  })
+    let run: { v: GV; high: boolean }[] = []
+    const flush = (high: boolean) => {
+      if (run.length < 2) return
+      const top = run.map(({ v }): V3 => [v.x, v.y, zOf(v, high)])
+      const first = run[0].v
+      const last = run[run.length - 1].v
+      const face: V3[] = [...top, [last.x, last.y, slabBottom], [first.x, first.y, slabBottom]]
+      const mid: V3 = [(first.x + last.x) / 2 - centre[0], (first.y + last.y) / 2 - centre[1], 0]
+      items.push({ faces: [facing(face, mid, COLORS.soil)], solid: true, key: 0, layer: LAYER.skirt })
+    }
+    let side = pts[0].high
+    pts.forEach((p) => {
+      if (p.split) {
+        run.push(p)
+        flush(side)
+        side = !side
+        run = [p]
+      } else run.push(p)
+    })
+    flush(side)
+  }
+  skirtAlong(grid.map((col) => col[0]))
+  skirtAlong(grid.map((col) => col[nc]))
+  skirtAlong(grid[0])
+  skirtAlong(grid[na])
+
+  const surface = (pts: V3[], high: boolean) =>
+    items.push({ faces: [{ pts, color: high ? COLORS.earthTop : COLORS.grass }], solid: false, key: 0, layer: high ? LAYER.high : LAYER.low })
+  for (let i = 0; i < na; i++) {
+    // squares all on one side are run together, a strip at a time
+    let stripFrom = -1
+    let stripHigh = false
+    const flushStrip = (to: number) => {
+      if (stripFrom < 0) return
+      const left = grid[i].slice(stripFrom, to + 1)
+      const right = grid[i + 1].slice(stripFrom, to + 1).reverse()
+      surface([...left, ...right].map((v): V3 => [v.x, v.y, zOf(v, stripHigh)]), stripHigh)
+      stripFrom = -1
+    }
+    for (let j = 0; j < nc; j++) {
+      // the square's corners, going round it
+      const ring = [grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]]
+      const highs = ring.map((v) => v.g >= 0)
+      if (highs.every((h) => h === highs[0])) {
+        if (stripFrom >= 0 && stripHigh !== highs[0]) flushStrip(j)
+        if (stripFrom < 0) {
+          stripFrom = j
+          stripHigh = highs[0]
+        }
+        continue
+      }
+      flushStrip(j)
+      // split it on the line between the sides
+      const pieces: { pts: GV[]; high: boolean }[] = [
+        { pts: [], high: false },
+        { pts: [], high: true },
+      ]
+      const cuts: GV[] = []
+      ring.forEach((u, k) => {
+        const v = ring[(k + 1) % 4]
+        const uHigh = u.g >= 0
+        pieces[uHigh ? 1 : 0].pts.push(u)
+        if (uHigh !== v.g >= 0) {
+          const x = lerp(u, v)
+          pieces[0].pts.push(x)
+          pieces[1].pts.push(x)
+          cuts.push(x)
+        }
+      })
+      pieces.forEach(({ pts, high }) => pts.length >= 3 && surface(pts.map((v): V3 => [v.x, v.y, zOf(v, high)]), high))
+      // past an end of the wall, the bank where the ground steps up
+      if (cuts.length === 2) {
+        const [u, v] = cuts
+        const mid = groundAt((u.x + v.x) / 2, (u.y + v.y) / 2)
+        if (mid.pastEnd && Math.max(u.high - u.low, v.high - v.low) > 1e-3) {
+          const pts: V3[] = [
+            [u.x, u.y, u.low],
+            [v.x, v.y, v.low],
+            [v.x, v.y, v.high],
+            [u.x, u.y, u.high],
+          ]
+          // face it toward the low side: away from the higher ground
+          const n = faceNormal(pts)
+          const probe = groundAt((u.x + v.x) / 2 + n[0] * 0.05, (u.y + v.y) / 2 + n[1] * 0.05)
+          items.push({ faces: [probe.g < 0 ? { pts, color: COLORS.soil } : { pts: [...pts].reverse(), color: COLORS.soil }], solid: true, key: 0, layer: LAYER.high })
+        }
+      }
+    }
+    flushStrip(nc)
+  }
 
   // ── boards ───────────────────────────────────────────────────────────
   /** every wall item, with the posts/bays it touches, for sorting */
