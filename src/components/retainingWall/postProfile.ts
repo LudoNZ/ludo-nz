@@ -830,6 +830,25 @@ export function buildWallProfile(
     }
   })
 
+  // By default every pile on the wall is the same: the biggest size the
+  // table calls for at any post (a pile at the tall end sets it for all).
+  // Picking a size by hand overrides this.
+  if (!postSizeOverride) {
+    const sizable = posts.filter((p) => !p.needsEngineer)
+    if (sizable.length > 0) {
+      const biggest = sizable.reduce((best, p) =>
+        postSectionAreaM2(p.tableSizeLabel) > postSectionAreaM2(best) + 1e-9 ? p.tableSizeLabel : best, sizable[0].tableSizeLabel)
+      for (const p of posts) {
+        p.sizeLabel = biggest
+        p.widthM = postWidthM(biggest)
+        p.holeDiameterM = augerDiameterM ?? p.widthM * settings.holeDiameterMultiplier
+        p.holeVolumeM3 = calcHoleVolumeM3(p.holeDiameterM, p.embedmentM)
+        const concreteDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
+        p.concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(p.holeDiameterM, concreteDepthM) - postSectionAreaM2(biggest) * concreteDepthM)
+      }
+    }
+  }
+
   // hand-set hole depths, applied over the worked-out ones above
   const depthPoints = overrides.depthPoints ?? {}
   const setDepth = (p: ProfilePost, depthM: number, depthSet: ProfilePost["depthSet"]) => {

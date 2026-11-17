@@ -87,6 +87,9 @@ const WallPlanView: React.FC<{
   // moving corner every frame would slide the drawing out from under the
   // finger
   const [frozenView, setFrozenView] = useState<ViewBox | null>(null)
+  // the wall cards show as one-line summaries until "Edit walls" is pressed
+  const [editingWalls, setEditingWalls] = useState(false)
+  const editing = editingWalls && !readOnly
   const dragRef = useRef<{ index: number; startClientX: number; startClientY: number; dragging: boolean } | null>(null)
 
   const view = frozenView ?? fitViewBox(points)
@@ -295,12 +298,40 @@ const WallPlanView: React.FC<{
         </span>
       </div>
 
+      <div className={styles.segmentTableHead}>
+        <span>Walls</span>
+        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => setEditingWalls((v) => !v)}>
+          {editing ? "Done" : "Edit walls"}
+        </Button>
+      </div>
       <div className={styles.segmentTable}>
         {lengths.map((lengthM, i) => {
           const isLast = i === lengths.length - 1
           const seg = profile?.segments.length === lengths.length ? profile.segments[i] : undefined
           const bays = seg ? seg.endPostIndex - seg.startPostIndex : 0
           const tooWide = seg ? seg.postSpacingM > seg.tableMaxSpacingM + 1e-6 : false
+          if (!editing) {
+            const turn = isLast ? 0 : turnDeg(points, i + 1)
+            return (
+              <div key={i} className={`${styles.segmentSummary} ${selectedSegment === i ? styles.segmentRowSelected : ""}`}>
+                <button type="button" className={styles.segmentSummaryName} onClick={() => onSelectSegment(i)}>
+                  Wall {segmentLabel(i)}
+                </button>
+                <span>{lengthM.toFixed(2)} m</span>
+                {!isLast && (
+                  <span className={styles.segmentSummaryMuted}>
+                    {Math.abs(turn) < 0.05 ? "then straight on" : `then ${Math.abs(Number(turn.toFixed(1)))}° ${turn > 0 ? "left" : "right"}`}
+                  </span>
+                )}
+                {seg && (
+                  <span className={`${styles.segmentSummaryPosts} ${tooWide ? styles.postSpacingWarn : ""}`}>
+                    {bays + 1} posts at {Math.round(seg.postSpacingM * 1000)}mm{seg.spacingOverridden ? " (by hand)" : ""}
+                    {tooWide ? " ⚠" : ""}
+                  </span>
+                )}
+              </div>
+            )
+          }
           return (
             <div key={i} className={`${styles.segmentRow} ${selectedSegment === i ? styles.segmentRowSelected : ""}`}>
               <button type="button" className={styles.segmentName} onClick={() => onSelectSegment(i)}>
@@ -319,18 +350,43 @@ const WallPlanView: React.FC<{
               </label>
               {!isLast && (
                 <>
-                  <label className={styles.segmentField}>
+                  <div className={styles.segmentField}>
                     <span>Then turn (°)</span>
-                    <NumField
-                      value={Number(turnDeg(points, i + 1).toFixed(1))}
-                      step={5}
-                      onChange={(v) => {
-                        if (v > -180 && v < 180) onChange(setTurn(points, i + 1, v))
-                      }}
-                      ariaLabel={`Turn after wall ${segmentLabel(i)} in degrees, positive is left`}
-                      disabled={readOnly}
-                    />
-                  </label>
+                    <span className={styles.turnInput}>
+                      <NumField
+                        value={Math.abs(Number(turnDeg(points, i + 1).toFixed(1)))}
+                        min={0}
+                        step={5}
+                        onChange={(v) => {
+                          const sign = turnDeg(points, i + 1) < 0 ? -1 : 1
+                          if (v < 180) onChange(setTurn(points, i + 1, sign * v))
+                        }}
+                        ariaLabel={`Turn after wall ${segmentLabel(i)} in degrees`}
+                        disabled={readOnly}
+                      />
+                      <span className={styles.turnSide} role="group" aria-label={`Turn direction after wall ${segmentLabel(i)}`}>
+                        {(["left", "right"] as const).map((dir) => {
+                          const turn = turnDeg(points, i + 1)
+                          const active = dir === "left" ? turn > 0.05 : turn < -0.05
+                          return (
+                            <button
+                              key={dir}
+                              type="button"
+                              aria-pressed={active}
+                              className={active ? styles.turnSideActive : undefined}
+                              disabled={readOnly}
+                              onClick={() => {
+                                const mag = Math.abs(turn) < 0.05 ? 90 : Math.abs(turn)
+                                onChange(setTurn(points, i + 1, dir === "left" ? mag : -mag))
+                              }}
+                            >
+                              {dir === "left" ? "Left" : "Right"}
+                            </button>
+                          )
+                        })}
+                      </span>
+                    </span>
+                  </div>
                   <button
                     type="button"
                     className={styles.removeCorner}
@@ -375,11 +431,12 @@ const WallPlanView: React.FC<{
           )
         })}
       </div>
-      <p className={styles.hint}>
-        Turns are measured walking the wall from A onward: positive turns left, negative turns right, 90 is a square
-        corner. A corner post is shared, so each wall&apos;s post count includes both of its ends. Tap a wall&apos;s
-        name to see its elevation, where its spacing can be set or cleared.
-      </p>
+      {editing && (
+        <p className={styles.hint}>
+          Turns are measured walking the wall from A onward: pick Left or Right and the angle, 90 is a square corner. A corner post is shared, so each wall&apos;s post count includes both of its ends. Tap a wall&apos;s
+          name to see its elevation, where its spacing can be set or cleared.
+        </p>
+      )}
 
       <div className={styles.actions}>
         <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onChange(appendSegment(points, retainedSide, NEW_SEGMENT_M))}>

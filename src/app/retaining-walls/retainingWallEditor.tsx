@@ -518,15 +518,15 @@ const RetainingWallEditor: React.FC<{
         Posts and holes
       </h3>
       <p className={styles.overridesHint}>
-        Leave a box on Auto to have it worked out post by post from the reference table and each post&apos;s own
-        height, or set it to use the same value for every post on the wall.
+        Leave a box on Auto to have it worked out from the reference table (every pile gets the biggest size any
+        post needs; hole depths follow each post&apos;s own height), or set it to use the same value for every post.
       </p>
       <fieldset disabled={locked} className={styles.lockable}>
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
           <label htmlFor="postSize">Post size</label>
           <select id="postSize" value={postSizeOverride} onChange={(e) => setPostSizeOverride(e.target.value)}>
-            <option value="">Auto — from the table</option>
+            <option value="">Auto — one size, the biggest the table needs</option>
             {POST_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
                 All {size}
