@@ -295,3 +295,63 @@
   color: #c0392b;
   font-weight: 600;
 }
+
+// phones: a wall's card becomes a tight grid — name and "remove corner" on
+// one line, length and turn side by side, post stepper on one line
+@media (max-width: 600px) {
+  .segmentRow {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+    gap: 0.3rem 0.6rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .segmentName {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    padding: 0;
+    min-width: 0;
+  }
+
+  // pinned to the card's top right corner
+  .removeCorner {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.6rem;
+    padding: 0;
+    font-size: 0.78rem;
+  }
+
+  .segmentField {
+    gap: 0.1rem;
+    font-size: 0.75rem;
+
+    input {
+      width: 100%;
+      padding: 0.3rem 0.5rem;
+    }
+  }
+
+  .segmentPosts {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-left: 0;
+    min-width: 0;
+  }
+
+  .postStepper {
+    min-height: 0;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+
+    button {
+      width: 1.8rem;
+      height: 1.8rem;
+    }
+  }
+}
