@@ -159,6 +159,9 @@ export interface OrderedBoard<T = unknown> {
   leftM: number
 }
 
+/** an offcut longer than this (m) is counted as too much waste */
+export const MAX_GOOD_OFFCUT_M = 0.4
+
 export interface BoardOrderPlan<T = unknown> {
   lines: BoardOrderLine[]
   /** every board on the order with its cuts — the cut list */
@@ -167,6 +170,8 @@ export interface BoardOrderPlan<T = unknown> {
   totalLengthM: number
   /** m of the order that ends up as offcuts or spare boards */
   wasteM: number
+  /** boards cut into that leave an offcut over MAX_GOOD_OFFCUT_M */
+  bigOffcutCount: number
   /** boards that had to be split at a post into shorter pieces because
    * nothing long enough was left to cut them from — each one is an extra
    * join on the wall */
@@ -176,6 +181,12 @@ export interface BoardOrderPlan<T = unknown> {
   uncutLengthM: number
 }
 
+/** How a new board's length is picked when a piece has nowhere to go: the
+ * shortest it fits in (what the planner used to do), the one that leaves
+ * the least offcut once the rest of it is filled, or the shortest that
+ * leaves a good (small) offcut. */
+type StockRule = "shortest" | "least-offcut" | "shortest-good"
+
 /** Works out what to buy for a list of cut pieces — each piece given as
  * the bay widths it spans, so it can be split at a post if it has to be.
  *
@@ -183,13 +194,53 @@ export interface BoardOrderPlan<T = unknown> {
  * are on the order — what the supplier actually has, 0 for none — and
  * every other length makes up the difference. Longest pieces go first,
  * each cut from the tightest-fitting leftover of a board already on the
- * order, otherwise from a new board of the shortest length (among those
- * not pinned) it fits in. A piece too long for anything left is split at
- * a post into parts that do fit. Saw cuts aren't allowed for. */
+ * order. Otherwise a new board is bought. Which length is a judgement
+ * call that can't be made one board at a time (a longer board that takes
+ * three pieces can leave a lone piece needing a board of its own), so
+ * the whole order is planned under three rules for choosing it — see
+ * StockRule — and the plan that wastes least is the one returned.
+ * Offcuts over MAX_GOOD_OFFCUT_M are the thing being avoided: a short
+ * piece isn't given a long board it barely uses when a longer one would
+ * take two of them with a hand's width left over.
+ *
+ * A piece too long for anything left is split at a post into parts that
+ * do fit. Saw cuts aren't allowed for. */
 export function planBoardOrderDetailed<T = unknown>(
   piecesM: (number[] | OrderPiece<T>)[],
   stockLengthsM: number[],
   fixedCounts: Record<string, number> = {}
+): BoardOrderPlan<T> {
+  const rules: StockRule[] = ["least-offcut", "shortest-good", "shortest"]
+  let best: BoardOrderPlan<T> | null = null
+  const key = (plan: BoardOrderPlan<T>) => [
+    plan.uncutCount,
+    plan.extraJoins,
+    Math.round(plan.wasteM * 100), // to the centimetre
+    plan.bigOffcutCount,
+    plan.boardCount,
+  ]
+  for (const rule of rules) {
+    const plan = planBoardOrderWith(piecesM, stockLengthsM, fixedCounts, rule)
+    if (!best) {
+      best = plan
+      continue
+    }
+    const a = key(plan)
+    const b = key(best)
+    for (let k = 0; k < a.length; k++) {
+      if (a[k] === b[k]) continue
+      if (a[k] < b[k]) best = plan
+      break
+    }
+  }
+  return best as BoardOrderPlan<T>
+}
+
+function planBoardOrderWith<T>(
+  piecesM: (number[] | OrderPiece<T>)[],
+  stockLengthsM: number[],
+  fixedCounts: Record<string, number>,
+  rule: StockRule
 ): BoardOrderPlan<T> {
   const stocks = [...stockLengthsM].sort((a, b) => a - b)
   const isFixed = (l: number) => Number.isFinite(fixedCounts[String(l)]) && fixedCounts[String(l)] >= 0
@@ -217,20 +268,46 @@ export function planBoardOrderDetailed<T = unknown>(
   let uncutCount = 0
   let uncutLengthM = 0
 
+  /** what's left of a board of this length once the piece and then the
+   * longest waiting pieces that fit have been cut from it */
+  const offcutIfFilled = (lengthM: number, pieceM: number) => {
+    let left = lengthM - pieceM
+    for (let q = queue.length - 1; q >= 0 && left > 1e-6; q--) if (queue[q].lengthM <= left + 1e-6) left -= queue[q].lengthM
+    return Math.max(0, left)
+  }
+
   while (queue.length) {
     const piece = queue.pop()!
-    let best: (typeof boards)[number] | null = null
+    let open: (typeof boards)[number] | null = null
     for (const board of boards) {
-      if (board.leftM + 1e-6 >= piece.lengthM && (!best || board.leftM < best.leftM)) best = board
+      if (board.leftM + 1e-6 >= piece.lengthM && (!open || board.leftM < open.leftM)) open = board
     }
-    if (best) {
-      best.leftM = Math.max(0, best.leftM - piece.lengthM)
-      best.used = true
-      best.cuts.push(cutOf(piece))
+    if (open) {
+      open.leftM = Math.max(0, open.leftM - piece.lengthM)
+      open.used = true
+      open.cuts.push(cutOf(piece))
       continue
     }
-    const lengthM = autoStocks.find((l) => l + 1e-6 >= piece.lengthM)
-    if (lengthM !== undefined) {
+    const fitting = autoStocks.filter((l) => l + 1e-6 >= piece.lengthM)
+    if (fitting.length > 0) {
+      let lengthM = fitting[0]
+      if (rule !== "shortest" && fitting.length > 1) {
+        const offcuts = fitting.map((l) => offcutIfFilled(l, piece.lengthM))
+        const good = offcuts.map((o) => o <= MAX_GOOD_OFFCUT_M + 1e-6)
+        if (rule === "shortest-good") {
+          const first = good.indexOf(true)
+          if (first >= 0) lengthM = fitting[first]
+        }
+        if (rule === "least-offcut" || !good.includes(true)) {
+          // an acceptable offcut beats an excessive one; then the smaller
+          // offcut wins (within a millimetre, the shorter board — cheaper)
+          let pick = 0
+          for (let i = 1; i < fitting.length; i++) {
+            if ((good[i] && !good[pick]) || (good[i] === good[pick] && offcuts[i] < offcuts[pick] - 0.001)) pick = i
+          }
+          lengthM = fitting[pick]
+        }
+      }
       boards.push({ lengthM, leftM: Math.max(0, lengthM - piece.lengthM), used: true, cuts: [cutOf(piece)] })
       continue
     }
@@ -258,11 +335,10 @@ export function planBoardOrderDetailed<T = unknown>(
     queue.sort((a, b) => a.lengthM - b.lengthM)
   }
 
-  const lines: BoardOrderLine[] = stocks
-    .map((l) => {
-      const mine = boards.filter((b) => b.lengthM === l)
-      return { lengthM: l, count: mine.length, fixed: isFixed(l), usedCount: mine.filter((b) => b.used).length }
-    })
+  const lines: BoardOrderLine[] = stocks.map((l) => {
+    const mine = boards.filter((b) => b.lengthM === l)
+    return { lengthM: l, count: mine.length, fixed: isFixed(l), usedCount: mine.filter((b) => b.used).length }
+  })
   const totalLengthM = boards.reduce((t, b) => t + b.lengthM, 0)
   return {
     lines,
@@ -272,6 +348,7 @@ export function planBoardOrderDetailed<T = unknown>(
     boardCount: boards.length,
     totalLengthM,
     wasteM: boards.reduce((t, b) => t + b.leftM, 0),
+    bigOffcutCount: boards.filter((b) => b.used && b.leftM > MAX_GOOD_OFFCUT_M + 1e-6).length,
     extraJoins,
     uncutCount,
     uncutLengthM,

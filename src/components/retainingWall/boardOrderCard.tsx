@@ -359,6 +359,11 @@ const BoardOrderCard: React.FC<{
             <td>{m(suggested.wasteM)}</td>
             <td>{m(mine.wasteM)}</td>
           </tr>
+          <tr title="Boards cut into that leave an offcut longer than 400 mm">
+            <td>Offcuts over 400 mm</td>
+            <td>{suggested.bigOffcutCount}</td>
+            <td>{mine.bigOffcutCount}</td>
+          </tr>
         </tfoot>
       </table>
       <p className={styles.pickHint}>
@@ -461,7 +466,9 @@ const BoardOrderCard: React.FC<{
       )}
       <p className={styles.note}>
         {isPartial ? "This part of the job" : "The wall"} needs {m(neededM)} of board fixed in place. Worked out longest
-        pieces first, cutting shorter pieces from offcuts where they fit — no allowance for saw cuts, damaged boards or
+        pieces first, cutting shorter pieces from offcuts where they fit, and choosing each new board&apos;s length to
+        leave the least offcut (a longer board that takes two pieces beats a short one barely used; offcuts over 400 mm
+        are avoided where the lengths available allow) — no allowance for saw cuts, damaged boards or
         waste, so round up as you see fit.
         {isPartial && " The partial order keeps its own numbers; the whole-wall order is unchanged underneath."}
         {anyFixed && (
