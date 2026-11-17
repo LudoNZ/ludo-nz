@@ -627,7 +627,6 @@ export function buildRenderScene(
   const axes = runs.map((r) => scale(r.normal, backFacing(r) ? 1 : -1))
   const across = (ax: V3, p: V3) => ax[0] * p[0] + ax[1] * p[1]
   const isGround = (it: Item) => it.layer === LAYER.high || it.layer === LAYER.skirt
-  const frontWall = new Set(wallItems.filter((w) => w.item.layer === LAYER.wall).map((w) => w.item))
   const bbox2 = (pts: V3[]) => {
     const p2 = pts.map(project)
     return {
@@ -680,7 +679,9 @@ export function buildRenderScene(
     items.push(...keep, ...queue)
   }
   const low = items.filter((it) => it.layer === LAYER.low).sort(byLayer)
-  const rest = [...items.filter((it) => it.layer !== LAYER.low), ...wallItems.map((w) => w.item)].sort(byLayer)
+  // (anything wholly facing away from the camera isn't drawn, so isn't sorted)
+  const shows = (it: Item) => !it.solid || it.faces.some((f) => dot(faceNormal(f.pts), toCam) > 1e-6)
+  const rest = [...items.filter((it) => it.layer !== LAYER.low), ...wallItems.map((w) => w.item)].filter(shows).sort(byLayer)
   // pieces that only touch along an edge don't need ordering
   const overlapTol = Math.max(...items.map((it) => Math.max(...it.faces.flatMap((f) => f.pts.map((p) => Math.abs(p[0]) + Math.abs(p[1])))))) * 1e-5 + 1e-4
   const info = rest.map((it) => {
@@ -697,8 +698,10 @@ export function buildRenderScene(
       y1: Math.max(...pts2.map((p) => p[1])),
     }
   })
-  /** the ground item g is wholly on the camera's side of item w, across some run */
+  /** item g is wholly on the camera's side of item w, across some run */
   const inFront = (g: number, w: number) => axes.some((_, k) => info[g].lo[k] >= info[w].hi[k] - 1e-4)
+  /** the see-through footings keep to their layer */
+  const sorts = (i: number) => rest[i].layer !== LAYER.footing
   // draw-before edges between items that overlap on screen, then a
   // topological sort that otherwise keeps the layer order
   const n = rest.length
@@ -712,12 +715,15 @@ export function buildRenderScene(
       if (!hullsOverlap(A.hull, B.hull, overlapTol)) continue
       const ga = isGround(rest[a])
       const gb = isGround(rest[b])
-      // among the ground only the top before its cut sides matters (by
-      // depth alone it can loop round through a wall)
-      if (ga && gb && rest[a].layer === rest[b].layer) continue
-      // a < b in the layer order, so a goes first unless it's ground in front of wall b
-      const flip = ga && frontWall.has(rest[b]) && inFront(a, b)
-      const [first, second] = flip ? [b, a] : [a, b]
+      // where ground's involved and a plane square to a run parts them,
+      // the one on the camera's side goes second; otherwise the layer
+      // order (a first; the walls among themselves are already sorted),
+      // except that patches of ground needn't be ordered among themselves
+      const geo = (ga || gb) && sorts(a) && sorts(b)
+      const aFront = geo && inFront(a, b)
+      const bFront = geo && inFront(b, a)
+      if (aFront === bFront && ga && gb) continue
+      const [first, second] = aFront && !bFront ? [b, a] : [a, b]
       after[first].push(second)
       indeg[second]++
     }
