@@ -39,9 +39,11 @@ const WallRenderView: React.FC<{
 
   const handlePrint = () => {
     const root = document.documentElement
-    // landscape suits a wall; only while this view is what's printing
+    // landscape suits a wall, and nothing else on the page is printed —
+    // only while this view is what's printing (a CSS module can't hold
+    // the bare `body *` rule, so it goes in here)
     const pageStyle = document.createElement("style")
-    pageStyle.textContent = "@page { size: landscape; margin: 12mm; }"
+    pageStyle.textContent = "@page { size: landscape; margin: 12mm; } @media print { body * { visibility: hidden; } }"
     document.head.appendChild(pageStyle)
     root.setAttribute(PRINT_ATTR, "")
     const done = () => {

@@ -71,14 +71,12 @@
 }
 
 // "Print / save PDF" sets data-print-render on <html> for the length of
-// the print: everything else on the page is hidden and the drawing fills
+// the print, and hides everything else on the page: the drawing fills
 // the sheet
 @media print {
+  // (hiding everything else, `body *`, isn't a pure selector, so that
+  // rule is added by wallRenderView.tsx for the length of the print)
   :global(html[data-print-render]) {
-    body * {
-      visibility: hidden;
-    }
-
     .printArea,
     .printArea * {
       visibility: visible;
