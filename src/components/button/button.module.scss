@@ -1,4 +1,4 @@
-@mixin button($backgroundColor, $borderColor) {
+@mixin button($backgroundColor, $borderColor, $textColor) {
   cursor: pointer;
   padding: 1rem;
   width: max-content;
@@ -7,9 +7,9 @@
   border-radius: var(--borderRadius);
   border: 2px solid $borderColor;
   background-color: $backgroundColor;
-  color: var(--foreground);
+  color: $textColor;
   font-weight: 600;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background-color 0.15s, filter 0.15s;
 
   &:disabled {
     opacity: 0.35;
@@ -18,16 +18,29 @@
 }
 
 // VARIANTS
+// white text on the filled ones, dark text on the light secondary — all
+// comfortably over 4.5:1 on the light theme
 
 .primary {
-  @include button(var(--color-primary), var(--color-secondary));
+  @include button(var(--color-primary), var(--color-primary), #fff);
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.9);
+  }
 }
 .secondary {
-  @include button(var(--color-secondary), var(--color-primary));
+  @include button(#fff, var(--color-primary), var(--foreground));
+
+  &:hover:not(:disabled) {
+    background-color: rgba(27, 177, 47, 0.1);
+  }
 }
 .danger {
-  @include button(var(--color-danger), var(--color-primary));
-  background-color: var(--color-danger);
+  @include button(var(--color-danger), var(--color-danger), #fff);
+
+  &:hover:not(:disabled) {
+    filter: brightness(0.9);
+  }
 }
 
 // SIZES
