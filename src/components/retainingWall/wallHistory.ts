@@ -98,3 +98,18 @@ export function describeWallChange(before: WallProject, after: WallProject): str
 export function onlyLockChanged(before: WallProject, after: WallProject) {
   return same({ ...before, locked: false }, { ...after, locked: false })
 }
+
+/** the top-level wall fields that differ (the lock aside), for the
+ * activity log — lets reports filter by what kind of thing was changed */
+export function changedFields(before: WallProject, after: WallProject): string[] {
+  return (Object.keys(after) as (keyof WallProject)[]).filter((k) => k !== "locked" && !same(before[k], after[k])).sort()
+}
+
+/** What the editor reports for the activity log: one entry per finished
+ * change (a burst of edits, as merged for undo), and one per undo, redo,
+ * lock and unlock. */
+export interface WallActivity {
+  action: "change" | "undo" | "redo" | "lock" | "unlock"
+  label: string
+  fields: string[]
+}

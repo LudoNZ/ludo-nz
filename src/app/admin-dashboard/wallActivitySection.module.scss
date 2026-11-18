@@ -1,0 +1,247 @@
+@import "/src/styles/config";
+
+.activitySection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.header,
+.feedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.header h2,
+.subheading {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.subheading {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.toggle {
+  display: flex;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+}
+
+.toggleBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  opacity: 0.5;
+  text-transform: uppercase;
+
+  &.toggleActive {
+    background: var(--color-primary);
+    color: var(--background);
+    opacity: 1;
+  }
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.chip {
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+
+  @media (max-width: $MAX_PHONE) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  div {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+    border-radius: var(--borderRadius);
+    font-size: 0.8rem;
+    opacity: 0.85;
+  }
+
+  strong {
+    display: block;
+    font-size: 1.4rem;
+    color: var(--color-primary);
+  }
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+
+  @media (max-width: $MAX_TABLET) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+
+  > li:not(:last-child) {
+    border-bottom: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+}
+
+.groupRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+}
+
+.groupName {
+  font-size: 0.9rem;
+  font-weight: bold;
+  word-break: break-word;
+}
+
+.kind {
+  font-weight: normal;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.groupMeta {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.feedRow {
+  display: grid;
+  grid-template-columns: 7.5rem 5rem 1fr;
+  gap: 0.15rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+
+  @media (max-width: $MAX_PHONE) {
+    grid-template-columns: auto 1fr;
+  }
+}
+
+.when {
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.action {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  align-self: center;
+
+  &.undo,
+  &.redo {
+    color: var(--color-secondary);
+  }
+  &.lock,
+  &.unlock {
+    opacity: 0.6;
+  }
+  &.change {
+    color: var(--color-primary);
+  }
+}
+
+.what {
+  word-break: break-word;
+
+  @media (max-width: $MAX_PHONE) {
+    grid-column: 1 / -1;
+  }
+}
+
+.where {
+  grid-column: 3;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  word-break: break-word;
+
+  @media (max-width: $MAX_PHONE) {
+    grid-column: 1 / -1;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+}
+
+.smallBtn {
+  align-self: flex-start;
+  font-family: inherit;
+  background: none;
+  color: var(--foreground);
+  border: 1px solid var(--foreground);
+  border-radius: var(--borderRadius);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: 0.85rem;
+}
+
+.muted {
+  opacity: 0.5;
+  font-size: 0.85rem;
+}

@@ -8,6 +8,7 @@ import { useStoredState } from "@/components/interviewPrep/useStoredState"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { DEFAULT_WALL, SCRATCH_STORAGE_KEY, wallFromData, WallProject } from "@/components/retainingWall/wallProject"
 import { newProjectId, projectHref, ProjectLocation, saveProjectSoon } from "@/components/retainingWall/wallProjectStore"
+import { logWallActivity, scratchBrowserId } from "@/components/retainingWall/wallActivity"
 import RetainingWallEditor from "../retainingWallEditor"
 
 /** The scratch wall: a calculator with nothing to set up. Edits stay in
@@ -49,6 +50,9 @@ export default function ScratchWallPage() {
     <RetainingWallEditor
       initial={wall}
       onChange={(next) => setStored(() => next)}
+      onActivity={(activity) =>
+        logWallActivity({ kind: "scratch", id: scratchBrowserId(), name: "Scratch wall", ownerUid: null }, activity, auth?.currentUser ?? null)
+      }
       header={
         <EditorHeader
           backHref="/retaining-walls"

@@ -8,6 +8,8 @@ import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
 import { deleteProject, loadProject, makeProjectPublic, ProjectLocation, saveProject } from "@/components/retainingWall/wallProjectStore"
+import { activityProject, logWallActivity } from "@/components/retainingWall/wallActivity"
+import type { WallActivity } from "@/components/retainingWall/wallHistory"
 import RetainingWallEditor from "../retainingWallEditor"
 
 const SAVE_DELAY_MS = 1000
@@ -168,6 +170,16 @@ const ProjectEditor = () => {
     [schedule],
   )
 
+  // log each change against this project, under the name it has now
+  const handleActivity = useCallback(
+    (activity: WallActivity) => {
+      const loc = latest.current.location
+      if (!loc) return
+      logWallActivity(activityProject(loc, projectId, latest.current.name), activity, auth?.currentUser ?? null)
+    },
+    [projectId, auth?.currentUser],
+  )
+
   const rename = (n: string) => {
     setName(n)
     latest.current.name = n
@@ -274,6 +286,7 @@ const ProjectEditor = () => {
       key={`${location.kind}-${projectId}`}
       initial={initial}
       onChange={handleWallChange}
+      onActivity={handleActivity}
       header={
         <EditorHeader
           backHref="/retaining-walls"

@@ -331,6 +331,47 @@ service cloud.firestore {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }
 
+    // Retaining wall activity log: one entry per finished change, undo,
+    // redo, lock or unlock on any wall (see wallActivity.ts). Anyone
+    // editing a wall can add one — the calculator works signed out — but
+    // an entry can't claim to be someone else (the actor is whoever's
+    // signed in, or nobody), can't backdate itself, and can never be
+    // changed or deleted. Only an admin can read the log.
+    match /retainingWallActivity/{id} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow create: if request.resource.data.keys().hasOnly(
+          ['projectKind', 'projectId', 'projectName', 'ownerUid', 'action', 'label', 'fields', 'actorUid', 'actorEmail', 'at']
+        )
+        && request.resource.data.keys().hasAll(
+          ['projectKind', 'projectId', 'projectName', 'ownerUid', 'action', 'label', 'fields', 'actorUid', 'actorEmail', 'at']
+        )
+        && request.resource.data.projectKind in ['public', 'private', 'scratch']
+        && request.resource.data.projectId is string
+        && request.resource.data.projectId.size() > 0
+        && request.resource.data.projectId.size() <= 128
+        && request.resource.data.projectName is string
+        && request.resource.data.projectName.size() <= 100
+        // a private project is only ever edited by its owner
+        && (request.resource.data.projectKind == 'private'
+          ? (request.auth != null && request.resource.data.ownerUid == request.auth.uid)
+          : request.resource.data.ownerUid == null)
+        && request.resource.data.action in ['change', 'undo', 'redo', 'lock', 'unlock']
+        && request.resource.data.label is string
+        && request.resource.data.label.size() <= 300
+        && request.resource.data.fields is list
+        && request.resource.data.fields.size() <= 40
+        && request.resource.data.at == request.time
+        && (
+          (request.auth == null
+            && request.resource.data.actorUid == null
+            && request.resource.data.actorEmail == null)
+          || (request.auth != null
+            && request.resource.data.actorUid == request.auth.uid
+            && request.resource.data.actorEmail == request.auth.token.get('email', null))
+        );
+      allow update, delete: if false;
+    }
+
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

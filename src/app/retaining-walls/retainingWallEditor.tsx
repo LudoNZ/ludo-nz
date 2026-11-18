@@ -40,7 +40,7 @@ import SectionRail, { RailSection } from "./sectionRail"
 import ReferenceTableModal from "./referenceTableModal"
 import SettingsPanel from "./settingsPanel"
 import UndoToast from "./undoToast"
-import { describeWallChange, HISTORY_BURST_MS, HISTORY_LIMIT, onlyLockChanged, WallHistoryEntry } from "@/components/retainingWall/wallHistory"
+import { changedFields, describeWallChange, HISTORY_BURST_MS, HISTORY_LIMIT, onlyLockChanged, WallActivity, WallHistoryEntry } from "@/components/retainingWall/wallHistory"
 import styles from "./retainingWallEditor.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
@@ -59,7 +59,9 @@ const RetainingWallEditor: React.FC<{
   initial: WallProject
   onChange: (wall: WallProject) => void
   header: ReactNode
-}> = ({ initial, onChange, header }) => {
+  /** each finished change, undo, redo and lock — for an activity log */
+  onActivity?: (activity: WallActivity) => void
+}> = ({ initial, onChange, header, onActivity }) => {
   // the wall's shape seen from above: an open run of straight walls (A,
   // B, C…) joined at corners. Total wall length is just this unfolded.
   const [planPoints, setPlanPoints] = useState<PlanPoint[]>(initial.planPoints)
@@ -145,11 +147,16 @@ const RetainingWallEditor: React.FC<{
   // Every saveable change (spotted by the report effect below) pushes the
   // wall as it was onto `undoStack`; edits within HISTORY_BURST_MS of each
   // other merge into one step. The undo bar floats on screen for
-  // UNDO_VISIBLE_MS after each change. History lasts as long as the page is
-  // open — it isn't saved with the project.
+  // UNDO_VISIBLE_MS after each change. The undo stack lasts as long as the
+  // page is open; what was done is also reported through `onActivity` (one
+  // entry per finished step, undo, redo or lock) for the page to log.
   const undoStack = useRef<WallHistoryEntry[]>([])
   const redoStack = useRef<WallHistoryEntry[]>([])
-  const burst = useRef<{ before: WallProject; timer: ReturnType<typeof setTimeout> } | null>(null)
+  // the step being typed/dragged right now: the wall before it, the latest
+  // wall during it, and when it counts as finished
+  const burst = useRef<{ before: WallProject; after: WallProject; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const onActivityRef = useRef(onActivity)
+  onActivityRef.current = onActivity
   // set while a restored wall is being applied, so the report effect saves
   // it without recording it as a new change
   const restoringRef = useRef(false)
@@ -165,41 +172,55 @@ const RetainingWallEditor: React.FC<{
     undoBarTimer.current = setTimeout(() => setUndoBar(null), UNDO_VISIBLE_MS)
   }
 
-  const endBurst = () => {
-    if (burst.current) clearTimeout(burst.current.timer)
+  /** close the current step, reporting it as one change */
+  const finishBurst = () => {
+    const b = burst.current
+    if (!b) return
+    clearTimeout(b.timer)
     burst.current = null
+    if (!onlyLockChanged(b.before, b.after)) {
+      onActivityRef.current?.({ action: "change", label: describeWallChange(b.before, b.after), fields: changedFields(b.before, b.after) })
+    }
   }
+  const finishBurstRef = useRef(finishBurst)
+  finishBurstRef.current = finishBurst
 
   const recordChange = (before: WallProject, after: WallProject) => {
-    if (!before.locked && after.locked) {
-      // locking means the job is set up: undo mustn't be able to reach
-      // back past it and quietly change the locked wall
-      endBurst()
-      undoStack.current = []
-      redoStack.current = []
-      setUndoBar(null)
+    if (before.locked !== after.locked) {
+      finishBurst()
+      onActivityRef.current?.({ action: after.locked ? "lock" : "unlock", label: after.locked ? "Locked the wall" : "Unlocked the wall", fields: [] })
+      if (after.locked) {
+        // locking means the job is set up: undo mustn't be able to reach
+        // back past it and quietly change the locked wall
+        undoStack.current = []
+        redoStack.current = []
+        setUndoBar(null)
+      }
       return
     }
-    if (onlyLockChanged(before, after)) return
 
-    const startedFrom = burst.current?.before
-    endBurst()
-    if (startedFrom) {
-      if (onlyLockChanged(startedFrom, after)) {
-        // changed and changed straight back: nothing to undo
+    const current = burst.current
+    const timer = setTimeout(() => finishBurstRef.current(), HISTORY_BURST_MS)
+    if (current) {
+      clearTimeout(current.timer)
+      if (onlyLockChanged(current.before, after)) {
+        // changed and changed straight back: nothing to undo or log
+        clearTimeout(timer)
+        burst.current = null
         undoStack.current.pop()
         setUndoBar(null)
         return
       }
+      current.after = after
+      current.timer = timer
       const top = undoStack.current[undoStack.current.length - 1]
-      if (top) top.label = describeWallChange(startedFrom, after)
+      if (top) top.label = describeWallChange(current.before, after)
     } else {
       undoStack.current.push({ wall: before, label: describeWallChange(before, after) })
       if (undoStack.current.length > HISTORY_LIMIT) undoStack.current.shift()
       redoStack.current = []
+      burst.current = { before, after, timer }
     }
-    const timer = setTimeout(() => (burst.current = null), HISTORY_BURST_MS)
-    burst.current = { before: startedFrom ?? before, timer }
     showUndoBar(undoStack.current[undoStack.current.length - 1].label)
   }
   const recordChangeRef = useRef(recordChange)
@@ -241,33 +262,33 @@ const RetainingWallEditor: React.FC<{
     setRestoreNonce((n) => n + 1)
   }
 
-  const undo = () => {
-    endBurst()
-    const entry = undoStack.current.pop()
+  const step = (from: "undo" | "redo") => {
+    finishBurst()
+    const source = from === "undo" ? undoStack.current : redoStack.current
+    const target = from === "undo" ? redoStack.current : undoStack.current
+    const entry = source.pop()
     const now = currentWall()
     if (!entry || !now) return
-    redoStack.current.push({ wall: now, label: entry.label })
-    applyWall({ ...entry.wall, locked })
-    showUndoBar(`Undid: ${entry.label}`)
+    const restored = { ...entry.wall, locked }
+    target.push({ wall: now, label: entry.label })
+    applyWall(restored)
+    onActivityRef.current?.({ action: from, label: entry.label, fields: changedFields(now, restored) })
+    showUndoBar(`${from === "undo" ? "Undid" : "Redid"}: ${entry.label}`)
   }
+  const undo = () => step("undo")
+  const redo = () => step("redo")
 
-  const redo = () => {
-    endBurst()
-    const entry = redoStack.current.pop()
-    const now = currentWall()
-    if (!entry || !now) return
-    undoStack.current.push({ wall: now, label: entry.label })
-    applyWall({ ...entry.wall, locked })
-    showUndoBar(`Redid: ${entry.label}`)
-  }
-
-  useEffect(
-    () => () => {
+  // a step still open when leaving (navigating away, closing the tab) is
+  // reported then, rather than lost
+  useEffect(() => {
+    const flush = () => finishBurstRef.current()
+    window.addEventListener("pagehide", flush)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      flush()
       if (undoBarTimer.current) clearTimeout(undoBarTimer.current)
-      if (burst.current) clearTimeout(burst.current.timer)
-    },
-    [],
-  )
+    }
+  }, [])
 
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
