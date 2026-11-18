@@ -24,6 +24,30 @@ export const FRAMING_LABELS: Record<FramingType, string> = {
  * the tread framing beneath it, so nogs this deep fit between joists. */
 export const NOG_DEPTH = 90
 
+/** Maximum stringer ("string") spans for SG8 H3.2 45 mm thick timber, as
+ * quoted from BRANZ "External stairs for houses". Taken as the length
+ * along the stringer between supports (the conservative reading). */
+export const STRINGER_SPANS = [
+  { depth: 140, span: 1900 },
+  { depth: 190, span: 2600 },
+  { depth: 240, span: 3300 },
+  { depth: 290, span: 4000 },
+] as const
+
+/** Allowed span for a stringer depth: the table value for the deepest
+ * table size it's at least as deep as; shallower than 140 scales down. */
+export function maxStringerSpan(depth: number): number {
+  let span: number = (STRINGER_SPANS[0].span * depth) / STRINGER_SPANS[0].depth
+  for (const row of STRINGER_SPANS) if (depth >= row.depth - 0.5) span = row.span
+  return span
+}
+
+/** Intermediate support posts: H5 posts set in concrete. */
+export const POST_SIZE = 125
+export const POST_EMBED = 450
+/** posts along a bearer under several stringers, no further apart than this */
+export const BEARER_POST_SPACING = 1200
+
 /** Standard timber depths to rip riser joists from. */
 export const TIMBER_DEPTHS = [90, 140, 190, 240, 290]
 
@@ -87,7 +111,8 @@ export interface StairInput {
   going: number
   width: number
   framing: FramingType
-  stringerDepth: number
+  /** null = auto: stringers sized off the span table, frames off their height */
+  stringerDepth: number | null
   stringerThickness: number
   maxStringerSpacing: number
   boardWidth: number
@@ -104,7 +129,7 @@ export const DEFAULT_INPUT: StairInput = {
   going: MAIN_PRIVATE.minGoing,
   width: 1000,
   framing: "wedge-blocks",
-  stringerDepth: 190,
+  stringerDepth: null,
   stringerThickness: 45,
   maxStringerSpacing: 450,
   boardWidth: 140,
@@ -175,6 +200,13 @@ export interface Nog {
   y1: number
 }
 
+/** A support line under the stringers part way up. */
+export interface SupportPost {
+  x: number
+  /** ground to the underside of the stringer */
+  height: number
+}
+
 export interface StairResult {
   risers: number
   treads: number
@@ -208,7 +240,19 @@ export interface StairResult {
     /** centre-line positions across the width, from the left */
     positions: number[]
   }
+  /** stringer / frame timber depth actually used */
+  timberDepth: number
+  depthAuto: boolean
   stringer: {
+    /** allowed span for the depth used */
+    maxSpan: number
+    /** spans the stringer is split into by the support posts */
+    spans: number
+    posts: SupportPost[]
+    /** posts per support line (more than the stringers carry a bearer) */
+    postsPerLine: number
+    bearer: boolean
+    postLength: number
     angleDeg: number
     topEdgeLength: number
     polygon: Pt[]
@@ -231,6 +275,8 @@ export interface StairResult {
      * rise is wider than the stock, so they nest long-side-to-the-edge */
     rectangles: boolean
     fitsInStringerOffcuts: boolean
+    /** depth of board the wedges are cut from */
+    stockDepth: number
     needsWiderBoard: boolean
   }
   frames: {
@@ -404,7 +450,14 @@ export function calculateStairs(input: StairInput): StairResult {
   // and top-back corners of every wedge: y = (R/G)·x − t
   const slope = R / G
   const cos = Math.cos(Math.atan(slope))
-  const D = input.stringerDepth
+  const xTopEarly = treads * G
+  const stringerLength = treads > 0 ? Math.hypot(xTopEarly - t / slope, slope * xTopEarly - t) : 0
+  const tallestFrameEarly = treads >= 2 ? R : R - t
+  const autoDepth =
+    input.framing === "stacked-frames"
+      ? (TIMBER_DEPTHS.find((d) => d >= tallestFrameEarly - 0.5) ?? 290)
+      : (STRINGER_SPANS.find((r) => r.span >= stringerLength)?.depth ?? 290)
+  const D = input.stringerDepth ?? autoDepth
   const vDepth = D / cos // vertical depth of the stringer
   const xTop = treads * G // plumb cut against the deck's boundary joist
   const yTopAtTop = slope * xTop - t
@@ -451,6 +504,20 @@ export function calculateStairs(input: StairInput): StairResult {
   const positions = Array.from({ length: supportCount }, (_, i) => b / 2 + i * spacing)
   const stringerStock = planStock(topEdgeLength + 20, stringerCount)
 
+  // ---- support posts part way up (span too long for the stringer size) ----
+  const maxSpan = maxStringerSpan(D)
+  const spans = treads > 0 && wedgeFraming ? Math.max(1, Math.ceil(topEdgeLength / maxSpan - 1e-9)) : 1
+  const posts: SupportPost[] = []
+  for (let k = 1; k < spans; k++) {
+    const x = toeX + (k / spans) * (xTop - toeX)
+    posts.push({ x, height: Math.max(0, slope * x - t - vDepth) })
+  }
+  // two stringers: a post straight under each; more: a bearer across under
+  // them all, on posts at its ends and no more than BEARER_POST_SPACING apart
+  const bearer = stringerCount > 2
+  const postsPerLine = bearer ? Math.ceil(input.width / BEARER_POST_SPACING) + 1 : stringerCount
+  const postLength = posts.reduce((mx, p) => Math.max(mx, p.height), 0) + POST_EMBED
+
   // ---- wedge blocks ------------------------------------------------------
   const wedgePolys: Pt[][] = []
   for (let i = 1; i <= (wedgeFraming ? treads : 0); i++) {
@@ -471,7 +538,10 @@ export function calculateStairs(input: StairInput): StairResult {
   const fitsInStringerOffcuts = stringerStock !== null && stringerStock.piecesPerLength === 1 && offcutPerStringer >= wedgeRunPerStringer
   // the triangle's height off its long side — the narrowest board it fits
   const altitude = (R * G) / hypotenuse
-  const rectangles = R <= input.stringerDepth
+  // from the stringer offcuts when they're deep enough, else the smallest
+  // standard board that takes an R × G rectangle
+  const wedgeStockDepth = R <= D ? D : (TIMBER_DEPTHS.find((d) => d >= R) ?? 290)
+  const rectangles = R <= wedgeStockDepth
   const wedgeStockLengthM = rectangles
     ? (Math.ceil(wedgeTotal / 2) * (G + SAW_KERF)) / 1000
     : (Math.ceil((wedgeTotal + 1) / 2) * (hypotenuse + SAW_KERF)) / 1000
@@ -556,7 +626,15 @@ export function calculateStairs(input: StairInput): StairResult {
     riserBoardPieces,
     openRiserGap,
     supports: { count: supportCount, spacing, positions },
+    timberDepth: D,
+    depthAuto: input.stringerDepth === null,
     stringer: {
+      maxSpan,
+      spans,
+      posts,
+      postsPerLine,
+      bearer,
+      postLength,
       angleDeg: pitchDeg,
       topEdgeLength,
       polygon,
@@ -574,7 +652,8 @@ export function calculateStairs(input: StairInput): StairResult {
       stockLengthM: wedgeStockLengthM,
       fitsInStringerOffcuts,
       rectangles,
-      needsWiderBoard: altitude > input.stringerDepth,
+      stockDepth: wedgeStockDepth,
+      needsWiderBoard: altitude > wedgeStockDepth,
     },
     frames: {
       list: frameList,
@@ -583,7 +662,7 @@ export function calculateStairs(input: StairInput): StairResult {
       pieceCount: framePieces.length,
       linealM: framePieces.reduce((a, p) => a + p, 0) / 1000,
       stock: planMixedStock(framePieces),
-      timberTooShallow: tallestFrame > input.stringerDepth + 0.5,
+      timberTooShallow: tallestFrame > D + 0.5,
       tallest: tallestFrame,
     },
     riserJoists: {

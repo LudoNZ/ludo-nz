@@ -7,6 +7,8 @@ import {
   BOARD_PRESETS,
   DEFAULT_INPUT,
   FRAMING_LABELS,
+  POST_EMBED,
+  POST_SIZE,
   NOG_DEPTH,
   FramingType,
   STACKED_FRAMES_SUGGESTED_MAX,
@@ -95,7 +97,7 @@ const StairsPage = () => {
     )
   if (r.wedges.needsWiderBoard)
     notes.push(
-      `The wedges are too big to cut from the ${mm(input.stringerDepth)} stringer stock — cut them from a wider board.`,
+      `The wedges are too big for standard timber — the rise is over 290 mm.`,
     )
   if (input.boardThickness <= 25 && input.maxStringerSpacing > 450)
     notes.push(`${mm(input.boardThickness)} boards shouldn't span more than about 450 mm — bring the supports closer.`)
@@ -105,7 +107,7 @@ const StairsPage = () => {
     )
   if (stacked && r.frames.timberTooShallow)
     notes.push(
-      `The tallest frame is ${mm(r.frames.tallest)} high — deeper than the ${mm(input.stringerDepth)} timber. Use deeper timber or a packer on top.`,
+      `The tallest frame is ${mm(r.frames.tallest)} high — deeper than the ${mm(r.timberDepth)} timber. Use deeper timber or a packer on top.`,
     )
   if (stacked && r.treads > STACKED_FRAMES_SUGGESTED_MAX)
     notes.push(
@@ -217,15 +219,32 @@ const StairsPage = () => {
               </span>
             </div>
             <div className={styles.row}>
-              <NumberField
-                id="sDepth"
-                label={stacked ? "Timber depth" : "Stringer depth"}
-                value={input.stringerDepth}
-                min={90}
-                max={300}
-                step={10}
-                onChange={(v) => set("stringerDepth", Math.max(90, v))}
-              />
+              <div className={styles.field}>
+                <div className={styles.fieldHeader}>
+                  <label htmlFor="sDepth">{stacked ? "Timber depth" : "Stringer depth"}</label>
+                  <label className={styles.check}>
+                    <input
+                      type="checkbox"
+                      checked={input.stringerDepth === null}
+                      onChange={(e) => set("stringerDepth", e.target.checked ? null : r.timberDepth)}
+                    />
+                    Auto
+                  </label>
+                </div>
+                <div className={styles.numberUnit}>
+                  <input
+                    id="sDepth"
+                    type="number"
+                    min={90}
+                    max={300}
+                    step={10}
+                    value={r.timberDepth}
+                    disabled={input.stringerDepth === null}
+                    onChange={(e) => e.target.value !== "" && set("stringerDepth", Math.max(90, Number(e.target.value)))}
+                  />
+                  <span>mm</span>
+                </div>
+              </div>
               <NumberField
                 id="sThick"
                 label="Thickness"
@@ -236,6 +255,17 @@ const StairsPage = () => {
                 onChange={(v) => set("stringerThickness", Math.max(20, v))}
               />
             </div>
+            {!stacked && (
+              <span className={styles.hint}>
+                {input.stringerDepth === null
+                  ? r.stringer.posts.length
+                    ? `Auto: no size spans ${m(r.stringer.topEdgeLength)} in one go, so 290 with support posts (BRANZ SG8 spans: 140 → 1.9 m, 190 → 2.6 m, 240 → 3.3 m, 290 → 4.0 m).`
+                    : `Auto: the smallest size that spans ${m(r.stringer.topEdgeLength)} (BRANZ SG8 spans: 140 → 1.9 m, 190 → 2.6 m, 240 → 3.3 m, 290 → 4.0 m).`
+                  : `A ${r.timberDepth} stringer spans ${m(r.stringer.maxSpan)}`}
+                {r.stringer.posts.length > 0 &&
+                  ` ${r.stringer.posts.length === 1 ? "A support post line is" : `${r.stringer.posts.length} support post lines are`} added part way up.`}
+              </span>
+            )}
             <NumberField
               id="sSpacing"
               label={stacked ? "Max joist spacing" : outer ? "Max nog spacing" : "Max stringer spacing"}
@@ -357,7 +387,7 @@ const StairsPage = () => {
               <div className={styles.diagramCard}>
                 <h2>Side view</h2>
                 <StairElevation input={input} result={r} />
-                <DiagramLegend riserBoards={input.riserBoards} hasRip={hasRip || !!riserRip} stacked={stacked} outer={outer} />
+                <DiagramLegend riserBoards={input.riserBoards} hasRip={hasRip || !!riserRip} stacked={stacked} outer={outer} posts={r.stringer.posts.length > 0} />
               </div>
               <div className={styles.diagramCard}>
                 <h2>From above</h2>
@@ -416,7 +446,7 @@ const StairsPage = () => {
                     })),
                     {
                       label: "Timber",
-                      value: `${input.stringerDepth} × ${input.stringerThickness}, ${r.frames.linealM.toFixed(1)} m`,
+                      value: `${r.timberDepth} × ${input.stringerThickness}, ${r.frames.linealM.toFixed(1)} m`,
                     },
                     {
                       label: "Buy",
@@ -441,8 +471,26 @@ const StairsPage = () => {
                       },
                       {
                         label: "Size",
-                        value: `${input.stringerDepth} × ${input.stringerThickness}`,
+                        value: `${r.timberDepth} × ${input.stringerThickness}${r.depthAuto ? " (auto)" : ""}`,
                       },
+                      {
+                        label: "Span",
+                        value: `${m(r.stringer.topEdgeLength / r.stringer.spans)} of ${m(r.stringer.maxSpan)} allowed`,
+                      },
+                      {
+                        label: "Support posts",
+                        value: r.stringer.posts.length
+                          ? `${r.stringer.posts.length} line${r.stringer.posts.length > 1 ? "s" : ""} × ${r.stringer.postsPerLine} posts${r.stringer.bearer ? " + bearer" : ""}`
+                          : "none needed",
+                      },
+                      ...(r.stringer.posts.length
+                        ? [
+                            {
+                              label: "Posts",
+                              value: `${POST_SIZE} × ${POST_SIZE} H5, up to ${mm(r.stringer.postLength)} long (${POST_EMBED} in the ground)`,
+                            },
+                          ]
+                        : []),
                       {
                         label: "Length (top edge)",
                         value: mm(r.stringer.topEdgeLength),
@@ -466,7 +514,7 @@ const StairsPage = () => {
                           : "—",
                       },
                     ]}
-                    note={`Uncut — the top edge runs ${mm(input.boardThickness)} below the corners of the treads, so each wedge's long side sits flat on it. The foot is a level cut on the pad, the top a plumb cut against the deck's boundary joist, ${mm(r.rise)} below the top of the joist.`}
+                    note={`Uncut — the top edge runs ${mm(input.boardThickness)} below the corners of the treads, so each wedge's long side sits flat on it. The foot is a level cut on the pad, the top a plumb cut against the deck's boundary joist, ${mm(r.rise)} below the top of the joist. Size is checked against the BRANZ maximum spans for SG8 H3.2 45 mm stringers, measured along the stringer. When the stringer is longer than its size can span, posts set in concrete hold it up part way, evenly spaced${r.stringer.bearer ? ", with a bearer across under all the stringers" : ", one under each stringer"}.`}
                     noteToggle
                   />
                   <SpecCard
@@ -484,7 +532,7 @@ const StairsPage = () => {
                       { label: "Long side", value: mm(r.wedges.hypotenuse) },
                       {
                         label: "Cut from",
-                        value: `${r.wedges.stockLengthM.toFixed(2)} m of ${input.stringerDepth} × ${input.stringerThickness}`,
+                        value: `${r.wedges.stockLengthM.toFixed(2)} m of ${r.wedges.stockDepth} × ${input.stringerThickness}`,
                       },
                     ]}
                     note={`${r.wedges.rectangles ? `Cut ${mm(r.rise)} × ${mm(r.going)} rectangles and split each on the diagonal for two wedges.` : `The rise is wider than the board, so cut them nested, long side along the board edge, alternating up and down.`} The going leg goes on top (the tread), the rise leg faces forward (the riser). The bottom wedge has ${mm(r.wedges.bottomTrim)} trimmed off its point so it sits flat on the pad. Glue and screw each one to the stringer.`}

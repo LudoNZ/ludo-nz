@@ -56,6 +56,17 @@
   stroke-dasharray: 8 5;
 }
 
+.post {
+  fill: #9c7a4a;
+  stroke: #4a3018;
+}
+
+.footing {
+  fill: rgba(140, 140, 140, 0.35);
+  stroke: #666;
+  stroke-dasharray: 8 5;
+}
+
 .board {
   fill: #8b5e34;
   stroke: #4a3018;
@@ -150,4 +161,9 @@
 .legend .boardRipped {
   background-color: #e0a030;
   border-color: #7a5200;
+}
+
+.legend .post {
+  background-color: #9c7a4a;
+  border-color: #4a3018;
 }

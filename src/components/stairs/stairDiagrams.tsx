@@ -1,6 +1,6 @@
 "use client"
 
-import { Pt, StairInput, StairResult } from "./stairs"
+import { POST_EMBED, POST_SIZE, Pt, StairInput, StairResult } from "./stairs"
 import styles from "./stairDiagrams.module.scss"
 
 const pts = (poly: Pt[]) => poly.map((p) => `${p.x.toFixed(1)},${(-p.y).toFixed(1)}`).join(" ")
@@ -24,7 +24,10 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
   const pad = font * 3.2
   const minX = front - pad
   const maxX = xTop + DECK_SHOWN + pad * 0.6
-  const minY = -pad * 0.9 // below ground (positive y up, flipped in svg)
+  // below ground (positive y up, flipped in svg) — deeper when there are
+  // posts to show their footings
+  const hasPosts = result.stringer.posts.length > 0
+  const minY = hasPosts ? -(POST_EMBED + font * 2.6) : -pad * 0.9
   const maxY = H + pad * 0.8
   const viewBox = `${minX} ${-maxY} ${maxX - minX} ${maxY - minY}`
   const stroke = font * 0.07
@@ -78,6 +81,8 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
   // dimension: one rise and going on the second tread (or first)
   const k = Math.min(2, treads)
   const dimOffset = font * 1.6
+  // run dimension drops below any post footings
+  const runDimY = hasPosts ? POST_EMBED + font * 0.8 : dimOffset
 
   return (
     <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Stair side elevation, to scale">
@@ -115,6 +120,28 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
       <text x={xTop + JOIST_THICKNESS + DECK_SHOWN / 2} y={-H - font * 0.6} fontSize={font} className={styles.label} textAnchor="middle">
         Deck
       </text>
+
+      {/* support posts part way up, set in concrete below ground */}
+      {result.stringer.posts.map((p) => (
+        <g key={`post${p.x}`}>
+          <rect
+            x={p.x - POST_SIZE}
+            y={0}
+            width={POST_SIZE * 2}
+            height={POST_EMBED}
+            className={styles.footing}
+            strokeWidth={stroke}
+          />
+          <rect
+            x={p.x - POST_SIZE / 2}
+            y={-p.height}
+            width={POST_SIZE}
+            height={p.height + POST_EMBED - 50}
+            className={styles.post}
+            strokeWidth={stroke}
+          />
+        </g>
+      ))}
 
       {/* stringer */}
       {result.stringer.polygon.length > 0 && (
@@ -200,10 +227,10 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
       {/* total run, below ground */}
       {treads > 0 && (
         <g className={styles.dim}>
-          <line x1={0} y1={dimOffset} x2={xTop} y2={dimOffset} strokeWidth={stroke} />
-          <line x1={0} y1={dimOffset - font * 0.4} x2={0} y2={dimOffset + font * 0.4} strokeWidth={stroke} />
-          <line x1={xTop} y1={dimOffset - font * 0.4} x2={xTop} y2={dimOffset + font * 0.4} strokeWidth={stroke} />
-          <text x={xTop / 2} y={dimOffset + font * 1.15} fontSize={font} className={styles.dimText} textAnchor="middle">
+          <line x1={0} y1={runDimY} x2={xTop} y2={runDimY} strokeWidth={stroke} />
+          <line x1={0} y1={runDimY - font * 0.4} x2={0} y2={runDimY + font * 0.4} strokeWidth={stroke} />
+          <line x1={xTop} y1={runDimY - font * 0.4} x2={xTop} y2={runDimY + font * 0.4} strokeWidth={stroke} />
+          <text x={xTop / 2} y={runDimY + font * 1.15} fontSize={font} className={styles.dimText} textAnchor="middle">
             {Math.round(result.totalRun)} run
           </text>
         </g>
@@ -322,12 +349,13 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
   )
 }
 
-export const DiagramLegend: React.FC<{ riserBoards: boolean; hasRip: boolean; stacked: boolean; outer: boolean }> = ({
-  riserBoards,
-  hasRip,
-  stacked,
-  outer,
-}) => (
+export const DiagramLegend: React.FC<{
+  riserBoards: boolean
+  hasRip: boolean
+  stacked: boolean
+  outer: boolean
+  posts?: boolean
+}> = ({ riserBoards, hasRip, stacked, outer, posts }) => (
   <ul className={styles.legend}>
     <li>
       <span className={`${styles.swatch} ${styles.stringer}`} /> {stacked ? "Frame side joists" : "Stringer"}
@@ -343,6 +371,11 @@ export const DiagramLegend: React.FC<{ riserBoards: boolean; hasRip: boolean; st
     <li>
       <span className={`${styles.swatch} ${styles.board}`} /> {riserBoards ? "Tread & riser boards" : "Tread boards"}
     </li>
+    {posts && (
+      <li>
+        <span className={`${styles.swatch} ${styles.post}`} /> Support posts (in concrete)
+      </li>
+    )}
     {hasRip && (
       <li>
         <span className={`${styles.swatch} ${styles.boardRipped}`} /> Ripped board
