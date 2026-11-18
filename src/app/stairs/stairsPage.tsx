@@ -25,6 +25,13 @@ import styles from "./stairsPage.module.scss"
 const mm = (v: number) => `${Math.round(v)} mm`
 const m = (v: number) => `${(v / 1000).toFixed(2)} m`
 
+/** ok / service-only / fail for one dimension against the main and
+ * service stair limits ("max" for rise, "min" for going). */
+const levelOf = (v: number, main: number, service: number, kind: "max" | "min") => {
+  const within = (lim: number) => (kind === "max" ? v <= lim + 0.05 : v >= lim - 0.05)
+  return within(main) ? "readoutOk" : within(service) ? "readoutService" : "readoutFail"
+}
+
 const NumberField: React.FC<{
   id: string
   label: string
@@ -173,6 +180,26 @@ const StairsPage = () => {
                   </button>
                 )}
               </div>
+              {/* live readout, so stepping risers up and down shows the
+                  rise (and run) change right here */}
+              <dl className={styles.readout}>
+                <div className={styles[levelOf(r.rise, MAIN_PRIVATE.maxRise, SERVICE.maxRise, "max")]}>
+                  <dt>Rise</dt>
+                  <dd>{mm(r.rise)}</dd>
+                </div>
+                <div className={styles[levelOf(r.going, MAIN_PRIVATE.minGoing, SERVICE.minGoing, "min")]}>
+                  <dt>Going</dt>
+                  <dd>{mm(r.going)}</dd>
+                </div>
+                <div>
+                  <dt>Treads</dt>
+                  <dd>{r.treads}</dd>
+                </div>
+                <div>
+                  <dt>Run</dt>
+                  <dd>{m(r.totalRun)}</dd>
+                </div>
+              </dl>
             </div>
             <NumberField
               id="going"

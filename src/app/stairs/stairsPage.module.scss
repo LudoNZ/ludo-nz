@@ -174,6 +174,57 @@
   font-size: 1.1rem;
 }
 
+.readout {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+
+  > div {
+    padding: 0.35rem 0.45rem;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-radius: var(--borderRadius);
+    text-align: center;
+  }
+
+  dt {
+    font-size: 0.7rem;
+    opacity: 0.65;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  dd {
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+}
+
+.readoutOk {
+  border-color: var(--color-primary) !important;
+
+  dd {
+    color: var(--color-primary);
+  }
+}
+
+.readoutService {
+  border-color: var(--color-secondary) !important;
+
+  dd {
+    color: var(--color-secondary);
+  }
+}
+
+.readoutFail {
+  border-color: var(--color-danger) !important;
+
+  dd {
+    color: var(--color-danger);
+  }
+}
+
 .textButton {
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--color-primary);
