@@ -327,6 +327,22 @@
   }
 }
 
+.insertTurn {
+  margin-top: 0.3rem;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.8;
+  text-decoration: underline dotted;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
 .removeButton {
   border: none;
   background: none;

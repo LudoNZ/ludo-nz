@@ -138,7 +138,7 @@ const TurnedPlan: React.FC<{ input: StairInput; layout: StairLayout }> = ({ inpu
               textAnchor="middle"
               dominantBaseline="middle"
             >
-              Flight {f.index + 1}
+              Run {f.index + 1}
             </text>
           )
         })}

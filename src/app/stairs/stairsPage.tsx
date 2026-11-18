@@ -451,7 +451,7 @@ const StairsPage = () => {
                   return (
                     <div key={f.index} className={styles.diagramCard}>
                       <h2>
-                        Flight {f.index + 1} side view: {f.baseHeight > 0 ? `+${Math.round(f.baseHeight)}` : "ground"} up to{" "}
+                        Run {f.index + 1} side view: {f.baseHeight > 0 ? `+${Math.round(f.baseHeight)}` : "ground"} up to{" "}
                         {top.toLowerCase()} at +{Math.round(f.topHeight)}
                       </h2>
                       <StairElevation input={f.subInput} result={f.sub} topLabel={top} />
@@ -509,12 +509,12 @@ const StairsPage = () => {
                 ]}
               />
               <SpecCard
-                title="Flights"
+                title="Runs"
                 rows={layout.flights.map((f) => ({
-                  label: `Flight ${f.index + 1}`,
+                  label: `Run ${f.index + 1}`,
                   value:
                     f.treads === 0
-                      ? "one riser, no stringers"
+                      ? "no run, one riser between the turns"
                       : stacked
                         ? `${f.treads} treads, ${f.sub.frames.list.length} stacked frames`
                         : `${f.treads} treads · ${outer ? 2 : f.sub.supports.count} × ${f.sub.timberDepth}×${input.stringerThickness} at ${mm(f.sub.stringer.topEdgeLength)}${f.sub.stringer.posts.length ? ` · ${f.sub.stringer.posts.length} post line${f.sub.stringer.posts.length > 1 ? "s" : ""}` : ""}`,

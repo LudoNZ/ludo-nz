@@ -90,6 +90,25 @@ function intersect(a: Pt, da: Pt, b: Pt, db: Pt): Pt | null {
   return add(a, mul(da, s))
 }
 
+/** How far two convex polygons overlap (separating axis test): 0 if they
+ * only touch or are apart, otherwise the smallest push that separates them. */
+export function overlapDepth(a: Pt[], b: Pt[]): number {
+  let best = Infinity
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const e = sub(poly[(i + 1) % poly.length], poly[i])
+      if (len(e) < 1e-6) continue
+      const axis = unit({ x: -e.y, y: e.x })
+      const pa = a.map((p) => dot(p, axis))
+      const pb = b.map((p) => dot(p, axis))
+      const o = Math.min(Math.max(...pa), Math.max(...pb)) - Math.max(Math.min(...pa), Math.min(...pb))
+      if (o <= 0) return 0
+      best = Math.min(best, o)
+    }
+  }
+  return best
+}
+
 /** Drop consecutive duplicate points. */
 const dedupe = (poly: Pt[]) =>
   poly.filter((p, i) => {
@@ -489,6 +508,25 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
   if (input.turns.length > 0 && maxRiseBetweenLandings > MAX_RISE_BETWEEN_LANDINGS)
     notes.push(
       `There's a ${(maxRiseBetweenLandings / 1000).toFixed(2)} m climb with no landing — private stairs want one at least every ${MAX_RISE_BETWEEN_LANDINGS / 1000} m.`,
+    )
+
+  // does the stair run into itself? (e.g. two left turns on short runs)
+  const pieces: { name: string; poly: Pt[] }[] = []
+  for (const f of flights) {
+    if (f.treads > 0) {
+      const end = mul(f.dir, f.treads * G)
+      pieces.push({ name: `run ${f.index + 1}`, poly: [f.startL, add(f.startL, end), add(f.startR, end), f.startR] })
+    }
+    const tn = turns[f.index]
+    if (tn) pieces.push({ name: `turn ${tn.index + 1}`, poly: tn.polygon })
+  }
+  const clashes = new Set<string>()
+  for (let i = 0; i < pieces.length; i++)
+    for (let j = i + 1; j < pieces.length; j++)
+      if (overlapDepth(pieces[i].poly, pieces[j].poly) > 5) clashes.add(`${pieces[j].name} runs into ${pieces[i].name}`)
+  if (clashes.size)
+    errors.push(
+      `The stair overlaps itself: ${[...clashes].join(", ")}. Turn the other way, change the angle, or make a run longer.`,
     )
 
   const last = flights[flights.length - 1]
