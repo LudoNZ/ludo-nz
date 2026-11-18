@@ -238,6 +238,20 @@
   font-size: 1.05rem;
 }
 
+// "Posts and holes" with the Pile setup button beside it
+.overridesHeadingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+
+  .overridesHeading {
+    margin: 0;
+  }
+}
+
 .overridesHint,
 .breakdownNote {
   margin: 0 0 0.8rem;

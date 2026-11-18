@@ -64,6 +64,9 @@ export interface WallProject {
   postSizeOverride: string | null
   /** mm, drilled depth below ground; null = worked out per post */
   holeDepthOverrideMm: number | null
+  /** mm, how far each post is held up off the gravel base pad, the gap
+   * under it filled with concrete; 0 = it stands on the pad */
+  pileStandoffMm: number
   /** hand-set post count/spacing per wall, in step with the plan's runs;
    * null (or missing) = that wall uses the table's spacing */
   runSpacing: (RunSpacing | null)[]
@@ -89,6 +92,9 @@ export interface WallProject {
   controlPoints: ControlPoints
   /** hole depths set by hand on individual posts, keyed by post index */
   depthPoints: DepthPoints
+  /** mm, each hole's depth as measured on site for the concrete QA check,
+   * keyed by post index; a post with no entry is taken as dug to plan */
+  measuredHoleDepthsMm: Record<string, number>
   topCapEnabled: boolean
   /** top board laid on the rake as a full board, with the level boards
    * under it cut down to suit */
@@ -128,6 +134,7 @@ export const newBlankWall = (): WallProject => ({
   augerDiameterMm: null,
   postSizeOverride: null,
   holeDepthOverrideMm: null,
+  pileStandoffMm: 0,
   runSpacing: [],
   boardOrderFixed: {},
   boardOrderPartial: { enabled: false, wallRows: {}, fixed: {} },
@@ -136,6 +143,7 @@ export const newBlankWall = (): WallProject => ({
   bayCourses: {},
   controlPoints: {},
   depthPoints: {},
+  measuredHoleDepthsMm: {},
   topCapEnabled: false,
   rakedTopBoard: false,
   boardsToPostOutside: true,
@@ -173,6 +181,7 @@ export const wallFromData = (data: unknown): WallProject => {
     augerDiameterMm: typeof d.augerDiameterMm === "number" && d.augerDiameterMm > 0 ? d.augerDiameterMm : null,
     postSizeOverride: typeof d.postSizeOverride === "string" && d.postSizeOverride ? d.postSizeOverride : null,
     holeDepthOverrideMm: typeof d.holeDepthOverrideMm === "number" && d.holeDepthOverrideMm > 0 ? d.holeDepthOverrideMm : null,
+    pileStandoffMm: typeof d.pileStandoffMm === "number" && d.pileStandoffMm > 0 ? Math.round(d.pileStandoffMm) : 0,
     runSpacing: Array.isArray(d.runSpacing) ? d.runSpacing.map(runSpacingFromData) : [],
     boardOrderFixed: Object.fromEntries(
       Object.entries(typeof d.boardOrderFixed === "object" && d.boardOrderFixed !== null ? d.boardOrderFixed : {}).filter(
@@ -193,6 +202,7 @@ export const wallFromData = (data: unknown): WallProject => {
         .filter(([, v]) => typeof v === "object" && v !== null && typeof v.depthM === "number" && v.depthM > 0)
         .map(([k, v]) => [k, { depthM: v.depthM, mode: v.mode === "rake" ? "rake" : "lone" }])
     ) as DepthPoints,
+    measuredHoleDepthsMm: Object.fromEntries(Object.entries(numberMap(d.measuredHoleDepthsMm)).filter(([, n]) => n > 0)),
     topCapEnabled: Boolean(d.topCapEnabled),
     rakedTopBoard: Boolean(d.rakedTopBoard),
     boardsToPostOutside: d.boardsToPostOutside !== false,
@@ -221,7 +231,7 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "pileStandoffMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
   rakedTopBoard: wall.rakedTopBoard,
   boardsToPostOutside: wall.boardsToPostOutside,
@@ -231,6 +241,7 @@ export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "po
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,
+  pileStandoffM: wall.pileStandoffMm ? wall.pileStandoffMm / 1000 : 0,
 })
 
 export const profileForWall = (wall: WallProject) =>

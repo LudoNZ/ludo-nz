@@ -30,15 +30,35 @@ const WallRenderView: React.FC<{
   caption?: string
   /** boards picked out from the board order, tinted blue */
   highlight?: BoardHighlight[]
-}> = ({ profile, planPoints, retainedSide, settings, topCapEnabled, caption, highlight = EMPTY_HIGHLIGHT }) => {
+  /** a post picked out in blue, with a "#n" marker over it */
+  focusPostIndex?: number | null
+  /** tapping a post (or its footing) */
+  onSelectPost?: (index: number) => void
+  /** fill the parent's height, with just the turn/tilt/footings controls
+   * (no print or download) — for the concrete speed run's top half */
+  compact?: boolean
+  showFootingsInitially?: boolean
+}> = ({
+  profile,
+  planPoints,
+  retainedSide,
+  settings,
+  topCapEnabled,
+  caption,
+  highlight = EMPTY_HIGHLIGHT,
+  focusPostIndex = null,
+  onSelectPost,
+  compact = false,
+  showFootingsInitially = false,
+}) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-32)
   const [elevationDeg, setElevationDeg] = useState(26)
-  const [showFootings, setShowFootings] = useState(false)
+  const [showFootings, setShowFootings] = useState(showFootingsInitially)
   const svgRef = useRef<SVGSVGElement>(null)
 
   const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings }, highlight),
-    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, highlight]
+    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex }, highlight),
+    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, focusPostIndex, highlight]
   )
 
   const handlePrint = () => {
@@ -92,9 +112,10 @@ const WallRenderView: React.FC<{
 
   if (!scene) return null
   const { viewBox: vb, strokeW } = scene
+  const markerR = Math.max(vb.w, vb.h) * 0.028
 
   return (
-    <div className={styles.renderRoot}>
+    <div className={`${styles.renderRoot} ${compact ? styles.compact : ""}`}>
       <div className={styles.printArea}>
         <svg
           ref={svgRef}
@@ -119,8 +140,35 @@ const WallRenderView: React.FC<{
               strokeWidth={strokeW}
               strokeLinejoin="round"
               opacity={p.opacity}
+              onClick={onSelectPost && p.post !== undefined ? () => onSelectPost(p.post!) : undefined}
+              style={onSelectPost && p.post !== undefined ? { cursor: "pointer" } : undefined}
             />
           ))}
+          {scene.focus && focusPostIndex !== null && (
+            // a pin over the focused post: its number in a blue disc
+            <g pointerEvents="none">
+              <line
+                x1={scene.focus.x}
+                y1={scene.focus.y - markerR * 0.3}
+                x2={scene.focus.x}
+                y2={scene.focus.y - markerR * 1.6}
+                stroke="#2a78d6"
+                strokeWidth={strokeW * 2}
+              />
+              <circle cx={scene.focus.x} cy={scene.focus.y - markerR * 2.4} r={markerR} fill="#2a78d6" stroke="#ffffff" strokeWidth={strokeW * 2} />
+              <text
+                x={scene.focus.x}
+                y={scene.focus.y - markerR * 2.4}
+                fill="#ffffff"
+                fontSize={markerR * 1.05}
+                fontWeight={700}
+                textAnchor="middle"
+                dominantBaseline="central"
+              >
+                {focusPostIndex + 1}
+              </text>
+            </g>
+          )}
         </svg>
         {caption && <p className={styles.caption}>{caption}</p>}
       </div>
@@ -143,14 +191,16 @@ const WallRenderView: React.FC<{
           <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
           Show footings
         </label>
-        <div className={styles.actions}>
-          <button type="button" className={styles.actionButton} onClick={handlePrint}>
-            Print / save PDF
-          </button>
-          <button type="button" className={styles.actionButton} onClick={handleDownloadPng}>
-            Download PNG
-          </button>
-        </div>
+        {!compact && (
+          <div className={styles.actions}>
+            <button type="button" className={styles.actionButton} onClick={handlePrint}>
+              Print / save PDF
+            </button>
+            <button type="button" className={styles.actionButton} onClick={handleDownloadPng}>
+              Download PNG
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

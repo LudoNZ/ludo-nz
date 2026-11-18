@@ -1,0 +1,191 @@
+.qaCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  // clear of the materials above and the board order below
+  margin: 1.5rem 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  h3 {
+    font-size: 1.05rem;
+    color: var(--color-primary);
+  }
+}
+
+.headerButtons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.speedRun {
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: var(--color-primary);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(0.9);
+  }
+}
+
+.toggle,
+.clear {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: #fff;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.1);
+  }
+}
+
+.clear {
+  align-self: flex-start;
+  font-weight: 500;
+}
+
+.lead {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+
+  th,
+  td {
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+    white-space: nowrap;
+  }
+
+  thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.7;
+  }
+
+  tbody th {
+    font-weight: 700;
+  }
+
+  input {
+    width: 5.5rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--foreground);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--foreground);
+    font-family: inherit;
+    // 16px stops iOS zooming on focus
+    font-size: max(0.88rem, 16px);
+  }
+}
+
+// a box still at the planned depth (not measured yet)
+.table input.asPlanned {
+  color: rgba(28, 31, 35, 0.55);
+}
+
+.measuredRow {
+  background-color: rgba(27, 177, 47, 0.06);
+}
+
+.inputCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.tag {
+  margin-left: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: 0.65;
+}
+
+.short,
+.deep,
+.was {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.short {
+  color: var(--color-danger);
+}
+
+.deep {
+  color: #8a5a00;
+}
+
+.was {
+  opacity: 0.6;
+}
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.92rem;
+
+  div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  dt {
+    opacity: 0.75;
+  }
+
+  dd {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}
+
+.orderRow {
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.warn {
+  font-size: 0.8rem;
+  color: var(--color-danger);
+}

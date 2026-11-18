@@ -64,6 +64,8 @@ export function describeWallChange(before: WallProject, after: WallProject): str
     parts.push(`Post size ${before.postSizeOverride ?? "auto"} → ${after.postSizeOverride ?? "auto"}`)
   if (before.holeDepthOverrideMm !== after.holeDepthOverrideMm)
     parts.push(`Hole depth ${mm(before.holeDepthOverrideMm)} → ${mm(after.holeDepthOverrideMm)}`)
+  if ((before.pileStandoffMm ?? 0) !== (after.pileStandoffMm ?? 0))
+    parts.push(`Pile stand-off ${before.pileStandoffMm ?? 0} mm → ${after.pileStandoffMm ?? 0} mm`)
   if (!same(before.runSpacing, after.runSpacing)) parts.push("Post spacing")
   if (!same(before.steppedWalls, after.steppedWalls)) parts.push("Stepped top")
   if (before.topCapEnabled !== after.topCapEnabled) parts.push(after.topCapEnabled ? "Top cap on" : "Top cap off")
@@ -86,6 +88,8 @@ export function describeWallChange(before: WallProject, after: WallProject): str
     if (levels.length) parts.push(postsPhrase(levels, "levels"))
     const depths = changedPosts(before.depthPoints, after.depthPoints)
     if (depths.length) parts.push(postsPhrase(depths, "hole depth"))
+    const measured = changedPosts(before.measuredHoleDepthsMm ?? {}, after.measuredHoleDepthsMm ?? {})
+    if (measured.length) parts.push(postsPhrase(measured, "measured depth"))
     if (!same(before.bayCourses, after.bayCourses)) parts.push("Bay heights")
   }
 

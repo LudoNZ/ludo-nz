@@ -19,6 +19,27 @@
   display: none;
 }
 
+// fills a fixed-height pane: the drawing takes whatever the controls leave
+.compact {
+  height: 100%;
+  min-height: 0;
+  gap: 0.4rem;
+
+  .printArea {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .svg {
+    height: 100%;
+  }
+
+  .controls {
+    gap: 0.4rem 1rem;
+    font-size: 0.8rem;
+  }
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;

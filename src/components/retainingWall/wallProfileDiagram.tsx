@@ -209,9 +209,9 @@ const WallProfileDiagram: React.FC<{
         ))}
 
         {/* posts: above and embedded portions, stopping short of the hole
-            floor by the gravel base allowance, same as the uniform diagram */}
+            floor by the gravel base pad and any stand-off under the post */}
         {posts.map((p) => {
-          const postDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
+          const postDepthM = p.postDepthM
           const cls = p.needsEngineer ? styles.postBlocked : styles.postAbove
           const px = X(p.xM)
           return (

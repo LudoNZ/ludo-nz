@@ -25,7 +25,9 @@ export interface WallSpecRow {
  * active — see ENGINEER_HEIGHT_LIMIT_M in retainingWallCalc.ts. */
 export interface CalcSettings {
   referenceTable: WallSpecRow[]
-  /** m, drainage/bearing pad under the post, below its embedment */
+  /** m, drainage/bearing pad under the post, below its embedment; 0 = no
+   * pad (the default — it isn't usual practice here), switched on in the
+   * project's Pile setup */
   gravelBaseAllowanceM: number
   /** hole diameter as a multiple of the post's own width */
   holeDiameterMultiplier: number
@@ -56,7 +58,7 @@ export const DEFAULT_CALC_SETTINGS: CalcSettings = {
     { soil: "fill", maxHeightM: 1.0, postSizeLabel: "150 x 150mm", maxSpacingM: 1.05, embedmentRatio: 0.68 },
     { soil: "fill", maxHeightM: 1.5, postSizeLabel: "150 x 150mm", maxSpacingM: 1.0, embedmentRatio: 0.75 },
   ],
-  gravelBaseAllowanceM: 0.1,
+  gravelBaseAllowanceM: 0,
   holeDiameterMultiplier: 3,
   boardCourseHeightM: 0.15,
   boardStockLengthsM: [4.2, 4.8, 5.4, 6.0],

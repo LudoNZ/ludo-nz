@@ -23,6 +23,9 @@ export interface RenderOptions {
   elevationDeg: number
   /** posts and concrete below ground, drawn see-through */
   showFootings: boolean
+  /** a post to pick out in blue (its footing too) — the pile in focus in
+   * the concrete QA speed run */
+  focusPostIndex?: number | null
 }
 
 export interface RenderPolygon {
@@ -31,6 +34,8 @@ export interface RenderPolygon {
   fill: string
   stroke: string
   opacity?: number
+  /** the post this face belongs to (post or footing), for tapping */
+  post?: number
 }
 
 export interface RenderScene {
@@ -38,6 +43,8 @@ export interface RenderScene {
   viewBox: { x: number; y: number; w: number; h: number }
   /** a stroke width that reads at this scale */
   strokeW: number
+  /** where the focused post's top lands in view space, for a marker */
+  focus?: { x: number; y: number }
 }
 
 /** ~ a 150 × 50 board */
@@ -53,7 +60,11 @@ const COLORS = {
   topBoard: "#b07a3e",
   /** boards picked out from the order card — same blue as the elevation's */
   highlight: "#2a78d6",
+  /** the focused post's concrete, a lighter blue so the post shows inside it */
+  focusConcrete: "#86b6ef",
   cap: "#ddb06f",
+  /** the dark seam where two top cap pieces butt together */
+  capJoint: "#5a3a1c",
   post: "#93613a",
   grass: "#9cc46e",
   earthTop: "#5e7f3c",
@@ -140,6 +151,8 @@ interface Item {
   key: number
   layer: number
   opacity?: number
+  /** the post it belongs to, passed through to its polygons */
+  post?: number
 }
 
 /** a convex solid: point each face's winding outward from the middle */
@@ -490,6 +503,10 @@ export function buildRenderScene(
   // ── boards ───────────────────────────────────────────────────────────
   /** every wall item, with the posts/bays it touches, for sorting */
   const wallItems: { item: Item; bay?: number; post?: number }[] = []
+  // posts where one top cap piece ends and the next begins
+  const capJoints = new Set((topCapEnabled ? profile.topCap?.joints ?? [] : []).map((j) => j.postIndex))
+  /** seams drawn over the cap, sorted after the caps either side */
+  const capSeams: { item: Item; bay: number }[] = []
   bays.forEach((bay, k) => {
     const run = runOfBay(bay.leftIndex)
     const a = posts[bay.leftIndex]
@@ -556,12 +573,26 @@ export function buildRenderScene(
         [u1 + CAP_OVERHANG_M, topA + slope * (u1 + CAP_OVERHANG_M) + CAP_THICKNESS_M],
         [u0 - CAP_OVERHANG_M, topA + slope * (u0 - CAP_OVERHANG_M) + CAP_THICKNESS_M],
       ]
-      const faces = extrude(frame, prof, -Math.max(postHalf(a), postHalf(b)) - CAP_OVERHANG_M, n1 + CAP_OVERHANG_M, COLORS.cap)
+      const capN0 = -Math.max(postHalf(a), postHalf(b)) - CAP_OVERHANG_M
+      const capN1 = n1 + CAP_OVERHANG_M
+      const faces = extrude(frame, prof, capN0, capN1, COLORS.cap)
       wallItems.push({ item: { faces, solid: true, key: 0, layer: LAYER.wall + 1 }, bay: k })
+      if (capJoints.has(bay.leftIndex)) {
+        // a thin dark band just proud of the cap, across its top and faces
+        const w = 0.008
+        const seam: [number, number][] = [
+          [-w, topA - w * slope - 0.002],
+          [w, topA + w * slope - 0.002],
+          [w, topA + w * slope + CAP_THICKNESS_M + 0.003],
+          [-w, topA - w * slope + CAP_THICKNESS_M + 0.003],
+        ]
+        capSeams.push({ item: { faces: extrude(frame, seam, capN0 - 0.003, capN1 + 0.003, COLORS.capJoint), solid: true, key: 0, layer: LAYER.wall + 1 }, bay: k })
+      }
     }
   })
 
   // ── posts ────────────────────────────────────────────────────────────
+  let focusTop: V3 | null = null
   posts.forEach((p) => {
     const color = p.needsEngineer ? COLORS.blocked : COLORS.post
     const half = postHalf(p)
@@ -580,17 +611,22 @@ export function buildRenderScene(
             [-half, half],
           ] as [number, number][]
         ).map(([u, n]) => [frame.origin[0] + frame.dir[0] * u + frame.normal[0] * n, frame.origin[1] + frame.dir[1] * u + frame.normal[1] * n])
-    wallItems.push({ item: { faces: prism(footprint, p.groundLevelM, p.topLevelM, color), solid: true, key: 0, layer: LAYER.wall, opacity: p.needsEngineer ? 0.7 : undefined }, post: p.index })
+    const focused = options.focusPostIndex === p.index
+    wallItems.push({
+      item: { faces: prism(footprint, p.groundLevelM, p.topLevelM, focused ? COLORS.highlight : color), solid: true, key: 0, layer: LAYER.wall, opacity: p.needsEngineer ? 0.7 : undefined, post: p.index },
+      post: p.index,
+    })
+    if (focused) focusTop = [frame.origin[0], frame.origin[1], p.topLevelM]
 
     if (options.showFootings) {
-      const postBottom = p.groundLevelM - Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
+      const postBottom = p.groundLevelM - p.postDepthM
       const r = p.holeDiameterM / 2
       const hole: [number, number][] = Array.from({ length: 14 }, (_, k) => {
         const a = (k / 14) * Math.PI * 2
         return [frame.origin[0] + Math.cos(a) * r, frame.origin[1] + Math.sin(a) * r]
       })
-      items.push({ faces: prism(hole, p.groundLevelM - p.embedmentM, p.groundLevelM - 0.005, COLORS.concrete), solid: true, key: 0, layer: LAYER.footing, opacity: 0.55 })
-      items.push({ faces: prism(footprint, postBottom, p.groundLevelM - 0.004, COLORS.post), solid: true, key: 1, layer: LAYER.footing, opacity: 0.8 })
+      items.push({ faces: prism(hole, p.groundLevelM - p.embedmentM, p.groundLevelM - 0.005, focused ? COLORS.focusConcrete : COLORS.concrete), solid: true, key: 0, layer: LAYER.footing, opacity: focused ? 0.8 : 0.55, post: p.index })
+      items.push({ faces: prism(footprint, postBottom, p.groundLevelM - 0.004, focused ? COLORS.highlight : COLORS.post), solid: true, key: 1, layer: LAYER.footing, opacity: 0.8, post: p.index })
     }
   })
 
@@ -612,12 +648,22 @@ export function buildRenderScene(
     w.item.key = Math.max(w.item.key, postKey.get(bay.leftIndex) ?? -Infinity, postKey.get(bay.rightIndex) ?? -Infinity) + 2e-6
     w.item.layer = LAYER.wall
   })
+  // a cap seam goes over the caps of the bays either side of its post
+  {
+    const capKey = new Map<number, number>()
+    wallItems.forEach((w) => w.bay !== undefined && w.item.faces[0]?.color === COLORS.cap && capKey.set(w.bay, w.item.key))
+    capSeams.forEach((s) => {
+      s.item.key = Math.max(capKey.get(s.bay) ?? -Infinity, capKey.get(s.bay - 1) ?? -Infinity) + 3e-6
+      s.item.layer = LAYER.wall
+      wallItems.push(s)
+    })
+  }
   // a run seen from behind (the camera's round on its retained side) is
   // mostly hidden by the retained ground in front of it: draw it before
   // that ground, so the ground covers it — only a cap stays on top
   const backFacing = (run: (typeof runs)[number]) => dot(run.normal, toCam) > 0
   wallItems.forEach((w) => {
-    if (w.item.layer !== LAYER.wall || w.item.faces[0]?.color === COLORS.cap) return
+    if (w.item.layer !== LAYER.wall || w.item.faces[0]?.color === COLORS.cap || w.item.faces[0]?.color === COLORS.capJoint) return
     const behind =
       w.bay !== undefined
         ? backFacing(runOfBay(bays[w.bay].leftIndex))
@@ -787,15 +833,18 @@ export function buildRenderScene(
         minY = Math.min(minY, y)
         maxY = Math.max(maxY, y)
       })
-      polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke, opacity: it.opacity })
+      polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke, opacity: it.opacity, post: it.post })
     })
   })
   if (!polygons.length) return null
+  const focusXY = focusTop ? project(focusTop) : null
+  if (focusXY) minY = Math.min(minY, focusXY[1] - (maxY - minY) * 0.12) // room for its marker above
   const span = Math.max(maxX - minX, maxY - minY)
   const pad = span * 0.05
   return {
     polygons,
     viewBox: { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 },
     strokeW: span * 0.0012,
+    focus: focusXY ? { x: focusXY[0], y: focusXY[1] } : undefined,
   }
 }

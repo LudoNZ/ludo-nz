@@ -1,6 +1,6 @@
 "use client"
 
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import SpecCard from "@/components/structures/specCard"
 import LaborSummary from "@/components/structures/laborSummary"
@@ -18,6 +18,8 @@ import {
 } from "@/components/icons/icons"
 import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
+import ConcreteQaCard from "@/components/retainingWall/concreteQaCard"
+import ConcreteSpeedRun from "@/components/retainingWall/concreteSpeedRun"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import WallRenderView from "@/components/retainingWall/wallRenderView"
 import NumField from "@/components/weatherboards/numField"
@@ -28,13 +30,13 @@ import {
   RetainedSide,
   segmentLabel,
   segmentLengths,
-  setSegmentLength,
   totalLength,
 } from "@/components/retainingWall/wallPlan"
 import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import BoardEndsModal from "./boardEndsModal"
+import PileSetupModal, { PileSetup } from "./pileSetupModal"
 import StepEditor from "./stepEditor"
 import SectionRail, { RailSection } from "./sectionRail"
 import ReferenceTableModal from "./referenceTableModal"
@@ -107,6 +109,14 @@ const RetainingWallEditor: React.FC<{
   // hole depths set by hand, keyed by post index the same way — so they
   // follow their posts along with the hand-set levels
   const [depthPoints, setDepthPoints] = useState<DepthPoints>(initial.depthPoints)
+  // concrete QA check: holes as measured on site (mm), keyed by post index
+  // too, so they follow their posts the same way
+  const [measuredHoleDepthsMm, setMeasuredHoleDepthsMm] = useState<Record<string, number>>(initial.measuredHoleDepthsMm)
+  // mm the post is held up off the gravel pad (set in the pile setup modal)
+  const [pileStandoffMm, setPileStandoffMm] = useState(initial.pileStandoffMm)
+  const [showPileSetup, setShowPileSetup] = useState(false)
+  const [speedRunOpen, setSpeedRunOpen] = useState(false)
+  const closeSpeedRun = useCallback(() => setSpeedRunOpen(false), [])
   // whole-wall option, not per-post — an extra flat board laid over the
   // top board/post tops for a finished look and to protect end grain
   const [topCapEnabled, setTopCapEnabled] = useState(initial.topCapEnabled)
@@ -133,7 +143,6 @@ const RetainingWallEditor: React.FC<{
   }, [])
 
 
-  const wallLengthM = totalLength(planPoints)
   const segmentLengthsM = segmentLengths(planPoints)
   const retainedHeightM = parseFloat(retainedHeight)
   const rlDatumM = parseFloat(rlDatum) || 0
@@ -141,7 +150,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, pileStandoffMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
 
   // ---- change history / undo ----
   // Every saveable change (spotted by the report effect below) pushes the
@@ -237,7 +246,6 @@ const RetainingWallEditor: React.FC<{
     // the restored wall's hand-set levels already match its own post
     // layout; tell the follow-their-posts effect so, or it would shift them
     alignedCounts.current = segmentBayCounts(segmentLengths(wall.planPoints), wall.retainedHeightM, wall.soil, wall.calcSettings, wall.runSpacing).join(",")
-    setHeightEditing(false)
     setPlanPoints(wall.planPoints)
     setRetainedSide(wall.retainedSide)
     setRetainedHeight(String(wall.retainedHeightM))
@@ -246,6 +254,7 @@ const RetainingWallEditor: React.FC<{
     setAugerDiameter(wall.augerDiameterMm ? String(wall.augerDiameterMm) : "")
     setPostSizeOverride(wall.postSizeOverride ?? "")
     setHoleDepth(wall.holeDepthOverrideMm ? String(wall.holeDepthOverrideMm) : "")
+    setPileStandoffMm(wall.pileStandoffMm)
     setRunSpacing(wall.runSpacing)
     setBoardOrderFixed(wall.boardOrderFixed)
     setBoardOrderPartial(wall.boardOrderPartial)
@@ -254,6 +263,7 @@ const RetainingWallEditor: React.FC<{
     setBayCourses(wall.bayCourses)
     setControlPoints(wall.controlPoints)
     setDepthPoints(wall.depthPoints)
+    setMeasuredHoleDepthsMm(wall.measuredHoleDepthsMm)
     setTopCapEnabled(wall.topCapEnabled)
     setRakedTopBoard(wall.rakedTopBoard)
     setBoardsToPostOutside(wall.boardsToPostOutside)
@@ -309,6 +319,7 @@ const RetainingWallEditor: React.FC<{
       augerDiameterMm,
       postSizeOverride: postSizeOverride || null,
       holeDepthOverrideMm,
+      pileStandoffMm,
       runSpacing,
       boardOrderFixed,
       boardOrderPartial,
@@ -317,6 +328,7 @@ const RetainingWallEditor: React.FC<{
       bayCourses,
       controlPoints,
       depthPoints,
+      measuredHoleDepthsMm,
       topCapEnabled,
       rakedTopBoard,
       boardsToPostOutside,
@@ -331,7 +343,7 @@ const RetainingWallEditor: React.FC<{
     if (restoringRef.current) restoringRef.current = false
     else recordChangeRef.current(JSON.parse(previous) as WallProject, wall)
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -341,15 +353,19 @@ const RetainingWallEditor: React.FC<{
   // is unchanged from the start of the wall, or from the end, is kept
   // (shifted to its post's new number); only posts inside the walls that
   // actually changed are let go, since those posts have all moved.
-  const [heightEditing, setHeightEditing] = useState(false)
   const bayCountsKey = retainedHeightM > 0 ? segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing).join(",") : null
   const alignedCounts = useRef<string | null>(bayCountsKey)
+  // set when a wall is added before wall A: every existing post moves along,
+  // including post 0, which otherwise counts as unchanged
+  const prependedRef = useRef(false)
   useEffect(() => {
-    if (bayCountsKey === null || heightEditing) return
+    if (bayCountsKey === null) return
     if (alignedCounts.current === null || alignedCounts.current === bayCountsKey) {
       alignedCounts.current = bayCountsKey
       return
     }
+    const prepended = prependedRef.current
+    prependedRef.current = false
     const before = alignedCounts.current.split(",").map(Number)
     const after = bayCountsKey.split(",").map(Number)
     alignedCounts.current = bayCountsKey
@@ -363,7 +379,8 @@ const RetainingWallEditor: React.FC<{
     )
       suffix++
     const sum = (counts: number[]) => counts.reduce((t, n) => t + n, 0)
-    const keepUpTo = sum(before.slice(0, prefix)) // last post of the unchanged walls at the start
+    // last post of the unchanged walls at the start (none if a wall was added before them)
+    const keepUpTo = prepended && prefix === 0 ? -1 : sum(before.slice(0, prefix))
     const keepFrom = sum(before) - sum(before.slice(before.length - suffix)) // first post of the unchanged walls at the end
     const shiftBy = sum(after) - sum(before)
     const follow = <T,>(points: Record<number, T>): Record<number, T> => {
@@ -377,6 +394,7 @@ const RetainingWallEditor: React.FC<{
     }
     setControlPoints(follow)
     setDepthPoints(follow)
+    setMeasuredHoleDepthsMm(follow)
     // bay heights are keyed by the bay's left post, so the last bay of
     // the unchanged walls at the start is the one *before* keepUpTo
     setBayCourses((counts) => {
@@ -389,7 +407,7 @@ const RetainingWallEditor: React.FC<{
       return next
     })
     setSelectedIndex(null)
-  }, [bayCountsKey, heightEditing])
+  }, [bayCountsKey])
 
   const profile = !isNaN(retainedHeightM)
     ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, overrides)
@@ -414,6 +432,51 @@ const RetainingWallEditor: React.FC<{
   // or just the one run being looked at
   const totals = profile ? (shownSegment !== null ? profile.segmentTotals[shownSegment] : profile) : null
   const forWall = shownSegment !== null ? ` — Wall ${segmentLabel(shownSegment)}` : ""
+
+  // ---- pile setup (see PileSetupModal) ----
+  const pileSetup: PileSetup = {
+    postSize: postSizeOverride || null,
+    holeDepthMm: holeDepthOverrideMm,
+    augerMm: augerDiameterMm,
+    gravelPadMm: Math.round(calcSettings.gravelBaseAllowanceM * 1000),
+    standoffMm: pileStandoffMm,
+  }
+  /** the wall with a pile setup applied, as a profile */
+  const profileWithPile = (setup: PileSetup, settings = calcSettings) =>
+    retainedHeightM > 0
+      ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, settings, {
+          ...overrides,
+          postSizeLabel: setup.postSize,
+          holeDepthM: setup.holeDepthMm ? setup.holeDepthMm / 1000 : null,
+          augerDiameterM: setup.augerMm ? setup.augerMm / 1000 : null,
+          pileStandoffM: setup.standoffMm / 1000,
+        })
+      : null
+  // what Auto gives, for the wall's tallest post: the table with no size,
+  // depth or auger set
+  const pileAuto = useMemo(() => {
+    const p = profileWithPile({ postSize: null, holeDepthMm: null, augerMm: null, gravelPadMm: 0, standoffMm: 0 })
+    const valid = p?.posts.filter((post) => !post.needsEngineer) ?? []
+    if (!valid.length) return null
+    const tallest = valid.reduce((a, b) => (b.retainedHeightM > a.retainedHeightM ? b : a))
+    const depths = valid.map((post) => Math.round(post.embedmentM * 1000))
+    return {
+      postSize: tallest.sizeLabel,
+      holeDepthMm: Math.round(tallest.embedmentM * 1000),
+      holeDepthRangeMm: [Math.min(...depths), Math.max(...depths)] as [number, number],
+      augerMm: Math.round(tallest.holeDiameterM * 1000),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segmentLengthsM.join(","), retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, runSpacing, depthPoints, steppedWalls, bayCourses])
+  const previewPileConcrete = (setup: PileSetup) =>
+    profileWithPile(setup, { ...calcSettings, gravelBaseAllowanceM: setup.gravelPadMm / 1000 })?.totalConcreteVolumeM3 ?? 0
+  const applyPileSetup = (setup: PileSetup) => {
+    setPostSizeOverride(setup.postSize ?? "")
+    setHoleDepth(setup.holeDepthMm ? String(setup.holeDepthMm) : "")
+    setAugerDiameter(setup.augerMm ? String(setup.augerMm) : "")
+    setPileStandoffMm(setup.standoffMm)
+    if (setup.gravelPadMm !== pileSetup.gravelPadMm) setCalcSettings((settings) => ({ ...settings, gravelBaseAllowanceM: setup.gravelPadMm / 1000 }))
+  }
   const postList = (indices: number[]) => indices.map((i) => `#${i + 1}`).join(", ")
   const mmRange = (minM: number, maxM: number) => {
     const lo = Math.round(minM * 1000)
@@ -426,7 +489,21 @@ const RetainingWallEditor: React.FC<{
     // wall when a corner is added (the wall it splits goes back to the
     // table / unstepped) or removed (the two walls it joined merge into
     // one on the defaults)
-    if (next.length !== planPoints.length) {
+    const prepended =
+      next.length === planPoints.length + 1 && planPoints.every((p, i) => p.xM === next[i + 1].xM && p.yM === next[i + 1].yM)
+    if (prepended) {
+      // a new wall A: everything per wall moves up one letter
+      prependedRef.current = true
+      if (runSpacing.some(Boolean)) setRunSpacing([null, ...runSpacing])
+      if (steppedWalls.some(Boolean)) setSteppedWalls([false, ...steppedWalls])
+      setBoardOrderPartial((partial) => ({
+        ...partial,
+        wallRows: Object.fromEntries(Object.entries(partial.wallRows).map(([k, v]) => [String(Number(k) + 1), v])),
+      }))
+      setBoardOrdersPlaced((placed) =>
+        placed.map((o) => ({ ...o, walls: o.walls.map((w) => ({ ...w, segmentIndex: w.segmentIndex + 1 })) })),
+      )
+    } else if (next.length !== planPoints.length) {
       const changed = next.findIndex((p, i) => !planPoints[i] || p.xM !== planPoints[i].xM || p.yM !== planPoints[i].yM)
       const at = changed === -1 ? next.length : changed
       const seg = Math.max(0, at - 1)
@@ -604,40 +681,6 @@ const RetainingWallEditor: React.FC<{
       <fieldset disabled={locked} className={styles.lockable} id="rw-inputs">
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
-          <label htmlFor="wallLength">{planPoints.length > 2 ? "Total wall length (m)" : "Wall length (m)"}</label>
-          {planPoints.length > 2 ? (
-            // with corners, each wall's own length is set in the plan
-            <input id="wallLength" type="text" readOnly value={wallLengthM.toFixed(2)} title="Set each wall's length in the plan below" />
-          ) : (
-            <NumField
-              id="wallLength"
-              min={0.1}
-              step={0.1}
-              value={Number(wallLengthM.toFixed(3))}
-              onChange={(v) => handlePlanChange(setSegmentLength(planPoints, 0, v))}
-            />
-          )}
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="retainedHeight">Retained height (m)</label>
-          <input
-            id="retainedHeight"
-            type="number"
-            min={0.1}
-            step={0.1}
-            inputMode="decimal"
-            value={retainedHeight}
-            onChange={(e) => {
-              setRetainedHeight(e.target.value)
-            }}
-            // half-typed heights ("1" on the way to "1.25") can land in a
-            // different band of the table and change the post layout for
-            // a moment — hold off re-aligning hand-set posts until done
-            onFocus={() => setHeightEditing(true)}
-            onBlur={() => setHeightEditing(false)}
-          />
-        </div>
-        <div className={styles.field}>
           <label htmlFor="soil">Soil type</label>
           <select
             id="soil"
@@ -682,9 +725,14 @@ const RetainingWallEditor: React.FC<{
       </form>
       </fieldset>
 
-      <h3 className={styles.overridesHeading} id="rw-posts-holes">
-        Posts and holes
-      </h3>
+      <div className={styles.overridesHeadingRow}>
+        <h3 className={styles.overridesHeading} id="rw-posts-holes">
+          Posts and holes
+        </h3>
+        <Button size="small" variant="secondary" onClick={() => setShowPileSetup(true)} disabled={locked || !pileAuto}>
+          Pile setup
+        </Button>
+      </div>
       <p className={styles.overridesHint}>
         Leave a box on Auto to have it worked out from the reference table (every pile gets the biggest size any
         post needs; hole depths follow each post&apos;s own height), or set it to use the same value for every post.
@@ -750,6 +798,16 @@ const RetainingWallEditor: React.FC<{
         referenceTable={calcSettings.referenceTable}
         activeRow={referenceRow}
       />
+      {pileAuto && (
+        <PileSetupModal
+          isOpen={showPileSetup}
+          onClose={() => setShowPileSetup(false)}
+          value={pileSetup}
+          auto={pileAuto}
+          onApply={applyPileSetup}
+          previewTotalM3={previewPileConcrete}
+        />
+      )}
       <BoardEndsModal
         isOpen={showBoardEnds}
         onClose={() => setShowBoardEnds(false)}
@@ -771,7 +829,7 @@ const RetainingWallEditor: React.FC<{
 
       <div className={styles.diagramCard} id="rw-plan">
         <div className={styles.diagramCardHeader}>
-          <h3>Plan</h3>
+          <h3>Plan view</h3>
         </div>
         <WallPlanView
           points={planPoints}
@@ -1030,7 +1088,8 @@ const RetainingWallEditor: React.FC<{
                       </div>
                     </div>
                     <p className={styles.cornerNote}>
-                      Depth is from this post&apos;s ground level to the bottom of its hole, gravel base pad included
+                      Depth is from this post&apos;s ground level to the bottom of its hole
+                      {calcSettings.gravelBaseAllowanceM > 0 ? ", gravel base pad included" : ""}
                       {selectedPost.embedmentM < selectedPost.tableEmbedmentM - 1e-6
                         ? ` — ⚠ shallower than the ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm the reference table gives for this post.`
                         : ` (the reference table gives ${Math.round(selectedPost.tableEmbedmentM * 1000)}mm for this post).`}{" "}
@@ -1112,12 +1171,14 @@ const RetainingWallEditor: React.FC<{
                       label: holeDepthOverrideMm ? "Hole depth (set)" : "Hole depth",
                       value: totals.postIndices.length ? mmRange(totals.minHoleDepthM, totals.maxHoleDepthM) : "—",
                     },
-                    { label: "Concrete, net of posts", value: formatM3(totals.totalConcreteVolumeM3) },
+                    { label: "Concrete, piles accounted for", value: formatM3(totals.totalConcreteVolumeM3) },
                     { label: "Concrete + 10% waste", value: formatM3(totals.totalConcreteVolumeM3 * 1.1) },
-                    { label: "Gravel base pads", value: formatM3(totals.totalGravelBaseVolumeM3) },
+                    ...(calcSettings.gravelBaseAllowanceM > 0 ? [{ label: "Gravel base pads", value: formatM3(totals.totalGravelBaseVolumeM3) }] : []),
                     { label: "Total drilled volume", value: formatM3(totals.totalFillVolumeM3) },
                   ]}
-                  note={`${totals.augerTooSmall ? "⚠ That auger is too small for at least one post here — the post won't fit down the hole. " : ""}${totals.shallowHolePostIndices.length ? `⚠ The set hole depth is shallower than the reference table gives for post${totals.shallowHolePostIndices.length > 1 ? "s" : ""} ${postList(totals.shallowHolePostIndices)}. ` : ""}${totals.undersizedPostIndices.length ? `⚠ The set post size is smaller than the reference table gives for post${totals.undersizedPostIndices.length > 1 ? "s" : ""} ${postList(totals.undersizedPostIndices)}. ` : ""}Hole depth is from the post's ground level to the bottom of the hole, gravel base pad included. Concrete is each hole above its gravel base pad, less the post’s own volume — the figure to order from, before the 10% allowance for over-dug holes and spillage. Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load.`}
+                  alert={`${totals.augerTooSmall ? "⚠ That auger is too small for at least one post here — the post won't fit down the hole. " : ""}${totals.shallowHolePostIndices.length ? `⚠ The set hole depth is shallower than the reference table gives for post${totals.shallowHolePostIndices.length > 1 ? "s" : ""} ${postList(totals.shallowHolePostIndices)}. ` : ""}${totals.undersizedPostIndices.length ? `⚠ The set post size is smaller than the reference table gives for post${totals.undersizedPostIndices.length > 1 ? "s" : ""} ${postList(totals.undersizedPostIndices)}. ` : ""}`.trim() || undefined}
+                  noteToggle
+                  note={`Hole depth is from the post's ground level to the bottom of the hole${calcSettings.gravelBaseAllowanceM > 0 ? ", gravel base pad included" : ""}. Concrete is each hole above its gravel base pad, less the post’s own volume — the figure to order from, before the 10% allowance for over-dug holes and spillage. Embeds deeper than a simple fence post — it has to resist the retained soil's push over its whole buried length, not just wind load.`}
                 />
                 <SpecCard
                   title={`Boards${forWall}`}
@@ -1146,12 +1207,8 @@ const RetainingWallEditor: React.FC<{
                         .join(" / ") + " m",
                     },
                   ]}
+                  noteToggle
                   note={`${rakedTopBoard ? "The top board is a full board laid on the rake of the wall; the level boards run up to its underside and the ones that meet it are cut down along their length to suit. It's measured along the slope, and joined at any post where the rake changes. " : ""}Every layer is planned as real cut pieces. A board runs on over as many posts as the longest available length allows and only ever ends on a post; it always breaks at a corner or an excluded bay. ${boardsToPostOutside ? "Lengths are post centre to post centre, except at the two ends of each wall, where the board runs on to the outside face of the end post" : "Lengths are post centre to post centre, including at the ends of each wall"} — change that under “Board ends” above the elevation. Where a wall is too long for one board, each row's joins are staggered onto different posts than the row below — see the join marks on the elevation. The order is worked out with longest pieces first, cutting shorter pieces from offcuts where they fit, and no allowance for saw cuts or waste.${shownSegment !== null ? " Ordered wall by wall, offcuts can't be shared between walls, so the walls' orders can add up to more than the whole-wall order." : ""} Change the available lengths in the calculation settings.`}
-                />
-                <SpecCard
-                  title={`Drainage backfill${forWall}`}
-                  rows={[{ label: "Volume", value: formatM3(totals.totalBackfillVolumeM3) }]}
-                  note={`Compacted free-draining gravel behind the facing boards, ${Math.round(calcSettings.backfillThicknessM * 1000)}mm thick.`}
                 />
                 <LaborSummary
                   estimate={totals.labor}
@@ -1160,6 +1217,31 @@ const RetainingWallEditor: React.FC<{
                   hideSetup={shownSegment !== null}
                 />
               </div>
+              {/* not locked either: holes are measured on site, after the
+                  wall's set up and locked */}
+              <ConcreteQaCard
+                posts={totals.postIndices.map((i) => profile.posts[i])}
+                gravelBaseM={calcSettings.gravelBaseAllowanceM}
+                standoffM={pileStandoffMm / 1000}
+                measuredMm={measuredHoleDepthsMm}
+                onChange={setMeasuredHoleDepthsMm}
+                title={`Concrete Quantity Check${forWall}`}
+                onSpeedRun={() => setSpeedRunOpen(true)}
+              />
+              {speedRunOpen && (
+                <ConcreteSpeedRun
+                  profile={profile}
+                  settings={calcSettings}
+                  topCapEnabled={topCapEnabled}
+                  planPoints={planPoints}
+                  retainedSide={retainedSide}
+                  posts={totals.postIndices.map((i) => profile.posts[i])}
+                  standoffM={pileStandoffMm / 1000}
+                  measuredMm={measuredHoleDepthsMm}
+                  onChange={setMeasuredHoleDepthsMm}
+                  onClose={closeSpeedRun}
+                />
+              )}
               {/* deliberately not locked: the order is worked on after the
                   wall is set up, which is exactly when it's locked */}
               <div id="rw-order">

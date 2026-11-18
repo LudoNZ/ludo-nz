@@ -114,6 +114,10 @@ export interface ProfilePost {
   /** m³, what actually gets poured: the hole above the gravel base pad,
    * less the space the post itself takes up */
   concreteVolumeM3: number
+  /** m, how far the post itself goes below ground: the hole, less the
+   * gravel base pad and any stand-off (the gap left under the post, which
+   * is filled with concrete) */
+  postDepthM: number
 }
 
 export interface ProfileBay {
@@ -268,6 +272,18 @@ export interface ProfileOverrides {
    * laid on the rake, with the level courses under it cut down to suit —
    * see bayCourseLayout */
   rakedTopBoard?: boolean
+  /** m — the post is held this far up off the gravel base pad, and the
+   * gap under it filled with concrete (0 = it stands on the pad) */
+  pileStandoffM?: number | null
+}
+
+/** m³ of concrete for one hole `embedmentM` deep: the hole above its
+ * gravel base pad, less the part of that taken up by the post — which
+ * stops `standoffM` short of the pad, so the gap under it is concrete. */
+export function holeConcreteM3(holeDiameterM: number, embedmentM: number, gravelBaseM: number, standoffM: number, sizeLabel: string): number {
+  const concreteDepthM = Math.max(0, embedmentM - gravelBaseM)
+  const postDepthM = Math.max(0, concreteDepthM - Math.max(0, standoffM))
+  return Math.max(0, calcHoleVolumeM3(holeDiameterM, concreteDepthM) - postSectionAreaM2(sizeLabel) * postDepthM)
 }
 
 /** The materials and labour for a set of posts and bays — the whole
@@ -497,6 +513,9 @@ function planPieces(
   return pieces
 }
 
+/** the longest a top cap piece runs before it's joined */
+const CAP_MAX_LENGTH_M = 6
+
 type LayerAgg = {
   totalLengthM: number
   rakeCutCount: number
@@ -620,8 +639,12 @@ function planBoardLayers(
         if (stretch && !stepsApart) stretch.push(bay)
         else capStretches.push([bay])
       }
+      // the cap sits on top, clear of the boards' joins, so it isn't
+      // staggered against them: just the fewest pieces (so the fewest
+      // joins), no piece over CAP_MAX_LENGTH_M (or the longest stock length)
+      const capMaxLengthM = Math.min(maxLengthM, CAP_MAX_LENGTH_M)
       for (const stretch of capStretches) {
-        const capPieces = planPieces(stretch, maxLengthM, ((maxCourses + 1) % 2) as 0 | 1)
+        const capPieces = planPieces(stretch, capMaxLengthM, 0)
         accumulatePieces(topCapAgg, stretch, capPieces, (postIndex) => posts[postIndex].topLevelM + capThicknessM, "topCap")
       }
     }
@@ -827,6 +850,7 @@ export function buildWallProfile(
       holeDiameterM,
       holeVolumeM3,
       concreteVolumeM3,
+      postDepthM: 0, // set once every hole's depth is known, below
     }
   })
 
@@ -885,6 +909,14 @@ export function buildWallProfile(
   for (const p of posts) {
     const d = validDepth(p.index)
     if (d?.mode === "lone") setDepth(p, d.depthM, "lone")
+  }
+
+  // with every hole's depth settled: the concrete and how far the post
+  // goes down, allowing for any stand-off under the post
+  const standoffM = Math.max(0, overrides.pileStandoffM ?? 0)
+  for (const p of posts) {
+    p.concreteVolumeM3 = holeConcreteM3(p.holeDiameterM, p.embedmentM, settings.gravelBaseAllowanceM, standoffM, p.sizeLabel)
+    p.postDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM - standoffM)
   }
 
   // Stepped runs: every bay is a whole number of courses high, so the top
