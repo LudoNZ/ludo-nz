@@ -1,0 +1,290 @@
+.stairsPage {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+
+  h1 {
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    color: var(--color-primary);
+    margin-bottom: 0.5rem;
+  }
+}
+
+.intro {
+  opacity: 0.85;
+  line-height: 1.55;
+  margin-bottom: 1.5rem;
+  max-width: 46rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+
+  @media (max-width: 800px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem 1.1rem;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    min-width: 0;
+  }
+
+  legend {
+    padding: 0 0.4rem;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--color-primary);
+  }
+
+  select {
+    padding: 0.5rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: max(0.95rem, 16px);
+    font-family: inherit;
+  }
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  > label {
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+}
+
+.fieldHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+
+  > label:first-child {
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+}
+
+.hint {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+
+  input {
+    accent-color: var(--color-primary);
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+.numberUnit {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  input {
+    width: 5.5rem;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(27, 177, 47, 0.1);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+    }
+  }
+
+  span {
+    font-size: 0.85rem;
+    opacity: 0.7;
+  }
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+
+  > button:not(.textButton) {
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 2px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background: none;
+    color: var(--color-primary);
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+  }
+}
+
+.stepperValue {
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.textButton {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-primary);
+    color: var(--background);
+  }
+}
+
+.presetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.presetActive {
+  background-color: var(--color-primary) !important;
+  color: var(--background) !important;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.compliance {
+  padding: 0.9rem 1.1rem;
+  border: 2px solid var(--color-primary);
+  border-left-width: 6px;
+  border-radius: var(--borderRadius);
+
+  strong {
+    display: block;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
+
+  p {
+    font-size: 0.88rem;
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+}
+
+.main {
+}
+
+.service {
+  border-color: var(--color-secondary);
+
+  strong {
+    color: var(--color-secondary);
+  }
+}
+
+.fail {
+  border-color: var(--color-danger);
+
+  strong {
+    color: var(--color-danger);
+  }
+}
+
+.diagramCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h2 {
+    font-size: 1rem;
+    color: var(--color-primary);
+  }
+}
+
+.note {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.tip {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.resultsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.disclaimer {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  opacity: 0.6;
+  max-width: 52rem;
+}

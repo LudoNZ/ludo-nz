@@ -1,0 +1,591 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import SpecCard from "@/components/structures/specCard";
+import {
+  DiagramLegend,
+  StairElevation,
+  StairPlan,
+} from "@/components/stairs/stairDiagrams";
+import {
+  BOARD_PRESETS,
+  DEFAULT_INPUT,
+  FRAMING_LABELS,
+  FramingType,
+  STACKED_FRAMES_SUGGESTED_MAX,
+  MAIN_PRIVATE,
+  MIN_RIP,
+  OPEN_RISER_MAX_GAP,
+  SERVICE,
+  StairInput,
+  TWO_R_PLUS_G,
+  calculateStairs,
+} from "@/components/stairs/stairs";
+import styles from "./stairsPage.module.scss";
+
+const mm = (v: number) => `${Math.round(v)} mm`;
+const m = (v: number) => `${(v / 1000).toFixed(2)} m`;
+
+const NumberField: React.FC<{
+  id: string;
+  label: string;
+  hint?: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  onChange: (v: number) => void;
+}> = ({
+  id,
+  label,
+  hint,
+  value,
+  min,
+  max,
+  step = 1,
+  unit = "mm",
+  onChange,
+}) => (
+  <div className={styles.field}>
+    <label htmlFor={id}>{label}</label>
+    {hint && <span className={styles.hint}>{hint}</span>}
+    <div className={styles.numberUnit}>
+      <input
+        id={id}
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={Number(value.toFixed(1))}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (Number.isFinite(v) && e.target.value !== "") onChange(v);
+        }}
+      />
+      <span>{unit}</span>
+    </div>
+  </div>
+);
+
+/** Straight flight of deck stairs between the ground and a deck: rise and
+ * going worked out against NZBC D1, framed as straight stringers with
+ * wedge blocks screwed on top to make each step, and the decking boards
+ * laid out on every tread (and riser, if closed) — to-scale side and plan
+ * views, plus a cut list. */
+const StairsPage = () => {
+  const [input, setInput] = useState<StairInput>(DEFAULT_INPUT);
+  const set = <K extends keyof StairInput>(key: K, value: StairInput[K]) =>
+    setInput((s) => ({ ...s, [key]: value }));
+
+  const r = useMemo(() => calculateStairs(input), [input]);
+
+  const stacked = input.framing === "stacked-frames";
+  const hasRip = r.treadBoards.some((b) => b.ripped);
+  const rip = r.treadBoards.find((b) => b.ripped);
+  const riserRip = r.riserBoardPieces.find((b) => b.ripped);
+
+  const complianceText =
+    r.compliance === "main"
+      ? `Meets ${MAIN_PRIVATE.label.toLowerCase()} limits (rise ≤ ${MAIN_PRIVATE.maxRise}, going ≥ ${MAIN_PRIVATE.minGoing}, ≤ ${MAIN_PRIVATE.maxPitchDeg}°, 2R + G ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max}).`
+      : r.compliance === "service"
+        ? `Only OK as a service stair (rise ≤ ${SERVICE.maxRise}, going ≥ ${SERVICE.minGoing}, ≤ ${SERVICE.maxPitchDeg}°) — ${r.serviceNotes.join("; ")}. A service stair is one that isn't the main way up, e.g. down to a back yard, shed or plant area. Not for the main entrance stair.`
+        : `Doesn't meet the Building Code even as a service stair: ${r.failures.join("; ")}.`;
+
+  const notes: string[] = [];
+  if (rip && rip.width < MIN_RIP)
+    notes.push(
+      `The back board on each tread is ripped to only ${mm(rip.width)} — too thin to fix well. Change the nosing or going so boards fit.`,
+    );
+  if (riserRip && riserRip.width < MIN_RIP)
+    notes.push(
+      `The top riser board is ripped to only ${mm(riserRip.width)} — consider a narrower board for the risers.`,
+    );
+  if (!input.riserBoards && r.treads > 0 && r.openRiserGap > OPEN_RISER_MAX_GAP)
+    notes.push(
+      `Open risers leave a ${mm(r.openRiserGap)} gap. Where young children could use the stair, NZBC F4 wants gaps a 100 mm sphere can't pass — add riser boards or a batten.`,
+    );
+  if (r.wedges.needsWiderBoard)
+    notes.push(
+      `The wedges are too big to cut from the ${mm(input.stringerDepth)} stringer stock — cut them from a wider board.`,
+    );
+  if (input.boardThickness <= 25 && input.maxStringerSpacing > 450)
+    notes.push(
+      `${mm(input.boardThickness)} boards shouldn't span more than about 450 mm — bring the supports closer.`,
+    );
+  if (stacked && r.frames.timberTooShallow)
+    notes.push(
+      `The tallest frame is ${mm(r.frames.tallest)} high — deeper than the ${mm(input.stringerDepth)} timber. Use deeper timber or a packer on top.`,
+    );
+  if (stacked && r.treads > STACKED_FRAMES_SUGGESTED_MAX)
+    notes.push(
+      `${r.treads} stacked frames is a lot of timber and weight — past ${STACKED_FRAMES_SUGGESTED_MAX} steps the stringer and wedge blocks are usually the better build.`,
+    );
+
+  return (
+    <div className={styles.stairsPage}>
+      <h1>Stairs Calculator</h1>
+      <p className={styles.intro}>
+        A straight flight of deck stairs from the ground up to a deck. Set the
+        height and it works out the fewest steps that meet the Building Code,
+        frames them on straight stringers with wedge blocks, and shows exactly
+        where the decking boards land on every tread.
+      </p>
+
+      <div className={styles.layout}>
+        <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
+          <fieldset>
+            <legend>Stair</legend>
+            <NumberField
+              id="rise"
+              label="Total rise"
+              hint="Ground to the top of the deck boards"
+              value={input.totalRise}
+              min={100}
+              max={4000}
+              step={10}
+              onChange={(v) => set("totalRise", Math.max(100, v))}
+            />
+            <div className={styles.field}>
+              <label>Risers (steps up)</label>
+              <span className={styles.hint}>
+                {input.risers === null
+                  ? `Auto — fewest that keep the rise ≤ ${MAIN_PRIVATE.maxRise} mm`
+                  : "Set by hand"}
+              </span>
+              <div className={styles.stepper}>
+                <button
+                  type="button"
+                  onClick={() => set("risers", Math.max(2, r.risers - 1))}
+                  aria-label="One fewer riser"
+                  disabled={r.risers <= 2}
+                >
+                  −
+                </button>
+                <span className={styles.stepperValue}>{r.risers}</span>
+                <button
+                  type="button"
+                  onClick={() => set("risers", r.risers + 1)}
+                  aria-label="One more riser"
+                >
+                  +
+                </button>
+                {input.risers !== null && (
+                  <button
+                    type="button"
+                    className={styles.textButton}
+                    onClick={() => set("risers", null)}
+                  >
+                    Auto
+                  </button>
+                )}
+                {r.fewestRisersService < r.fewestRisersMain &&
+                  r.risers !== r.fewestRisersService && (
+                    <button
+                      type="button"
+                      className={styles.textButton}
+                      onClick={() => set("risers", r.fewestRisersService)}
+                      title={`Fewest risers at up to ${SERVICE.maxRise} mm — service stairs only`}
+                    >
+                      Squeeze ({r.fewestRisersService})
+                    </button>
+                  )}
+              </div>
+            </div>
+            <NumberField
+              id="going"
+              label="Going"
+              hint={`Front to back of each step, nosing to nosing — min ${MAIN_PRIVATE.minGoing} (${SERVICE.minGoing} service)`}
+              value={input.going}
+              min={150}
+              max={450}
+              step={5}
+              onChange={(v) => set("going", Math.max(100, v))}
+            />
+            <NumberField
+              id="width"
+              label="Stair width"
+              value={input.width}
+              min={300}
+              max={6000}
+              step={50}
+              onChange={(v) => set("width", Math.max(300, v))}
+            />
+          </fieldset>
+
+          <fieldset>
+            <legend>Framing</legend>
+            <div className={styles.field}>
+              <label htmlFor="framing">Type</label>
+              <select
+                id="framing"
+                value={input.framing}
+                onChange={(e) => set("framing", e.target.value as FramingType)}
+              >
+                {(Object.keys(FRAMING_LABELS) as FramingType[]).map((f) => (
+                  <option key={f} value={f}>
+                    {FRAMING_LABELS[f]}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.hint}>
+                {stacked
+                  ? "A flat, level frame for each step, running all the way back to the deck. Each one sits on the frame below and is one going shorter. Best for small stairs."
+                  : "An uncut stringer at the stair's pitch, with a right-angle triangle block (rise × going) fixed on top for each tread."}
+              </span>
+            </div>
+            <div className={styles.row}>
+              <NumberField
+                id="sDepth"
+                label={stacked ? "Timber depth" : "Stringer depth"}
+                value={input.stringerDepth}
+                min={90}
+                max={300}
+                step={10}
+                onChange={(v) => set("stringerDepth", Math.max(90, v))}
+              />
+              <NumberField
+                id="sThick"
+                label="Thickness"
+                value={input.stringerThickness}
+                min={35}
+                max={90}
+                step={5}
+                onChange={(v) => set("stringerThickness", Math.max(20, v))}
+              />
+            </div>
+            <NumberField
+              id="sSpacing"
+              label={stacked ? "Max joist spacing" : "Max stringer spacing"}
+              hint="What the tread boards can span: 450 for 20 mm boards, 600 for 32 mm"
+              value={input.maxStringerSpacing}
+              min={300}
+              max={900}
+              step={50}
+              onChange={(v) => set("maxStringerSpacing", Math.max(200, v))}
+            />
+          </fieldset>
+
+          <fieldset>
+            <legend>Decking boards</legend>
+            <div className={styles.presetRow}>
+              {BOARD_PRESETS.map((b) => {
+                const active =
+                  input.boardWidth === b.width &&
+                  input.boardThickness === b.thickness;
+                return (
+                  <button
+                    key={`${b.width}x${b.thickness}`}
+                    type="button"
+                    className={`${styles.textButton} ${active ? styles.presetActive : ""}`}
+                    aria-pressed={active}
+                    onClick={() =>
+                      setInput((s) => ({
+                        ...s,
+                        boardWidth: b.width,
+                        boardThickness: b.thickness,
+                        maxStringerSpacing: b.maxSpan,
+                      }))
+                    }
+                  >
+                    {b.width} × {b.thickness}
+                  </button>
+                );
+              })}
+            </div>
+            <div className={styles.row}>
+              <NumberField
+                id="bWidth"
+                label="Width"
+                value={input.boardWidth}
+                min={40}
+                max={300}
+                step={5}
+                onChange={(v) => set("boardWidth", Math.max(40, v))}
+              />
+              <NumberField
+                id="bThick"
+                label="Thickness"
+                value={input.boardThickness}
+                min={15}
+                max={50}
+                onChange={(v) => set("boardThickness", Math.max(10, v))}
+              />
+              <NumberField
+                id="bGap"
+                label="Gap"
+                value={input.boardGap}
+                min={0}
+                max={15}
+                onChange={(v) => set("boardGap", Math.max(0, v))}
+              />
+            </div>
+            <div className={styles.field}>
+              <div className={styles.fieldHeader}>
+                <label htmlFor="nosing">Nosing overhang</label>
+                <label className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={input.nosing === null}
+                    onChange={(e) =>
+                      set(
+                        "nosing",
+                        e.target.checked ? null : Math.round(r.nosing),
+                      )
+                    }
+                  />
+                  Auto
+                </label>
+              </div>
+              <span className={styles.hint}>
+                {input.nosing === null
+                  ? "Set so whole boards cover each tread, where that gives a sensible overhang"
+                  : "How far the front board overhangs the riser"}
+              </span>
+              <div className={styles.numberUnit}>
+                <input
+                  id="nosing"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={Math.round(r.nosing)}
+                  disabled={input.nosing === null}
+                  onChange={(e) =>
+                    e.target.value !== "" &&
+                    set("nosing", Math.max(0, Number(e.target.value)))
+                  }
+                />
+                <span>mm</span>
+              </div>
+            </div>
+            <label className={styles.check}>
+              <input
+                type="checkbox"
+                checked={input.riserBoards}
+                onChange={(e) => set("riserBoards", e.target.checked)}
+              />
+              Close the risers with decking boards
+            </label>
+          </fieldset>
+        </form>
+
+        <div className={styles.results}>
+          <div className={`${styles.compliance} ${styles[r.compliance]}`}>
+            <strong>
+              {r.risers} risers of {mm(r.rise)} · {r.treads} treads of{" "}
+              {mm(r.going)} · {m(r.totalRun)} run · {r.pitchDeg.toFixed(1)}°
+            </strong>
+            <p>{complianceText}</p>
+          </div>
+
+          {r.treads === 0 ? (
+            <p className={styles.note}>
+              That&apos;s a single step — no stair framing needed.
+            </p>
+          ) : (
+            <>
+              <div className={styles.diagramCard}>
+                <h2>Side view</h2>
+                <StairElevation input={input} result={r} />
+                <DiagramLegend
+                  riserBoards={input.riserBoards}
+                  hasRip={hasRip || !!riserRip}
+                  stacked={stacked}
+                />
+              </div>
+              <div className={styles.diagramCard}>
+                <h2>From above</h2>
+                <StairPlan input={input} result={r} />
+              </div>
+            </>
+          )}
+
+          {r.suggestedNosing !== null && (
+            <p className={styles.tip}>
+              Tip: a {mm(r.suggestedNosing)} nosing would cover each tread in
+              whole boards, no rip.{" "}
+              <button
+                type="button"
+                className={styles.textButton}
+                onClick={() => set("nosing", Math.round(r.suggestedNosing!))}
+              >
+                Use it
+              </button>
+            </p>
+          )}
+          {notes.map((n) => (
+            <p key={n} className={styles.note}>
+              ⚠ {n}
+            </p>
+          ))}
+
+          {r.treads > 0 && (
+            <div className={styles.resultsGrid}>
+              <SpecCard
+                title="Steps"
+                rows={[
+                  { label: "Rise", value: `${r.risers} × ${mm(r.rise)}` },
+                  { label: "Going", value: `${r.treads} × ${mm(r.going)}` },
+                  { label: "Total run", value: mm(r.totalRun) },
+                  { label: "Pitch", value: `${r.pitchDeg.toFixed(1)}°` },
+                  { label: "2R + G", value: mm(r.twoRPlusG) },
+                ]}
+                note="The top riser steps up onto the deck itself, so there's one fewer tread than risers."
+                noteToggle
+              />
+              {stacked ? (
+                <SpecCard
+                  title="Step frames"
+                  rows={[
+                    {
+                      label: "Frames",
+                      value: `${r.frames.list.length}, stacked`,
+                    },
+                    {
+                      label: "Each frame",
+                      value: `2 rails × ${mm(r.frames.railLength)} + ${r.frames.joistsPerFrame} joists at ${mm(r.supports.spacing)}`,
+                    },
+                    ...r.frames.list.map((f) => ({
+                      label: `Step ${f.step}`,
+                      value: `${mm(f.depth)} deep × ${mm(f.height)} high (joists ${mm(f.joistLength)})`,
+                    })),
+                    {
+                      label: "Timber",
+                      value: `${input.stringerDepth} × ${input.stringerThickness}, ${r.frames.linealM.toFixed(1)} m`,
+                    },
+                    {
+                      label: "Buy",
+                      value: r.frames.stock
+                        ? `${r.frames.stock.lengths} × ${r.frames.stock.lengthM.toFixed(1)} m`
+                        : "—",
+                    },
+                  ]}
+                  note={`Each frame is a front rail and back rail across the width with joists between them front to back, timber on edge. The bottom frame sits on the ground or pavers and is ${mm(r.frames.list[0]?.height ?? 0)} high. Every frame above is ${mm(r.rise)} high, sits on the frame below, runs back to the deck, and starts one going (${mm(r.going)}) further back. Rip the timber down to each frame's height. Fix each frame down to the one below and the top one to the deck.`}
+                  noteToggle
+                />
+              ) : (
+                <>
+                  <SpecCard
+                    title="Stringers"
+                    rows={[
+                      {
+                        label: "Count",
+                        value: `${r.supports.count} at ${mm(r.supports.spacing)} centres`,
+                      },
+                      {
+                        label: "Size",
+                        value: `${input.stringerDepth} × ${input.stringerThickness}`,
+                      },
+                      {
+                        label: "Length (top edge)",
+                        value: mm(r.stringer.topEdgeLength),
+                      },
+                      {
+                        label: "Angle",
+                        value: `${r.stringer.angleDeg.toFixed(1)}°`,
+                      },
+                      {
+                        label: "Level cut (foot)",
+                        value: mm(r.stringer.levelCutLength),
+                      },
+                      {
+                        label: "Plumb cut (top)",
+                        value: mm(r.stringer.plumbCutHeight),
+                      },
+                      {
+                        label: "Buy",
+                        value: r.stringer.stock
+                          ? `${r.stringer.stock.lengths} × ${r.stringer.stock.lengthM.toFixed(1)} m${r.stringer.stock.piecesPerLength > 1 ? ` (${r.stringer.stock.piecesPerLength} per length)` : ""}`
+                          : "—",
+                      },
+                    ]}
+                    note={`Uncut — the top edge runs ${mm(input.boardThickness)} below the corners of the treads, so each wedge's long side sits flat on it. The foot is a level cut on the pad, the top a plumb cut against the deck's boundary joist, ${mm(r.rise)} below the top of the joist.`}
+                    noteToggle
+                  />
+                  <SpecCard
+                    title="Wedge blocks"
+                    rows={[
+                      {
+                        label: "Per stringer",
+                        value: `${r.wedges.perStringer}`,
+                      },
+                      { label: "Total", value: `${r.wedges.total}` },
+                      {
+                        label: "Legs",
+                        value: `${mm(r.rise)} × ${mm(r.going)}`,
+                      },
+                      { label: "Long side", value: mm(r.wedges.hypotenuse) },
+                      {
+                        label: "Cut from",
+                        value: `${r.wedges.stockLengthM.toFixed(2)} m of ${input.stringerDepth} × ${input.stringerThickness}`,
+                      },
+                    ]}
+                    note={`${r.wedges.rectangles ? `Cut ${mm(r.rise)} × ${mm(r.going)} rectangles and split each on the diagonal for two wedges.` : `The rise is wider than the board, so cut them nested, long side along the board edge, alternating up and down.`} The going leg goes on top (the tread), the rise leg faces forward (the riser). The bottom wedge has ${mm(r.wedges.bottomTrim)} trimmed off its point so it sits flat on the pad. Glue and screw each one to the stringer.`}
+                    noteToggle
+                  />
+                </>
+              )}
+              <SpecCard
+                title="Decking boards"
+                rows={[
+                  {
+                    label: "Per tread",
+                    value: r.treadBoards
+                      .map((b) =>
+                        b.ripped
+                          ? `${mm(b.width)} rip`
+                          : `${Math.round(b.width)}`,
+                      )
+                      .join(" + "),
+                  },
+                  { label: "Nosing", value: mm(r.nosing) },
+                  { label: "Tread depth", value: mm(r.treadDepth) },
+                  ...(input.riserBoards
+                    ? [
+                        {
+                          label: "Per riser",
+                          value: r.riserBoardPieces
+                            .map((b) =>
+                              b.ripped
+                                ? `${mm(b.width)} rip`
+                                : `${Math.round(b.width)}`,
+                            )
+                            .join(" + "),
+                        },
+                      ]
+                    : []),
+                  {
+                    label: "Pieces",
+                    value: `${r.boards.treadPieces + r.boards.riserPieces} × ${mm(r.boards.pieceLength)}`,
+                  },
+                  {
+                    label: "Buy",
+                    value: r.boards.stock
+                      ? `${r.boards.stock.lengths} × ${r.boards.stock.lengthM.toFixed(1)} m (${r.boards.stock.piecesPerLength} per length)`
+                      : "—",
+                  },
+                  { label: "Screws", value: `~${r.screws}` },
+                ]}
+                note="Boards are laid from the front edge back, full width first, so any rip ends up at the back of the tread, tucked against the next riser where it's least noticed."
+                noteToggle
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className={styles.disclaimer}>
+        Rise and going limits are from NZ Building Code clause D1 (D1/AS1): main
+        private stairs max {MAIN_PRIVATE.maxRise} mm rise and min{" "}
+        {MAIN_PRIVATE.minGoing} mm going. Service stairs, ones that aren&apos;t
+        the main way up, are allowed up to {SERVICE.maxRise} mm rise and down to{" "}
+        {SERVICE.minGoing} mm going. Use that only if you really have to squeeze
+        a stair in. Handrails and barriers (D1 / F4) aren&apos;t covered here;
+        check them for your stair. It&apos;s a rule-of-thumb guide, not a
+        substitute for your building consent documents.
+      </p>
+    </div>
+  );
+};
+
+export default StairsPage;

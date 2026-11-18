@@ -1,0 +1,135 @@
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 70vh;
+}
+
+.ground {
+  stroke: var(--foreground);
+  opacity: 0.7;
+}
+
+.hatch {
+  stroke: var(--foreground);
+  opacity: 0.2;
+}
+
+.stringer {
+  fill: #d9b98a;
+  stroke: #7a5a2b;
+}
+
+.planSvg {
+  max-height: 42vh;
+}
+
+// stringers seen from above, under the boards — drawn on top, dashed
+.stringerHidden {
+  fill: rgba(217, 185, 138, 0.35);
+  stroke: #f3e2c4;
+  stroke-dasharray: 14 8;
+}
+
+.packing {
+  fill: #d9b98a;
+  stroke: #7a5a2b;
+  stroke-dasharray: 10 6;
+  opacity: 0.7;
+}
+
+.wedge {
+  fill: #b88a4e;
+  stroke: #6b4a1e;
+}
+
+.board {
+  fill: #8b5e34;
+  stroke: #4a3018;
+}
+
+.boardRipped {
+  fill: #e0a030;
+  stroke: #7a5200;
+}
+
+.deckBoard {
+  fill: #8b5e34;
+  opacity: 0.35;
+}
+
+.deckFrame {
+  fill: #d9b98a;
+  stroke: #7a5a2b;
+  opacity: 0.8;
+}
+
+.deckFrameFaint {
+  fill: #d9b98a;
+  opacity: 0.25;
+}
+
+.label {
+  fill: var(--foreground);
+  opacity: 0.6;
+  font-family: inherit;
+}
+
+.dim line {
+  stroke: var(--foreground);
+  opacity: 0.55;
+}
+
+.dimText {
+  fill: var(--foreground);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.stepDim .dimText {
+  fill: var(--color-primary);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  list-style: none;
+  font-size: 0.82rem;
+  opacity: 0.85;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1px solid;
+  border-radius: 2px;
+  background-color: currentColor;
+}
+
+.legend .stringer {
+  background-color: #d9b98a;
+  border-color: #7a5a2b;
+}
+
+.legend .wedge {
+  background-color: #b88a4e;
+  border-color: #6b4a1e;
+}
+
+.legend .board {
+  background-color: #8b5e34;
+  border-color: #4a3018;
+}
+
+.legend .boardRipped {
+  background-color: #e0a030;
+  border-color: #7a5200;
+}

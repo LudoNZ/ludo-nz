@@ -59,6 +59,14 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     tags: ["Elevations", "Rakes & openings", "Board order", "Cutting plan"],
     link: "/weatherboards",
   },
+  {
+    id: "stairs",
+    title: "Stairs",
+    description:
+      "Deck stairs from the ground up — the fewest code-compliant steps for your height, framed on straight stringers with wedge blocks, and every decking board placed on the treads.",
+    tags: ["Rise & going", "NZBC D1 aware", "Board layout", "Cut list"],
+    link: "/stairs",
+  },
 ]
 
 // Ideas queued up for the same rule-of-thumb, real-materials-list treatment
@@ -105,12 +113,6 @@ const PLANNED_CALCULATORS: PlannedCalculator[] = [
     title: "Bracing",
     description: "Wall bracing demand vs. bracing-unit capacity, NZS 3604 style — check a floor plan actually stacks up before you frame it.",
     tags: ["Bracing demand", "BU capacity"],
-  },
-  {
-    id: "stair-stringer",
-    title: "Stair Stringer",
-    description: "Rise/going/tread count for a code-compliant stringer between two levels, with a cut-list for the stringer itself.",
-    tags: ["Rise & going", "Cut list"],
   },
   {
     id: "pergola",
