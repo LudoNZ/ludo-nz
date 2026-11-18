@@ -39,12 +39,16 @@ import StepEditor from "./stepEditor"
 import SectionRail, { RailSection } from "./sectionRail"
 import ReferenceTableModal from "./referenceTableModal"
 import SettingsPanel from "./settingsPanel"
+import UndoToast from "./undoToast"
+import { describeWallChange, HISTORY_BURST_MS, HISTORY_LIMIT, onlyLockChanged, WallHistoryEntry } from "@/components/retainingWall/wallHistory"
 import styles from "./retainingWallEditor.module.scss"
 
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
 /** common hire/contractor auger diameters, offered as suggestions — any
  * size can still be typed */
 const AUGER_SIZES_MM = [200, 250, 300, 350, 400, 450, 500, 600]
+/** how long the floating undo bar stays up after each change */
+const UNDO_VISIBLE_MS = 10_000
 
 /** The retaining wall calculator itself, with no idea where its wall is
  * kept: it starts from `initial` (read once, on mount — the caller mounts
@@ -137,6 +141,134 @@ const RetainingWallEditor: React.FC<{
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
   const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
 
+  // ---- change history / undo ----
+  // Every saveable change (spotted by the report effect below) pushes the
+  // wall as it was onto `undoStack`; edits within HISTORY_BURST_MS of each
+  // other merge into one step. The undo bar floats on screen for
+  // UNDO_VISIBLE_MS after each change. History lasts as long as the page is
+  // open — it isn't saved with the project.
+  const undoStack = useRef<WallHistoryEntry[]>([])
+  const redoStack = useRef<WallHistoryEntry[]>([])
+  const burst = useRef<{ before: WallProject; timer: ReturnType<typeof setTimeout> } | null>(null)
+  // set while a restored wall is being applied, so the report effect saves
+  // it without recording it as a new change
+  const restoringRef = useRef(false)
+  // bumped on every restore, to remount inputs that only read their value
+  // once (the post editor's fields)
+  const [restoreNonce, setRestoreNonce] = useState(0)
+  const [undoBar, setUndoBar] = useState<{ message: string; undoCount: number; canRedo: boolean } | null>(null)
+  const undoBarTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showUndoBar = (message: string) => {
+    setUndoBar({ message, undoCount: undoStack.current.length, canRedo: redoStack.current.length > 0 })
+    if (undoBarTimer.current) clearTimeout(undoBarTimer.current)
+    undoBarTimer.current = setTimeout(() => setUndoBar(null), UNDO_VISIBLE_MS)
+  }
+
+  const endBurst = () => {
+    if (burst.current) clearTimeout(burst.current.timer)
+    burst.current = null
+  }
+
+  const recordChange = (before: WallProject, after: WallProject) => {
+    if (!before.locked && after.locked) {
+      // locking means the job is set up: undo mustn't be able to reach
+      // back past it and quietly change the locked wall
+      endBurst()
+      undoStack.current = []
+      redoStack.current = []
+      setUndoBar(null)
+      return
+    }
+    if (onlyLockChanged(before, after)) return
+
+    const startedFrom = burst.current?.before
+    endBurst()
+    if (startedFrom) {
+      if (onlyLockChanged(startedFrom, after)) {
+        // changed and changed straight back: nothing to undo
+        undoStack.current.pop()
+        setUndoBar(null)
+        return
+      }
+      const top = undoStack.current[undoStack.current.length - 1]
+      if (top) top.label = describeWallChange(startedFrom, after)
+    } else {
+      undoStack.current.push({ wall: before, label: describeWallChange(before, after) })
+      if (undoStack.current.length > HISTORY_LIMIT) undoStack.current.shift()
+      redoStack.current = []
+    }
+    const timer = setTimeout(() => (burst.current = null), HISTORY_BURST_MS)
+    burst.current = { before: startedFrom ?? before, timer }
+    showUndoBar(undoStack.current[undoStack.current.length - 1].label)
+  }
+  const recordChangeRef = useRef(recordChange)
+  recordChangeRef.current = recordChange
+
+  const currentWall = () => (lastReported.current ? (JSON.parse(lastReported.current) as WallProject) : null)
+
+  /** put every saveable field back to `wall`'s — except the lock, which
+   * stays as it is now */
+  const applyWall = (wall: WallProject) => {
+    // nothing would change, so the report effect wouldn't run to clear the flag
+    if (JSON.stringify(wall) === lastReported.current) return
+    restoringRef.current = true
+    // the restored wall's hand-set levels already match its own post
+    // layout; tell the follow-their-posts effect so, or it would shift them
+    alignedCounts.current = segmentBayCounts(segmentLengths(wall.planPoints), wall.retainedHeightM, wall.soil, wall.calcSettings, wall.runSpacing).join(",")
+    setHeightEditing(false)
+    setPlanPoints(wall.planPoints)
+    setRetainedSide(wall.retainedSide)
+    setRetainedHeight(String(wall.retainedHeightM))
+    setSoil(wall.soil)
+    setRlDatum(String(wall.rlDatumM))
+    setAugerDiameter(wall.augerDiameterMm ? String(wall.augerDiameterMm) : "")
+    setPostSizeOverride(wall.postSizeOverride ?? "")
+    setHoleDepth(wall.holeDepthOverrideMm ? String(wall.holeDepthOverrideMm) : "")
+    setRunSpacing(wall.runSpacing)
+    setBoardOrderFixed(wall.boardOrderFixed)
+    setBoardOrderPartial(wall.boardOrderPartial)
+    setBoardOrdersPlaced(wall.boardOrdersPlaced)
+    setSteppedWalls(wall.steppedWalls)
+    setBayCourses(wall.bayCourses)
+    setControlPoints(wall.controlPoints)
+    setDepthPoints(wall.depthPoints)
+    setTopCapEnabled(wall.topCapEnabled)
+    setRakedTopBoard(wall.rakedTopBoard)
+    setBoardsToPostOutside(wall.boardsToPostOutside)
+    setCalcSettings(wall.calcSettings)
+    setCalcSettingsName(wall.calcSettingsName)
+    setRestoreNonce((n) => n + 1)
+  }
+
+  const undo = () => {
+    endBurst()
+    const entry = undoStack.current.pop()
+    const now = currentWall()
+    if (!entry || !now) return
+    redoStack.current.push({ wall: now, label: entry.label })
+    applyWall({ ...entry.wall, locked })
+    showUndoBar(`Undid: ${entry.label}`)
+  }
+
+  const redo = () => {
+    endBurst()
+    const entry = redoStack.current.pop()
+    const now = currentWall()
+    if (!entry || !now) return
+    undoStack.current.push({ wall: now, label: entry.label })
+    applyWall({ ...entry.wall, locked })
+    showUndoBar(`Redid: ${entry.label}`)
+  }
+
+  useEffect(
+    () => () => {
+      if (undoBarTimer.current) clearTimeout(undoBarTimer.current)
+      if (burst.current) clearTimeout(burst.current.timer)
+    },
+    [],
+  )
+
   // report the wall upward whenever anything saveable actually changes.
   // The first pass only records what the wall looked like on mount
   // (nothing has changed yet — reporting would mark a freshly opened
@@ -175,6 +307,8 @@ const RetainingWallEditor: React.FC<{
     const previous = lastReported.current
     lastReported.current = json
     if (previous === null || previous === json) return
+    if (restoringRef.current) restoringRef.current = false
+    else recordChangeRef.current(JSON.parse(previous) as WallProject, wall)
     onChangeRef.current(wall)
   }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
 
@@ -400,6 +534,16 @@ const RetainingWallEditor: React.FC<{
   return (
     <div className={styles.retainingWallsPage} id="rw-top">
       <SectionRail sections={railSections} />
+      {undoBar && (
+        <UndoToast
+          message={undoBar.message}
+          undoCount={undoBar.undoCount}
+          canRedo={undoBar.canRedo}
+          onUndo={undo}
+          onRedo={redo}
+          onClose={() => setUndoBar(null)}
+        />
+      )}
       {header}
       <div className={styles.headerRow}>
         <div>
@@ -796,7 +940,7 @@ const RetainingWallEditor: React.FC<{
               highlight={boardHighlight}
               belowDrawing={
                 selectedPost && (
-                  <div className={styles.editPanel} key={selectedPost.index}>
+                  <div className={styles.editPanel} key={`${selectedPost.index}-${restoreNonce}`}>
                     <h3>Post #{selectedPost.index + 1}</h3>
                     <fieldset disabled={locked} className={styles.lockable}>
                     <div className={styles.editFields}>
