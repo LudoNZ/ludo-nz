@@ -14,7 +14,11 @@ const NumField: React.FC<{
   className?: string
   ariaLabel?: string
   disabled?: boolean
-}> = ({ value, onChange, id, min, step = 1, className, ariaLabel, disabled }) => {
+  /** step arrows land on whole multiples of `step` (5 → 6, not 5.1 → 6.1
+   * off a 0.1 minimum). `min` is still enforced on what's typed, and any
+   * value can still be typed by hand. */
+  snapToStep?: boolean
+}> = ({ value, onChange, id, min, step = 1, className, ariaLabel, disabled, snapToStep }) => {
   const [text, setText] = useState(String(value))
 
   useEffect(() => {
@@ -26,7 +30,8 @@ const NumField: React.FC<{
       id={id}
       type="number"
       inputMode="decimal"
-      min={min}
+      // the browser counts steps from `min`; leaving it off counts from 0
+      min={snapToStep ? undefined : min}
       step={step}
       className={className}
       aria-label={ariaLabel}

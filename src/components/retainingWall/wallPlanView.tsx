@@ -6,6 +6,7 @@ import NumField from "@/components/weatherboards/numField"
 import { WallProfile } from "./postProfile"
 import {
   appendSegment,
+  prependSegment,
   insertCorner,
   offsetPolyline,
   PlanPoint,
@@ -16,9 +17,9 @@ import {
   segmentLengths,
   setSegmentLength,
   setTurn,
-  sideNormal,
   turnDeg,
 } from "./wallPlan"
+import { placeLabels } from "./planLabels"
 import styles from "./wallPlanView.module.scss"
 
 /** dragged corners land on a 100mm grid… */
@@ -99,6 +100,8 @@ const WallPlanView: React.FC<{
   const handleR = scale * 0.02
   const lengths = segmentLengths(points)
   const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
+  const labelTexts = lengths.map((l, i) => `${segmentLabel(i)} · ${l.toFixed(2)} m`)
+  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, fontSize, view)
 
   const toPlan = (clientX: number, clientY: number): PlanPoint | null => {
     const svg = svgRef.current
@@ -219,24 +222,21 @@ const WallPlanView: React.FC<{
           )
         })}
 
-        {/* run labels, sat out on the low (open) side so they stay clear
-            of the soil band */}
-        {points.slice(0, -1).map((a, i) => {
-          const b = points[i + 1]
-          const n = sideNormal(a, b, lowSide)
-          const mx = (a.xM + b.xM) / 2 + n.xM * fontSize * 2.2
-          const my = (a.yM + b.yM) / 2 + n.yM * fontSize * 2.2
+        {/* run labels, placed clear of each other and of the walls (see
+            placeLabels) — on the low side where there's room */}
+        {labelTexts.map((text, i) => {
+          const at = labelSpots[i]
           return (
             <text
               key={`label-${i}`}
-              x={mx}
-              y={my}
+              x={at.xM}
+              y={at.yM}
               fontSize={fontSize}
               textAnchor="middle"
               dominantBaseline="middle"
               className={selectedSegment === i ? styles.labelSelected : styles.label}
             >
-              {segmentLabel(i)} · {lengths[i].toFixed(2)} m
+              {text}
             </text>
           )
         })}
@@ -300,9 +300,24 @@ const WallPlanView: React.FC<{
 
       <div className={styles.segmentTableHead}>
         <span>Walls</span>
-        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => setEditingWalls((v) => !v)}>
-          {editing ? "Done" : "Edit walls"}
-        </Button>
+        <div className={styles.actions}>
+          {editing && (
+            <>
+              <Button size="small" variant="secondary" onClick={() => onChange(prependSegment(points, retainedSide, NEW_SEGMENT_M))}>
+                + Wall at start
+              </Button>
+              <Button size="small" variant="secondary" onClick={() => onChange(appendSegment(points, retainedSide, NEW_SEGMENT_M))}>
+                + Wall at end
+              </Button>
+            </>
+          )}
+          <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onRetainedSideChange(lowSide)}>
+            Flip side
+          </Button>
+          <Button size="small" variant={editing ? "primary" : "secondary"} disabled={readOnly} onClick={() => setEditingWalls((v) => !v)}>
+            {editing ? "Done" : "Edit walls"}
+          </Button>
+        </div>
       </div>
       <div className={styles.segmentTable}>
         {lengths.map((lengthM, i) => {
@@ -342,7 +357,8 @@ const WallPlanView: React.FC<{
                 <NumField
                   value={Number(lengthM.toFixed(3))}
                   min={MIN_SEGMENT_M}
-                  step={0.1}
+                  step={1}
+                  snapToStep
                   onChange={(v) => onChange(setSegmentLength(points, i, v))}
                   ariaLabel={`Wall ${segmentLabel(i)} length in metres`}
                   disabled={readOnly}
@@ -438,14 +454,6 @@ const WallPlanView: React.FC<{
         </p>
       )}
 
-      <div className={styles.actions}>
-        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onChange(appendSegment(points, retainedSide, NEW_SEGMENT_M))}>
-          Add a wall on the end
-        </Button>
-        <Button size="small" variant="secondary" disabled={readOnly} onClick={() => onRetainedSideChange(lowSide)}>
-          Flip retained side
-        </Button>
-      </div>
     </div>
   )
 }

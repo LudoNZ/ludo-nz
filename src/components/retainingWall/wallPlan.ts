@@ -94,15 +94,38 @@ export const insertCorner = (points: PlanPoint[], segmentIndex: number): PlanPoi
 export const removeCorner = (points: PlanPoint[], vertexIndex: number): PlanPoint[] =>
   points.length <= 2 ? points : points.filter((_, i) => i !== vertexIndex)
 
-/** Adds a new run onto the end of the wall, turning 90° toward the
- * retained ground (a return into the bank — the usual reason to turn). */
+/** Which way a new run added at one end should turn: opposite to the
+ * corner next to that end, so adding runs again and again zigzags out
+ * (left, right, left…) instead of folding back in on itself. With no
+ * corner there yet, it turns toward the retained ground (a return into
+ * the bank — the usual reason to turn). `neighbourTurn` is that corner's
+ * turnDeg, or null if the wall has none. Both ends use the same sense:
+ * "left" turns left walking the wall from A onward. */
+const nextTurnSide = (neighbourTurn: number | null, retainedSide: RetainedSide): RetainedSide =>
+  neighbourTurn === null || Math.abs(neighbourTurn) < 0.05 ? retainedSide : neighbourTurn > 0 ? "right" : "left"
+
+/** Adds a new run onto the end of the wall, square to the last one. */
 export const appendSegment = (points: PlanPoint[], retainedSide: RetainedSide, lengthM: number): PlanPoint[] => {
   const a = points[points.length - 2]
   const b = points[points.length - 1]
   const len = Math.hypot(b.xM - a.xM, b.yM - a.yM)
   if (!(len > 0)) return points
-  const n = sideNormal(a, b, retainedSide)
+  const side = nextTurnSide(points.length > 2 ? turnDeg(points, points.length - 2) : null, retainedSide)
+  const n = sideNormal(a, b, side)
   return [...points, roundPoint({ xM: b.xM + n.xM * lengthM, yM: b.yM + n.yM * lengthM })]
+}
+
+/** Adds a new run before the start of the wall (it becomes wall A and the
+ * others move up a letter), square to the first one. */
+export const prependSegment = (points: PlanPoint[], retainedSide: RetainedSide, lengthM: number): PlanPoint[] => {
+  const a = points[0]
+  const b = points[1]
+  const len = Math.hypot(b.xM - a.xM, b.yM - a.yM)
+  if (!(len > 0)) return points
+  const side = nextTurnSide(points.length > 2 ? turnDeg(points, 1) : null, retainedSide)
+  // placed on that side of A, the new run then turns that way into the old wall A
+  const n = sideNormal(a, b, side)
+  return [roundPoint({ xM: a.xM + n.xM * lengthM, yM: a.yM + n.yM * lengthM }), ...points]
 }
 
 /** Unit normal of run a→b pointing to the given side of travel. */

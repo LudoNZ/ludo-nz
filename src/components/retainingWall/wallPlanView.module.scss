@@ -6,8 +6,9 @@
 
 .svg {
   width: 100%;
-  height: auto;
-  max-height: 26rem;
+  // a fixed height (the drawing is fitted inside it), so adding or
+  // reshaping walls doesn't push the wall list and its buttons around
+  height: clamp(12rem, 45vw, 26rem);
   display: block;
   // a drag on a corner must move the corner, not scroll the page
   touch-action: pan-y;
@@ -168,6 +169,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.5rem;
   font-weight: 600;
 }
