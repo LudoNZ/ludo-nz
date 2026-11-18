@@ -7,6 +7,7 @@ import { useAuth } from "@/context/auth"
 import { useRouter } from "next/navigation"
 import { firestore } from "../../../firebase/client"
 import { collection, getDocs, getCountFromServer, query, orderBy, limit } from "firebase/firestore"
+import MembersSection from "./membersSection"
 
 interface SessionSummary {
   code: string
@@ -51,7 +52,7 @@ export const AdminDashboardPage = () => {
   }, [auth, router])
 
   useEffect(() => {
-    if (!auth?.customClaims?.admin) return
+    if (!auth?.isAdmin) return
     const fetchSessions = async () => {
       setLoading(true)
       setError("")
@@ -104,9 +105,9 @@ export const AdminDashboardPage = () => {
       }
     }
     fetchSessions()
-  }, [filter, auth?.customClaims?.admin])
+  }, [filter, auth?.isAdmin])
 
-  if (!auth?.customClaims?.admin) {
+  if (!auth?.isAdmin) {
     return (
       <div className={styles.adminDashboardPage}>
         <p className={styles.loading}>Checking access...</p>
@@ -117,6 +118,8 @@ export const AdminDashboardPage = () => {
   return (
     <div className={styles.adminDashboardPage}>
       <h1>Admin Dashboard</h1>
+
+      <MembersSection />
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>

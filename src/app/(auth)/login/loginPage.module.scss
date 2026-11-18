@@ -67,6 +67,44 @@
     }
   }
 
+  // shared by the messages inside and outside the form
+  .errorMessage,
+  .noticeMessage {
+    padding: 0.85rem;
+    border-radius: var(--borderRadius);
+    font-size: 1.1rem;
+    text-align: center;
+  }
+
+  > .errorMessage {
+    margin-bottom: 1.25rem;
+    background-color: rgba(177, 27, 27, 0.1);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+  }
+
+  .noticeMessage {
+    background-color: rgba(27, 177, 47, 0.1);
+    border: 1px solid var(--color-primary);
+  }
+
+  .linkButton {
+    align-self: center;
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-family: inherit;
+    font-size: 1rem;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .readonlyEmail {
+    font-size: 1.2rem;
+    color: var(--color-primary);
+    word-break: break-all;
+  }
+
   .divider {
     display: flex;
     align-items: center;

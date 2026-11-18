@@ -9,17 +9,17 @@ import styles from "./financePage.module.scss"
 
 type Tab = "savings" | "kiwisaver"
 
-/** Admin-only for now: NZ bank savings and KiwiSaver compound-interest
- * calculators, side by side as tabs. */
+/** Granted feature (see finance/layout.tsx): NZ bank savings and KiwiSaver
+ * compound-interest calculators, side by side as tabs. */
 const FinancePage = () => {
   const auth = useAuth()
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("savings")
-  const isAdmin = !!auth?.customClaims?.admin
+  const allowed = !!auth?.hasFeature("finance")
 
   useEffect(() => {
-    if (auth && !auth.authLoading && !isAdmin) router.push("/")
-  }, [auth, isAdmin, router])
+    if (auth && !auth.authLoading && !allowed) router.push("/")
+  }, [auth, allowed, router])
 
   useEffect(() => {
     if (window.location.hash === "#kiwisaver") setTab("kiwisaver")
@@ -30,7 +30,7 @@ const FinancePage = () => {
     history.replaceState(null, "", t === "kiwisaver" ? "#kiwisaver" : location.pathname)
   }
 
-  if (!isAdmin) return <main className={styles.financePage} />
+  if (!allowed) return <main className={styles.financePage} />
 
   return (
     <main className={styles.financePage}>

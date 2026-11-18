@@ -6,6 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import React from "react"
+import { FEATURES } from "@/lib/features"
 
 const Header = () => {
   const auth = useAuth()
@@ -50,44 +51,26 @@ const Header = () => {
           <li>
             <Link href={"/contact"}>Contact</Link>
           </li>
-          <li>
-            <Link href={"/dice"}>Dice</Link>
-          </li>
-          <li>
-            <Link href={"/menu"}>Menu</Link>
-          </li>
-          <li>
-            <Link href={"/calculators"}>Calculators</Link>
-          </li>
-          {!!auth &&
-            !!auth.currentUser && ( //user loged in
-              <>
-                <li>
-                  <Link href={"/exercise"}>Exercise</Link>
-                </li>
-                <li>
-                  <Link href={"/interview-prep"}>Interview prep</Link>
-                </li>
-                <li className={styles.authLink}>{`Hi ${auth.currentUser.displayName}`}</li>
-                <LogoutButton />
-              </>
-            )}
-          {!auth?.currentUser && auth?.authLoading === false && ( // anonymous visitor (once auth state is resolved)
+          {FEATURES.filter((f) => f.access === "public" || (auth?.currentUser && auth.hasFeature(f.id))).map((f) => (
+            <li key={f.id}>
+              <Link href={f.href}>{f.label}</Link>
+            </li>
+          ))}
+          {auth?.isAdmin && (
+            <li className={styles.authLink}>
+              <Link href={"/admin-dashboard"}>Admin</Link>
+            </li>
+          )}
+          {!!auth?.currentUser && (
             <>
-              <li className={styles.authLink}>
-                <Link href={"/login"}>Login</Link>
-              </li>
+              <li className={styles.authLink}>{`Hi ${auth.currentUser.displayName || auth.currentUser.email}`}</li>
+              <LogoutButton />
             </>
           )}
-          {auth && !!auth.customClaims?.admin && (
-            <>
-              <li>
-                <Link href={"/finance"}>Finance</Link>
-              </li>
-              <li className={styles.authLink}>
-                <Link href={"/admin-dashboard"}>Admin</Link>
-              </li>
-            </>
+          {!auth?.currentUser && auth?.authLoading === false && ( // anonymous visitor (once auth state is resolved)
+            <li className={styles.authLink}>
+              <Link href={"/login"}>Login</Link>
+            </li>
           )}
         </ul>
       </nav>
