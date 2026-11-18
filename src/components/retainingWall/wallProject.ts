@@ -9,6 +9,7 @@ import { buildWallProfile, ControlPoints, DepthPoints, legacyPlan, ProfileOverri
 import { SavedWallDesign } from "./retainingWallData"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
 import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
+import { DEFAULT_ESTIMATE_SETTINGS, EstimateSettings, estimateSettingsFromData } from "./pricing"
 
 export interface PartialBoardOrder {
   enabled: boolean
@@ -107,6 +108,9 @@ export interface WallProject {
   locked: boolean
   calcSettings: CalcSettings
   calcSettingsName: string
+  /** pricing for this wall: markup, extra lines, the proposal's details —
+   * the prices themselves come from the price library */
+  estimate: EstimateSettings
 }
 
 /** What a project card shows — worked out when a project is saved, so
@@ -150,6 +154,7 @@ export const newBlankWall = (): WallProject => ({
   locked: false,
   calcSettings: DEFAULT_CALC_SETTINGS,
   calcSettingsName: "Default",
+  estimate: DEFAULT_ESTIMATE_SETTINGS,
 })
 
 export const DEFAULT_WALL: WallProject = newBlankWall()
@@ -212,6 +217,7 @@ export const wallFromData = (data: unknown): WallProject => {
         ? { ...DEFAULT_CALC_SETTINGS, ...settings }
         : blank.calcSettings,
     calcSettingsName: typeof d.calcSettingsName === "string" && d.calcSettingsName ? d.calcSettingsName : "Default",
+    estimate: estimateSettingsFromData(d.estimate),
   }
 }
 

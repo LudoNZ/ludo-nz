@@ -287,6 +287,7 @@ const ProjectEditor = () => {
       initial={initial}
       onChange={handleWallChange}
       onActivity={handleActivity}
+      projectName={name}
       header={
         <EditorHeader
           backHref="/retaining-walls"

@@ -1,0 +1,493 @@
+// The proposal: an editing panel beside an A4 sheet. The document has its
+// own clean type and colours, not the site's, so it reads as a business
+// document and prints the same whatever the site's theme.
+
+$ink: #1f2933;
+$muted: #5f6b76;
+$rule: #d9dee3;
+$accent: #2f4858;
+$soft: #f4f6f8;
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  // under the site's modals (1000), so "Edit company details" opens over it
+  z-index: 990;
+  display: grid;
+  grid-template-columns: 20rem 1fr;
+  background: #e6e9ec;
+  color: var(--foreground);
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+  }
+}
+
+.panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1.1rem 2rem;
+  overflow-y: auto;
+  background: var(--background);
+  border-right: 1px solid rgba(127, 127, 127, 0.3);
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+
+    small {
+      font-weight: 400;
+      opacity: 0.65;
+    }
+  }
+
+  input:not([type="checkbox"]),
+  textarea {
+    width: 100%;
+    min-width: 0;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid rgba(28, 31, 35, 0.45);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--foreground);
+    font-family: inherit;
+    font-weight: 400;
+    font-size: max(0.88rem, 16px);
+    resize: vertical;
+  }
+}
+
+.panelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  h2 {
+    color: var(--color-primary);
+    font-size: 1.2rem;
+  }
+}
+
+.close,
+.linkBtn {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: #fff;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.linkBtn {
+  align-self: flex-start;
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.print {
+  padding: 0.65rem 1rem;
+  border: none;
+  border-radius: var(--borderRadius);
+  background: var(--color-primary);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(0.9);
+  }
+}
+
+.warn {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #d68910;
+  border-radius: var(--borderRadius);
+  background: #fff6e5;
+  font-size: 0.8rem;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.6rem;
+}
+
+.check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.45rem !important;
+  cursor: pointer;
+
+  input {
+    accent-color: var(--color-primary);
+  }
+}
+
+.stage {
+  overflow-y: auto;
+  padding: 1.5rem 1rem 3rem;
+
+  @media (max-width: 900px) {
+    overflow: visible;
+    padding: 1rem 0.5rem 2rem;
+  }
+}
+
+// ── the document ─────────────────────────────────────────────────────
+
+.doc {
+  width: min(210mm, 100%);
+  margin: 0 auto;
+  padding: 16mm 15mm 14mm;
+  background: #fff;
+  color: $ink;
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.12);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.5;
+
+  @media (max-width: 600px) {
+    padding: 8mm 6mm;
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: $ink;
+    font-family: inherit;
+  }
+}
+
+.placeholder {
+  color: #8a96a3;
+  font-style: italic;
+  background: #fff8d6;
+  padding: 0 0.15em;
+  border-radius: 2px;
+}
+
+.line {
+  display: block;
+}
+
+.letterhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  padding-bottom: 5mm;
+  border-bottom: 2px solid $accent;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+}
+
+.logo {
+  display: grid;
+  place-items: center;
+  width: 16mm;
+  height: 16mm;
+  border-radius: 3mm;
+  background: $accent;
+  color: #fff;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.companyName {
+  font-size: 16pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tagline {
+  color: $muted;
+  font-size: 9.5pt;
+}
+
+.contact {
+  text-align: right;
+  color: $muted;
+  font-size: 8.5pt;
+  line-height: 1.45;
+}
+
+.titleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+  margin: 7mm 0 5mm;
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.kicker {
+  color: $accent;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin-top: 1mm;
+  font-size: 19pt;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.5mm 4mm;
+  font-size: 9pt;
+
+  div {
+    display: contents;
+  }
+
+  dt {
+    color: $muted;
+  }
+
+  dd {
+    font-weight: 600;
+    text-align: right;
+  }
+}
+
+.parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5mm;
+  padding: 4mm 5mm;
+  background: $soft;
+  border-radius: 2mm;
+
+  h3 {
+    margin-bottom: 1mm;
+    color: $muted;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  p {
+    font-weight: 600;
+  }
+}
+
+.intro {
+  margin: 5mm 0;
+}
+
+.figure {
+  margin: 0 0 5mm;
+  break-inside: avoid;
+
+  figcaption {
+    margin-top: 1.5mm;
+    color: $muted;
+    font-size: 8pt;
+    text-align: center;
+  }
+}
+
+.render {
+  display: block;
+  width: 100%;
+  max-height: 95mm;
+  border: 1px solid $rule;
+  border-radius: 2mm;
+}
+
+.section {
+  margin-top: 6mm;
+
+  h2 {
+    margin-bottom: 2.5mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 1px solid $rule;
+    font-size: 11.5pt;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    break-after: avoid;
+  }
+}
+
+.scope,
+.exclusions {
+  padding-left: 5mm;
+
+  li {
+    margin-bottom: 1.2mm;
+    break-inside: avoid;
+  }
+}
+
+.exclusions {
+  color: #3a4651;
+}
+
+.prices {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+
+  th,
+  td {
+    padding: 2mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  thead th {
+    background: $accent;
+    color: #fff;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid $rule;
+    break-inside: avoid;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #fafbfc;
+  }
+
+  tfoot th {
+    text-align: right;
+    font-weight: 600;
+    color: $muted;
+  }
+
+  tfoot td {
+    font-weight: 600;
+  }
+
+  tfoot tr:first-child th,
+  tfoot tr:first-child td {
+    padding-top: 3mm;
+  }
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineDetail {
+  display: block;
+  color: $muted;
+  font-size: 8pt;
+}
+
+.grand {
+  th,
+  td {
+    border-top: 2px solid $accent;
+    color: $ink !important;
+    font-size: 11pt;
+    font-weight: 700 !important;
+  }
+}
+
+.acceptance {
+  break-inside: avoid;
+
+  p {
+    margin-bottom: 9mm;
+  }
+}
+
+.signatures {
+  display: grid;
+  grid-template-columns: 1.3fr 1.3fr 1fr;
+  gap: 6mm;
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: 1mm;
+    color: $muted;
+    font-size: 8pt;
+  }
+}
+
+.sigLine {
+  display: block;
+  border-bottom: 1px solid $ink;
+  height: 8mm;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 9mm;
+  padding-top: 2.5mm;
+  border-top: 1px solid $rule;
+  color: $muted;
+  font-size: 8pt;
+}
+
+// ── printing: just the sheet, edge to edge on the page ───────────────
+@media print {
+  :global(html[data-print-proposal]) {
+    .overlay {
+      position: static;
+      display: block;
+      width: 100%;
+      background: none;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .stage {
+      overflow: visible;
+      padding: 0;
+    }
+
+    .doc {
+      width: 100%;
+      padding: 0;
+      box-shadow: none;
+    }
+
+    // placeholders still show, but without the on-screen highlight
+    .placeholder {
+      background: none;
+    }
+  }
+}

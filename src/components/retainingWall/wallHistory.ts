@@ -79,6 +79,7 @@ export function describeWallChange(before: WallProject, after: WallProject): str
     !same(before.boardOrdersPlaced, after.boardOrdersPlaced)
   )
     parts.push("Board order")
+  if (!same(before.estimate, after.estimate)) parts.push("Price estimate")
 
   // per-post changes: only worth naming when they're the change itself,
   // not posts renumbered after the layout moved

@@ -10,6 +10,7 @@ import {
   MaterialsIcon,
   OrderIcon,
   PlanViewIcon,
+  PriceTagIcon,
   PostHoleIcon,
   Render3DIcon,
   SettingsIcon,
@@ -37,6 +38,11 @@ import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/ret
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import BoardEndsModal from "./boardEndsModal"
 import PileSetupModal, { PileSetup } from "./pileSetupModal"
+import { buildEstimate, type EstimateSettings } from "@/components/retainingWall/pricing"
+import { usePriceLibrary } from "@/components/retainingWall/usePriceLibrary"
+import EstimateCard from "@/components/retainingWall/estimateCard"
+import ProposalView from "@/components/retainingWall/proposalView"
+import PriceLibraryModal from "./priceLibraryModal"
 import StepEditor from "./stepEditor"
 import SectionRail, { RailSection } from "./sectionRail"
 import ReferenceTableModal from "./referenceTableModal"
@@ -63,7 +69,9 @@ const RetainingWallEditor: React.FC<{
   header: ReactNode
   /** each finished change, undo, redo and lock — for an activity log */
   onActivity?: (activity: WallActivity) => void
-}> = ({ initial, onChange, header, onActivity }) => {
+  /** shown in the proposal's title */
+  projectName?: string
+}> = ({ initial, onChange, header, onActivity, projectName }) => {
   // the wall's shape seen from above: an open run of straight walls (A,
   // B, C…) joined at corners. Total wall length is just this unfolded.
   const [planPoints, setPlanPoints] = useState<PlanPoint[]>(initial.planPoints)
@@ -115,6 +123,12 @@ const RetainingWallEditor: React.FC<{
   // mm the post is held up off the gravel pad (set in the pile setup modal)
   const [pileStandoffMm, setPileStandoffMm] = useState(initial.pileStandoffMm)
   const [showPileSetup, setShowPileSetup] = useState(false)
+  // pricing for this wall (markup, extra lines, proposal details)
+  const [estimateSettings, setEstimateSettings] = useState<EstimateSettings>(initial.estimate)
+  const priceLibrary = usePriceLibrary()
+  const [libraryOpen, setLibraryOpen] = useState<null | { tab: "prices" | "company" }>(null)
+  const [proposalOpen, setProposalOpen] = useState(false)
+  const closeProposal = useCallback(() => setProposalOpen(false), [])
   const [speedRunOpen, setSpeedRunOpen] = useState(false)
   const closeSpeedRun = useCallback(() => setSpeedRunOpen(false), [])
   // whole-wall option, not per-post — an extra flat board laid over the
@@ -269,6 +283,7 @@ const RetainingWallEditor: React.FC<{
     setBoardsToPostOutside(wall.boardsToPostOutside)
     setCalcSettings(wall.calcSettings)
     setCalcSettingsName(wall.calcSettingsName)
+    setEstimateSettings(wall.estimate)
     setRestoreNonce((n) => n + 1)
   }
 
@@ -335,6 +350,7 @@ const RetainingWallEditor: React.FC<{
       locked,
       calcSettings,
       calcSettingsName,
+      estimate: estimateSettings,
     }
     const json = JSON.stringify(wall)
     const previous = lastReported.current
@@ -343,7 +359,7 @@ const RetainingWallEditor: React.FC<{
     if (restoringRef.current) restoringRef.current = false
     else recordChangeRef.current(JSON.parse(previous) as WallProject, wall)
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -432,6 +448,12 @@ const RetainingWallEditor: React.FC<{
   // or just the one run being looked at
   const totals = profile ? (shownSegment !== null ? profile.segmentTotals[shownSegment] : profile) : null
   const forWall = shownSegment !== null ? ` — Wall ${segmentLabel(shownSegment)}` : ""
+
+  // ---- price estimate: always the whole wall, whichever wall is shown ----
+  // (cheap enough to rebuild each render, like the profile itself)
+  const estimate = profile
+    ? buildEstimate(profile, profile, totalLength(planPoints), calcSettings.gravelBaseAllowanceM > 0, priceLibrary.library.items, estimateSettings)
+    : null
 
   // ---- pile setup (see PileSetupModal) ----
   const pileSetup: PileSetup = {
@@ -626,6 +648,7 @@ const RetainingWallEditor: React.FC<{
     { id: "rw-elevation", label: "Elevation", icon: <ElevationIcon /> },
     { id: "rw-3d", label: "3D view", icon: <Render3DIcon /> },
     { id: "rw-materials", label: "Materials", icon: <MaterialsIcon /> },
+    { id: "rw-estimate", label: "Estimate", icon: <PriceTagIcon /> },
     { id: "rw-order", label: "Board order", icon: <OrderIcon /> },
   ]
 
@@ -797,6 +820,17 @@ const RetainingWallEditor: React.FC<{
         onClose={() => setShowReferenceTable(false)}
         referenceTable={calcSettings.referenceTable}
         activeRow={referenceRow}
+      />
+      <PriceLibraryModal
+        isOpen={libraryOpen !== null}
+        onClose={() => setLibraryOpen(null)}
+        initialTab={libraryOpen?.tab ?? "prices"}
+        library={priceLibrary.library}
+        status={priceLibrary.status}
+        error={priceLibrary.error}
+        signedIn={priceLibrary.signedIn}
+        onSave={priceLibrary.save}
+        inUse={new Set((estimate?.lines ?? []).flatMap((l) => (l.item ? [l.item.id] : [])))}
       />
       {pileAuto && (
         <PileSetupModal
@@ -1217,6 +1251,42 @@ const RetainingWallEditor: React.FC<{
                   hideSetup={shownSegment !== null}
                 />
               </div>
+              {/* not locked: pricing is worked on once the wall's set up */}
+              {estimate && (
+                <EstimateCard
+                  estimate={estimate}
+                  settings={estimateSettings}
+                  onChange={setEstimateSettings}
+                  onOpenLibrary={() => setLibraryOpen({ tab: "prices" })}
+                  onOpenProposal={() => setProposalOpen(true)}
+                  libraryNote={
+                    !priceLibrary.signedIn
+                      ? "Signed out: your price library is kept in this browser only."
+                      : priceLibrary.status === "offline"
+                        ? "Offline: using the prices saved on this device."
+                        : priceLibrary.status === "error"
+                          ? "Couldn't load your price library from your account; using this device's copy."
+                          : priceLibrary.error
+                  }
+                />
+              )}
+              {proposalOpen && estimate && (
+                <ProposalView
+                  profile={profile}
+                  totals={profile}
+                  estimate={estimate}
+                  settings={estimateSettings}
+                  onChange={setEstimateSettings}
+                  company={priceLibrary.library.company}
+                  onEditCompany={() => setLibraryOpen({ tab: "company" })}
+                  planPoints={planPoints}
+                  retainedSide={retainedSide}
+                  calcSettings={calcSettings}
+                  topCapEnabled={topCapEnabled}
+                  projectName={projectName}
+                  onClose={closeProposal}
+                />
+              )}
               {/* not locked either: holes are measured on site, after the
                   wall's set up and locked */}
               <ConcreteQaCard

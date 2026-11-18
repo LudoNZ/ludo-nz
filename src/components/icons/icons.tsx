@@ -138,6 +138,13 @@ export const MaterialsIcon: React.FC<IconProps> = ({ className }) => (
   </svg>
 )
 
+export const PriceTagIcon: React.FC<IconProps> = ({ className }) => (
+  <svg {...base} className={className}>
+    <path d="M3.5 4.5v4.6a1 1 0 0 0 .3.7l6.4 6.4a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4L9.8 3.8a1 1 0 0 0-.7-.3H4.5a1 1 0 0 0-1 1Z" />
+    <circle cx="7" cy="7" r="1.2" />
+  </svg>
+)
+
 export const OrderIcon: React.FC<IconProps> = ({ className }) => (
   <svg {...base} className={className}>
     <path d="M7 3.5h6a1 1 0 0 1 1 1V5H6v-.5a1 1 0 0 1 1-1Z" />

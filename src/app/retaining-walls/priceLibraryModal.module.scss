@@ -1,0 +1,315 @@
+.content {
+  width: min(96vw, 56rem);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  h2 {
+    color: var(--color-primary);
+  }
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--foreground);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--color-primary);
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 1rem;
+    border: none;
+    border-radius: var(--borderRadius) var(--borderRadius) 0 0;
+    background: none;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tabOn {
+    background: var(--color-primary);
+    color: #fff;
+  }
+}
+
+.badge {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #b11b1b;
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1.3rem;
+  text-align: center;
+}
+
+.sync {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.error {
+  color: var(--color-danger);
+  opacity: 1;
+}
+
+.staleBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d68910;
+  border-radius: var(--borderRadius);
+  background: #fff6e5;
+  font-size: 0.88rem;
+}
+
+.bannerButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.allGood {
+  font-size: 0.88rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+
+  input {
+    accent-color: var(--color-primary);
+  }
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.categoryHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.5rem;
+
+  h3 {
+    font-size: 1rem;
+    color: var(--color-primary);
+  }
+}
+
+.hint,
+.empty {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  border-radius: var(--borderRadius);
+  background: #fff;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.75rem;
+
+    > span:first-child {
+      opacity: 0.7;
+    }
+  }
+
+  input,
+  select,
+  textarea {
+    padding: 0.3rem 0.45rem;
+    border: 1px solid rgba(28, 31, 35, 0.5);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--foreground);
+    font-family: inherit;
+    // 16px stops iOS zooming on focus
+    font-size: max(0.9rem, 16px);
+  }
+}
+
+.itemStale {
+  border-color: #d68910;
+  background: #fffaf0;
+}
+
+.nameField {
+  flex: 3 1 14rem;
+}
+
+.sizeField {
+  flex: 1 1 8rem;
+}
+
+.priceField {
+  flex: 0 1 8rem;
+}
+
+.money {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+
+  input {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.unitField {
+  flex: 0 1 7rem;
+}
+
+.supplierField {
+  flex: 1 1 9rem;
+}
+
+.itemFoot {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.age {
+  opacity: 0.7;
+}
+
+.ageStale {
+  color: #8a5a00;
+  font-weight: 600;
+}
+
+.inUse {
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(27, 177, 47, 0.12);
+  font-size: 0.75rem;
+}
+
+.itemButtons {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.secondary,
+.remove,
+.add,
+.done {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: #fff;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(27, 177, 47, 0.1);
+  }
+}
+
+.remove {
+  border-color: rgba(177, 27, 27, 0.6);
+  color: var(--color-danger);
+
+  &:hover {
+    background-color: rgba(177, 27, 27, 0.08);
+  }
+}
+
+.add {
+  align-self: flex-start;
+  border-style: dashed;
+}
+
+.company {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.companyField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+
+  input,
+  textarea {
+    padding: 0.4rem 0.55rem;
+    border: 1px solid rgba(28, 31, 35, 0.5);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--foreground);
+    font-family: inherit;
+    font-weight: 400;
+    font-size: max(0.9rem, 16px);
+    resize: vertical;
+  }
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.done {
+  padding: 0.5rem 1.4rem;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.95rem;
+
+  &:hover {
+    background: var(--color-primary);
+    filter: brightness(0.9);
+  }
+}
