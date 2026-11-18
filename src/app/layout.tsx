@@ -58,7 +58,7 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-        <meta name="theme-color" content="#1bb12f" />
+        <meta name="theme-color" content="#137a22" />
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className={`${styles.layout} ${shareTechMono.className}`}>

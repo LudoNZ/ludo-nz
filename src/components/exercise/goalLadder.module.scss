@@ -10,14 +10,6 @@
   gap: 0.9rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  .ladder {
-    --track: #2c2c2a;
-  }
-}
-:root[data-theme="dark"] .ladder {
-  --track: #2c2c2a;
-}
 
 .row {
   display: grid;

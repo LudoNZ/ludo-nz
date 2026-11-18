@@ -15,20 +15,18 @@
 
 :root {
   font-size: 15px;
+  // Always-light theme, tuned for readability: a warm off-white page
+  // (easier on the eyes than pure white) with near-black text (~15:1).
+  color-scheme: light;
   // CSS CUSTOM PROPERTIES / VARIABLES
-  --background: #ffffff;
-  --foreground: #171717;
-  --color-primary: #1bb12f;
-  --color-secondary: #b1ae1b;
+  --background: #f6f5f1;
+  --foreground: #1c1f23;
+  // darker greens/olives than before so text in these colours stays
+  // readable (>= 4.5:1) on the light background
+  --color-primary: #137a22;
+  --color-secondary: #7a6a00;
   --color-danger: #b11b1b;
   --borderRadius: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #555555;
-    --foreground: #ededed;
-  }
 }
 
 // GLOBAL STYLING

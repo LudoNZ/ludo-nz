@@ -17,23 +17,6 @@
   gap: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  .chartRoot {
-    color-scheme: dark;
-    --text-secondary: var(--foreground);
-    --text-muted: #a3a29b;
-    --gridline: #3a3a37;
-    --baseline: #4a4a46;
-    --accent-max: #d95926;
-  }
-}
-:root[data-theme="dark"] .chartRoot {
-  color-scheme: dark;
-  --text-muted: #a3a29b;
-  --gridline: #3a3a37;
-  --baseline: #4a4a46;
-  --accent-max: #d95926;
-}
 
 .readout {
   min-height: 1.6rem;
