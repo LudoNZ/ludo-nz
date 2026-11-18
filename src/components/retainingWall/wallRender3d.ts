@@ -9,7 +9,7 @@
  * World axes: x east (= plan x), y north (= -plan y, since the plan's y
  * points down the screen), z up (= level). */
 
-import { bayCourseLayout, ProfilePost, WallProfile } from "./postProfile"
+import { bayCourseLayout, BoardHighlight, ProfilePost, WallProfile } from "./postProfile"
 import { CalcSettings } from "./calcSettings"
 import { PlanPoint, RetainedSide, sideNormal } from "./wallPlan"
 
@@ -51,6 +51,8 @@ const EARTH_BACK_M = 1.0
 const COLORS = {
   board: "#c9924f",
   topBoard: "#b07a3e",
+  /** boards picked out from the order card — same blue as the elevation's */
+  highlight: "#2a78d6",
   cap: "#ddb06f",
   post: "#93613a",
   grass: "#9cc46e",
@@ -223,7 +225,10 @@ export function buildRenderScene(
   retainedSide: RetainedSide,
   settings: CalcSettings,
   topCapEnabled: boolean,
-  options: RenderOptions
+  options: RenderOptions,
+  /** boards to pick out (those cut from a length chosen in the board
+   * order), matched to courses and bays the same way the elevation does */
+  highlight: BoardHighlight[] = []
 ): RenderScene | null {
   const { posts, bays, segments } = profile
   if (posts.length < 2 || planPoints.length < 2) return null
@@ -527,7 +532,8 @@ export function buildRenderScene(
       ]
       const prof = clipUnder(rect, 0, undersideAM, underSlope)
       if (prof.length < 3) continue
-      wallItems.push({ item: { faces: extrude(frame, prof, n0, n1, COLORS.board), solid: true, key: 0, layer: LAYER.wall }, bay: k })
+      const lit = highlight.some((h) => h.layer === "course" && h.courseRow === c && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost)
+      wallItems.push({ item: { faces: extrude(frame, prof, n0, n1, lit ? COLORS.highlight : COLORS.board), solid: true, key: 0, layer: LAYER.wall }, bay: k })
     }
     // the top board: from the courses' underside line up to the top
     if (bay.stepTopM === null) {
@@ -538,7 +544,10 @@ export function buildRenderScene(
         [u0, topA + slope * u0],
       ]
       if (topA + slope * u0 - (undersideAM + underSlope * u0) > 1e-4 || topA + slope * u1 - (undersideAM + underSlope * u1) > 1e-4)
-        wallItems.push({ item: { faces: extrude(frame, prof, n0, n1, COLORS.topBoard), solid: true, key: 0, layer: LAYER.wall }, bay: k })
+      {
+        const lit = highlight.some((h) => h.layer === "topBoard" && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost)
+        wallItems.push({ item: { faces: extrude(frame, prof, n0, n1, lit ? COLORS.highlight : COLORS.topBoard), solid: true, key: 0, layer: LAYER.wall }, bay: k })
+      }
     }
     if (topCapEnabled) {
       const prof: [number, number][] = [

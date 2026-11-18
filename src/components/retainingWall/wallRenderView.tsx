@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { WallProfile } from "./postProfile"
+import { BoardHighlight, WallProfile } from "./postProfile"
 import { CalcSettings } from "./calcSettings"
 import { PlanPoint, RetainedSide } from "./wallPlan"
 import { buildRenderScene } from "./wallRender3d"
@@ -10,6 +10,8 @@ import styles from "./wallRenderView.module.scss"
 /** the attribute on <html> that tells the print stylesheet to print just
  * this view (see wallRenderView.module.scss) */
 const PRINT_ATTR = "data-print-render"
+// a stable default, so the scene isn't rebuilt every render
+const EMPTY_HIGHLIGHT: BoardHighlight[] = []
 
 /** A shaded 3D view of the wall, for showing a client: the ground in
  * front, the earth it holds back, every post and board course, from a
@@ -26,15 +28,17 @@ const WallRenderView: React.FC<{
   topCapEnabled: boolean
   /** shown under the drawing on the printed page */
   caption?: string
-}> = ({ profile, planPoints, retainedSide, settings, topCapEnabled, caption }) => {
+  /** boards picked out from the board order, tinted blue */
+  highlight?: BoardHighlight[]
+}> = ({ profile, planPoints, retainedSide, settings, topCapEnabled, caption, highlight = EMPTY_HIGHLIGHT }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-32)
   const [elevationDeg, setElevationDeg] = useState(26)
   const [showFootings, setShowFootings] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
   const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings }),
-    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings]
+    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings }, highlight),
+    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, highlight]
   )
 
   const handlePrint = () => {
@@ -120,6 +124,11 @@ const WallRenderView: React.FC<{
         </svg>
         {caption && <p className={styles.caption}>{caption}</p>}
       </div>
+      {highlight.length > 0 && (
+        <p className={styles.highlightNote}>
+          <span className={styles.highlightSwatch} /> Boards cut from the length picked in the board order
+        </p>
+      )}
 
       <div className={styles.controls}>
         <label className={styles.slider}>

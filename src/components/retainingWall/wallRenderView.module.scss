@@ -107,3 +107,22 @@
     }
   }
 }
+
+// shown while boards are picked out from the board order; outside the
+// print area, so it never ends up on a printout
+.highlightNote {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-top: 0.4rem;
+}
+
+.highlightSwatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 2px;
+  background-color: #2a78d6;
+}

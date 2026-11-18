@@ -1085,6 +1085,7 @@ const RetainingWallEditor: React.FC<{
               retainedSide={retainedSide}
               settings={calcSettings}
               topCapEnabled={topCapEnabled}
+              highlight={boardHighlight}
               caption={`${profile.segments.length > 1 ? `${profile.segments.length} walls, ` : ""}${totalLength(planPoints).toFixed(1)} m long, retaining up to ${Math.max(...profile.posts.map((p) => p.retainedHeightM)).toFixed(2)} m`}
             />
           </div>
