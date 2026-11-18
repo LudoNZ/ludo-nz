@@ -7,9 +7,11 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import React from "react"
 import { FEATURES } from "@/lib/features"
+import { useSiteAccess } from "@/context/siteAccess"
 
 const Header = () => {
   const auth = useAuth()
+  const siteAccess = useSiteAccess()
 
   const LogoutButton: React.FC = () => {
     const router = useRouter()
@@ -51,7 +53,7 @@ const Header = () => {
           <li>
             <Link href={"/contact"}>Contact</Link>
           </li>
-          {FEATURES.filter((f) => f.access === "public" || (auth?.currentUser && auth.hasFeature(f.id))).map((f) => (
+          {FEATURES.filter((f) => siteAccess[f.id] === "public" || (auth?.currentUser && auth.hasFeature(f.id))).map((f) => (
             <li key={f.id}>
               <Link href={f.href}>{f.label}</Link>
             </li>

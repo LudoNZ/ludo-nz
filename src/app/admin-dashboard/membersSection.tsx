@@ -2,7 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react"
 import { useAuth } from "@/context/auth"
-import { FeatureId, GRANTABLE_FEATURES } from "@/lib/features"
+import { FeatureId, FEATURES } from "@/lib/features"
+import { useSiteAccess } from "@/context/siteAccess"
 import {
   AccountRow,
   createInvite,
@@ -33,9 +34,10 @@ function FeatureChecks({
   disabled?: boolean
   idPrefix: string
 }) {
+  const siteAccess = useSiteAccess()
   return (
     <div className={styles.features}>
-      {GRANTABLE_FEATURES.map((f) => {
+      {FEATURES.map((f) => {
         const id = `${idPrefix}-${f.id}`
         const checked = value.includes(f.id)
         return (
@@ -48,6 +50,9 @@ function FeatureChecks({
               onChange={() => onChange(checked ? value.filter((v) => v !== f.id) : [...value, f.id])}
             />
             {f.label}
+            {siteAccess[f.id] !== "granted" && (
+              <span className={styles.featureNote}>({siteAccess[f.id] === "public" ? "public" : "hidden"})</span>
+            )}
           </label>
         )
       })}

@@ -12,6 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { auth } from "../../firebase/client"
 import { canUse, FeatureId, normaliseFeatures } from "@/lib/features"
 import { Access, removeToken, setToken } from "./actions"
+import { useSiteAccess } from "./siteAccess"
 
 type AuthContextType = {
   /** only set once the account's access has been checked, and never for an
@@ -25,8 +26,10 @@ type AuthContextType = {
   /** null when signed out (or access couldn't be determined at all) */
   access: Exclude<Access, "denied" | "unknown"> | null
   isAdmin: boolean
-  /** features granted to this member (admins implicitly have all) */
+  /** features ticked for this member (admins implicitly have all) */
   features: FeatureId[]
+  /** whether this visitor can use a feature right now: public, admin, or
+   * granted (and not hidden) */
   hasFeature: (id: FeatureId) => boolean
   /** set when someone signs in with an account that hasn't been invited;
    * they're signed straight back out and the login page explains why */
@@ -49,6 +52,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [features, setFeatures] = useState<FeatureId[]>([])
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null)
   const pendingInvite = useRef<string | null>(null)
+  const siteAccess = useSiteAccess()
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -137,7 +141,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const isAdmin = access === "admin"
-  const hasFeature = useCallback((id: FeatureId) => canUse(id, features, isAdmin), [features, isAdmin])
+  const hasFeature = useCallback(
+    (id: FeatureId) => canUse(id, features, isAdmin, siteAccess),
+    [features, isAdmin, siteAccess],
+  )
 
   return (
     <AuthContext.Provider

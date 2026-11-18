@@ -69,6 +69,13 @@
   }
 }
 
+// next to a checkbox whose tab isn't members only right now: the tick is
+// kept and applies if the tab is switched back to members only
+.featureNote {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
 .primaryBtn,
 .smallBtn {
   font-family: inherit;

@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore"
 import type { DecodedIdToken } from "firebase-admin/auth"
 import { getAuthAdmin, getFirestoreAdmin } from "../../firebase/server"
 import { FeatureId, normaliseFeatures } from "./features"
+import { getSiteAccess } from "./siteAccess.server"
 
 /** `members/{inviteId}`: one doc per invited person. The doc id is the
  * secret in their invite link (/register?invite=<id>). Only the Admin SDK
@@ -112,11 +113,15 @@ export async function syncMemberClaims(member: MemberDoc) {
 }
 
 /** Server-side feature check for server actions: verifies a fresh ID token
- * (from `user.getIdToken()`) and that it carries the feature. */
+ * (from `user.getIdToken()`) and that the account can use the feature under
+ * the site's current access settings (public: any signed-in account;
+ * members only: granted in its claims; hidden: admins only). */
 export async function requireFeature(idToken: string, feature: FeatureId): Promise<DecodedIdToken> {
-  const token = await getAuthAdmin().verifyIdToken(idToken)
+  const [token, siteAccess] = await Promise.all([getAuthAdmin().verifyIdToken(idToken), getSiteAccess()])
   if (isAdminToken(token)) return token
-  if (!normaliseFeatures(token.features as unknown[] | undefined).includes(feature)) {
+  const access = siteAccess[feature]
+  if (access === "public") return token
+  if (access === "hidden" || !normaliseFeatures(token.features as unknown[] | undefined).includes(feature)) {
     throw new Error(`No access to ${feature}`)
   }
   return token

@@ -5,6 +5,8 @@ import React from "react"
 import styles from "./layout.module.scss"
 import { AuthProvider } from "../context/auth"
 import Header from "@/components/layout/header"
+import { SiteAccessProvider } from "@/context/siteAccess"
+import { getSiteAccess } from "@/lib/siteAccess.server"
 import { Share_Tech_Mono } from "next/font/google"
 
 export const metadata: Metadata = {
@@ -48,11 +50,17 @@ const shareTechMono = Share_Tech_Mono({
   weight: ["400"],
 })
 
-export default function RootLayout({
+// Safety net for the cached site access settings: pages re-check them at
+// most hourly even if a save's revalidation were missed. Saving in the admin
+// dashboard refreshes them straight away.
+export const revalidate = 3600
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const siteAccess = await getSiteAccess()
   return (
     <html lang="en">
       <head>
@@ -62,15 +70,17 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className={`${styles.layout} ${shareTechMono.className}`}>
-        <AuthProvider>
-          <Header />
+        <SiteAccessProvider value={siteAccess}>
+          <AuthProvider>
+            <Header />
 
-          <div className={styles.mainContent}>{children}</div>
+            <div className={styles.mainContent}>{children}</div>
 
-          <footer className={styles.footer}>
-            <p>© 2025 Ludo Bourneville</p>
-          </footer>
-        </AuthProvider>
+            <footer className={styles.footer}>
+              <p>© 2025 Ludo Bourneville</p>
+            </footer>
+          </AuthProvider>
+        </SiteAccessProvider>
       </body>
     </html>
   )

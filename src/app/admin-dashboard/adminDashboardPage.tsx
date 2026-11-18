@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { firestore } from "../../../firebase/client"
 import { collection, getDocs, getCountFromServer, query, orderBy, limit } from "firebase/firestore"
 import MembersSection from "./membersSection"
+import SiteAccessSection from "./siteAccessSection"
 import WallActivitySection from "./wallActivitySection"
 
 interface SessionSummary {
@@ -119,6 +120,8 @@ export const AdminDashboardPage = () => {
   return (
     <div className={styles.adminDashboardPage}>
       <h1>Admin Dashboard</h1>
+
+      <SiteAccessSection />
 
       <MembersSection />
 
