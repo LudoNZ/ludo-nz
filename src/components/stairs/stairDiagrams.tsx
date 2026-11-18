@@ -150,6 +150,33 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
         </g>
       ))}
 
+      {/* outer-stringer type: riser joists end on and nogs, behind the
+          near stringer (so drawn see-through, dashed) */}
+      {result.riserJoists.nogs
+        .filter((n, i, all) => all.findIndex((m) => m.tread === n.tread) === i)
+        .map((n) => (
+          <rect
+            key={`nog${n.tread}`}
+            x={n.x0}
+            y={-n.y1}
+            width={n.x1 - n.x0}
+            height={n.y1 - n.y0}
+            className={styles.nog}
+            strokeWidth={stroke}
+          />
+        ))}
+      {result.riserJoists.list.map((j) => (
+        <rect
+          key={`rj${j.index}`}
+          x={j.x0}
+          y={-j.y1}
+          width={j.x1 - j.x0}
+          height={j.height}
+          className={styles.riserJoist}
+          strokeWidth={stroke}
+        />
+      ))}
+
       {riserRects}
       {treadRects}
 
@@ -219,7 +246,10 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
   const stroke = font * 0.07
 
   const stacked = input.framing === "stacked-frames"
+  const outer = input.framing === "outer-stringers"
   const supportStart = stacked ? 0 : result.stringer.toeX
+  const b = input.stringerThickness
+  const stringerLines = outer ? [result.supports.positions[0], result.supports.positions.at(-1)!] : result.supports.positions
 
   const boards = []
   for (let i = 1; i <= treads; i++) {
@@ -246,7 +276,33 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
         Deck
       </text>
       {boards}
-      {result.supports.positions.map((y) => (
+      {result.riserJoists.list.map((j) => (
+        <rect
+          key={`rj${j.index}`}
+          x={j.x0}
+          y={b}
+          width={j.x1 - j.x0}
+          height={W - 2 * b}
+          className={styles.stringerHidden}
+          strokeWidth={stroke}
+        />
+      ))}
+      {result.riserJoists.nogs.map((n, i) => {
+        const lines = result.riserJoists.nogLines
+        const y = lines[i % lines.length]
+        return (
+          <rect
+            key={`nog${i}`}
+            x={n.x0}
+            y={y - b / 2}
+            width={n.x1 - n.x0}
+            height={b}
+            className={styles.stringerHidden}
+            strokeWidth={stroke}
+          />
+        )
+      })}
+      {stringerLines.map((y) => (
         <rect
           key={y}
           x={supportStart}
@@ -258,17 +314,19 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
         />
       ))}
       <text x={(front + xTop) / 2} y={W + pad * 1.2} fontSize={font} className={styles.dimText} textAnchor="middle">
-        {Math.round(W)} wide · {result.supports.count} {stacked ? "joists per frame" : "stringers"} at{" "}
-        {Math.round(result.supports.spacing)} centres
+        {Math.round(W)} wide · {outer
+          ? `2 stringers, nogs between at ${Math.round(result.supports.spacing)} centres`
+          : `${result.supports.count} ${stacked ? "joists per frame" : "stringers"} at ${Math.round(result.supports.spacing)} centres`}
       </text>
     </svg>
   )
 }
 
-export const DiagramLegend: React.FC<{ riserBoards: boolean; hasRip: boolean; stacked: boolean }> = ({
+export const DiagramLegend: React.FC<{ riserBoards: boolean; hasRip: boolean; stacked: boolean; outer: boolean }> = ({
   riserBoards,
   hasRip,
   stacked,
+  outer,
 }) => (
   <ul className={styles.legend}>
     <li>
@@ -277,6 +335,11 @@ export const DiagramLegend: React.FC<{ riserBoards: boolean; hasRip: boolean; st
     <li>
       <span className={`${styles.swatch} ${styles.wedge}`} /> {stacked ? "Front & back rails" : "Wedge blocks"}
     </li>
+    {outer && (
+      <li>
+        <span className={`${styles.swatch} ${styles.riserJoist}`} /> Riser joists &amp; nogs (behind the stringer)
+      </li>
+    )}
     <li>
       <span className={`${styles.swatch} ${styles.board}`} /> {riserBoards ? "Tread & riser boards" : "Tread boards"}
     </li>

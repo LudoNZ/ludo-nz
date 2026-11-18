@@ -43,6 +43,19 @@
   stroke: #6b4a1e;
 }
 
+// outer-stringer type's joists and nogs, behind the near stringer
+.riserJoist {
+  fill: rgba(70, 110, 160, 0.45);
+  stroke: #2c4a70;
+  stroke-dasharray: 8 5;
+}
+
+.nog {
+  fill: rgba(70, 110, 160, 0.25);
+  stroke: #2c4a70;
+  stroke-dasharray: 8 5;
+}
+
 .board {
   fill: #8b5e34;
   stroke: #4a3018;
@@ -127,6 +140,11 @@
 .legend .board {
   background-color: #8b5e34;
   border-color: #4a3018;
+}
+
+.legend .riserJoist {
+  background-color: rgba(70, 110, 160, 0.45);
+  border-color: #2c4a70;
 }
 
 .legend .boardRipped {

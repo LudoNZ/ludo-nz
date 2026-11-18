@@ -12,12 +12,20 @@
  * back yard or plant area) is allowed up to 220 rise / 220 going / 47°.
  * Both need 2R + G between 550 and 700. */
 
-export type FramingType = "wedge-blocks" | "stacked-frames"
+export type FramingType = "wedge-blocks" | "outer-stringers" | "stacked-frames"
 
 export const FRAMING_LABELS: Record<FramingType, string> = {
-  "wedge-blocks": "Straight stringer + wedge blocks",
+  "wedge-blocks": "Straight stringers + wedge blocks",
+  "outer-stringers": "Two outer stringers + riser joists",
   "stacked-frames": "Stacked step frames",
 }
+
+/** Outer-stringer stairs: each riser joist runs this far below the top of
+ * the tread framing beneath it, so nogs this deep fit between joists. */
+export const NOG_DEPTH = 90
+
+/** Standard timber depths to rip riser joists from. */
+export const TIMBER_DEPTHS = [90, 140, 190, 240, 290]
 
 /** Common NZ decking boards, with the support spacing each can span on a
  * stair tread (thinner boards need closer stringers / joists). */
@@ -146,6 +154,27 @@ export interface StepFrame {
   joistLength: number
 }
 
+/** A riser joist across the stair (outer-stringer framing), seen end on. */
+export interface RiserJoist {
+  /** 1 = bottom riser; the last one is the ledger against the deck */
+  index: number
+  x0: number
+  x1: number
+  y0: number
+  y1: number
+  height: number
+  ledger: boolean
+}
+
+/** A nog between two riser joists, on an intermediate support line. */
+export interface Nog {
+  tread: number
+  x0: number
+  x1: number
+  y0: number
+  y1: number
+}
+
 export interface StairResult {
   risers: number
   treads: number
@@ -215,6 +244,19 @@ export interface StairResult {
     /** tallest frame is deeper than the timber */
     timberTooShallow: boolean
     tallest: number
+  }
+  riserJoists: {
+    list: RiserJoist[]
+    length: number
+    tallest: number
+    /** smallest standard depth that covers the tallest joist, or null if none does */
+    ripFrom: number | null
+    stock: StockPlan | null
+    nogs: Nog[]
+    /** nog lines across the width (where middle stringers would be) */
+    nogLines: number[]
+    nogStock: MixedStockPlan | null
+    nogLinealM: number
   }
   boards: {
     treadPieces: number
@@ -373,7 +415,10 @@ export function calculateStairs(input: StairInput): StairResult {
   let topEdgeLength = 0
   let plumbCutHeight = 0
   let levelCutLength = 0
-  const wedgeFraming = input.framing === "wedge-blocks"
+  // both stringer types draw the same straight stringer and wedges; the
+  // outer-stringer type just has two of them, joists and nogs between
+  const wedgeFraming = input.framing !== "stacked-frames"
+  const outerOnly = input.framing === "outer-stringers"
   if (treads > 0 && wedgeFraming) {
     // level cut on the ground from toe to heel, plumb cut against the deck
     // (if the stringer is deep enough to reach the ground there, the level
@@ -401,7 +446,7 @@ export function calculateStairs(input: StairInput): StairResult {
   const clearWidth = Math.max(input.width - b, 1)
   const spaces = Math.max(1, Math.ceil(clearWidth / Math.max(input.maxStringerSpacing, 100) - 1e-9))
   const supportCount = treads > 0 ? spaces + 1 : 0
-  const stringerCount = wedgeFraming ? supportCount : 0
+  const stringerCount = wedgeFraming ? (outerOnly ? Math.min(2, supportCount) : supportCount) : 0
   const spacing = clearWidth / spaces
   const positions = Array.from({ length: supportCount }, (_, i) => b / 2 + i * spacing)
   const stringerStock = planStock(topEdgeLength + 20, stringerCount)
@@ -451,6 +496,31 @@ export function calculateStairs(input: StairInput): StairResult {
     ...Array<number>(supportCount).fill(Math.max(f.joistLength, 0)),
   ])
   const tallestFrame = frameList.reduce((mx, f) => Math.max(mx, f.height), 0)
+
+  // ---- riser joists and nogs (outer-stringer framing) ---------------------
+  // joist i sits behind riser face i, from the top of tread i's framing down
+  // to NOG_DEPTH below the top of tread i−1's framing (the ground for the
+  // bottom one); the last is a ledger in front of the deck's boundary joist
+  const joistList: RiserJoist[] = []
+  const nogs: Nog[] = []
+  const nogLines = outerOnly ? positions.slice(1, -1) : []
+  if (outerOnly && treads > 0) {
+    for (let i = 1; i <= risers; i++) {
+      const ledger = i === risers
+      const x0 = ledger ? treads * G - b : (i - 1) * G
+      const y1 = i * R - t
+      const y0 = Math.max(0, (i - 1) * R - t - NOG_DEPTH)
+      joistList.push({ index: i, x0, x1: x0 + b, y0, y1, height: y1 - y0, ledger })
+    }
+    for (let i = 1; i <= treads; i++) {
+      const x0 = joistList[i - 1].x1
+      const x1 = joistList[i].x0
+      for (let n = 0; n < nogLines.length; n++) nogs.push({ tread: i, x0, x1, y0: i * R - t - NOG_DEPTH, y1: i * R - t })
+    }
+  }
+  const joistLength = Math.max(input.width - 2 * b, 0)
+  const tallestJoist = joistList.reduce((mx, j) => Math.max(mx, j.height), 0)
+  const nogPieces = nogs.map((n) => n.x1 - n.x0)
 
   // ---- board order ---------------------------------------------------------
   const treadPieces = treads * treadBoards.length
@@ -515,6 +585,17 @@ export function calculateStairs(input: StairInput): StairResult {
       stock: planMixedStock(framePieces),
       timberTooShallow: tallestFrame > input.stringerDepth + 0.5,
       tallest: tallestFrame,
+    },
+    riserJoists: {
+      list: joistList,
+      length: joistLength,
+      tallest: tallestJoist,
+      ripFrom: TIMBER_DEPTHS.find((d) => d >= tallestJoist - 0.5) ?? null,
+      stock: planStock(joistLength, joistList.length),
+      nogs,
+      nogLines,
+      nogStock: planMixedStock(nogPieces),
+      nogLinealM: nogPieces.reduce((a, p) => a + p, 0) / 1000,
     },
     boards: { treadPieces, riserPieces, pieceLength, stock: boardStock, linealM },
     screws,
