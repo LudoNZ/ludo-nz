@@ -167,3 +167,49 @@
   background-color: #9c7a4a;
   border-color: #4a3018;
 }
+
+// ---- turned stair plan ------------------------------------------------------
+.turnedSvg {
+  max-height: 75vh;
+}
+
+.turnFill {
+  fill: rgba(217, 185, 138, 0.25);
+  stroke: #7a5a2b;
+}
+
+.riserLine {
+  stroke: #4a3018;
+}
+
+.stringerLine {
+  stroke: rgba(243, 226, 196, 0.85);
+  stroke-dasharray: 40 24;
+}
+
+.planLabel {
+  fill: #fff;
+  font-family: inherit;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(40, 25, 10, 0.75);
+}
+
+.upArrow {
+  stroke: var(--color-primary);
+}
+
+.arrowHead {
+  fill: var(--color-primary);
+}
+
+// boards cut on an angle (winders, angled landings)
+.boardTapered {
+  fill: #b5814a;
+  stroke: #4a3018;
+}
+
+.legend .boardTapered {
+  background-color: #b5814a;
+  border-color: #4a3018;
+}

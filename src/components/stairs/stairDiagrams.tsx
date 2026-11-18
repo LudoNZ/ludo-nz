@@ -12,7 +12,12 @@ const JOIST_THICKNESS = 45
 /** Side elevation, to scale: ground, the straight stringer with its level
  * and plumb cuts, a wedge block under each tread, and every decking board
  * on the treads (ripped ones picked out) and risers, up to the deck. */
-export const StairElevation: React.FC<{ input: StairInput; result: StairResult }> = ({ input, result }) => {
+export const StairElevation: React.FC<{
+  input: StairInput
+  result: StairResult
+  /** what the stair climbs onto (default "Deck") */
+  topLabel?: string
+}> = ({ input, result, topLabel = "Deck" }) => {
   const { rise: R, going: G, treads, risers, nosing } = result
   const t = input.boardThickness
   const H = input.totalRise
@@ -118,7 +123,7 @@ export const StairElevation: React.FC<{ input: StairInput; result: StairResult }
       <rect x={xTop + JOIST_THICKNESS} y={-(H - t)} width={DECK_SHOWN} height={JOIST_DEPTH * 0.6} className={styles.deckFrameFaint} />
       <rect x={deckBoardX} y={-H} width={xTop + DECK_SHOWN + JOIST_THICKNESS - deckBoardX} height={t} className={styles.deckBoard} strokeWidth={stroke} />
       <text x={xTop + JOIST_THICKNESS + DECK_SHOWN / 2} y={-H - font * 0.6} fontSize={font} className={styles.label} textAnchor="middle">
-        Deck
+        {topLabel}
       </text>
 
       {/* support posts part way up, set in concrete below ground */}
@@ -355,7 +360,8 @@ export const DiagramLegend: React.FC<{
   stacked: boolean
   outer: boolean
   posts?: boolean
-}> = ({ riserBoards, hasRip, stacked, outer, posts }) => (
+  angled?: boolean
+}> = ({ riserBoards, hasRip, stacked, outer, posts, angled }) => (
   <ul className={styles.legend}>
     <li>
       <span className={`${styles.swatch} ${styles.stringer}`} /> {stacked ? "Frame side joists" : "Stringer"}
@@ -374,6 +380,11 @@ export const DiagramLegend: React.FC<{
     {posts && (
       <li>
         <span className={`${styles.swatch} ${styles.post}`} /> Support posts (in concrete)
+      </li>
+    )}
+    {angled && (
+      <li>
+        <span className={`${styles.swatch} ${styles.boardTapered}`} /> Angled cut
       </li>
     )}
     {hasRip && (

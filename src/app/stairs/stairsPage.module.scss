@@ -181,14 +181,15 @@
   margin-top: 0.35rem;
 
   > div {
-    padding: 0.35rem 0.45rem;
+    min-width: 0;
+    padding: 0.35rem 0.3rem;
     border: 1px solid rgba(128, 128, 128, 0.35);
     border-radius: var(--borderRadius);
     text-align: center;
   }
 
   dt {
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     opacity: 0.65;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -196,8 +197,8 @@
 
   dd {
     font-weight: 700;
-    font-size: 0.9rem;
-    white-space: nowrap;
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -250,6 +251,99 @@
 .presetActive {
   background-color: var(--color-primary) !important;
   color: var(--background) !important;
+}
+
+.layoutList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.3rem 0 0.4rem;
+}
+
+.layoutRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.layoutName {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.layoutValue {
+  font-size: 0.85rem;
+}
+
+.layoutError {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.turnRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.45rem 0 0 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--color-primary);
+  background-color: rgba(27, 177, 47, 0.06);
+  border-radius: 0 var(--borderRadius) var(--borderRadius) 0;
+}
+
+.turnNumbers {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+
+  input {
+    width: 4.2rem !important;
+  }
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+  width: fit-content;
+
+  button {
+    padding: 0.25rem 0.7rem;
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    & + button {
+      border-left: 1px solid var(--color-primary);
+    }
+  }
+}
+
+.removeButton {
+  border: none;
+  background: none;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+  cursor: pointer;
+  opacity: 0.75;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.error {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-danger);
 }
 
 .results {

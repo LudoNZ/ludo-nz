@@ -121,6 +121,11 @@ export interface StairInput {
   /** null = auto (a whole number of boards covers each tread exactly) */
   nosing: number | null
   riserBoards: boolean
+  /** flights from the ground up; the last always takes whatever risers are
+   * left over (treads: null). One flight and no turns = a straight stair. */
+  flights: FlightSpec[]
+  /** turns.length === flights.length − 1; turn i joins flight i to i + 1 */
+  turns: TurnSpec[]
 }
 
 export const DEFAULT_INPUT: StairInput = {
@@ -137,7 +142,28 @@ export const DEFAULT_INPUT: StairInput = {
   boardThickness: 20,
   nosing: null,
   riserBoards: false,
+  flights: [{ treads: null }],
+  turns: [],
 }
+
+export interface FlightSpec {
+  /** null = the remainder (only the last flight) */
+  treads: number | null
+}
+
+export type TurnKind = "landing" | "winders"
+export type TurnDirection = "left" | "right"
+
+export interface TurnSpec {
+  kind: TurnKind
+  direction: TurnDirection
+  /** degrees, 1–180; 90 is a quarter turn, 180 a U-turn */
+  angle: number
+  /** number of winder treads (kind "winders") */
+  winders: number
+}
+
+export const DEFAULT_TURN: TurnSpec = { kind: "landing", direction: "left", angle: 90, winders: 3 }
 
 export interface Pt {
   x: number

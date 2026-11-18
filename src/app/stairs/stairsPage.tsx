@@ -20,6 +20,10 @@ import {
   TWO_R_PLUS_G,
   calculateStairs,
 } from "@/components/stairs/stairs"
+import { calculateLayout, resolveFlightTreads } from "@/components/stairs/layout"
+import TurnedPlan from "@/components/stairs/turnedPlan"
+import { planMixedStock } from "@/components/stairs/stairs"
+import LayoutEditor from "./layoutEditor"
 import styles from "./stairsPage.module.scss"
 
 const mm = (v: number) => `${Math.round(v)} mm`
@@ -74,6 +78,9 @@ const StairsPage = () => {
   const set = <K extends keyof StairInput>(key: K, value: StairInput[K]) => setInput((s) => ({ ...s, [key]: value }))
 
   const r = useMemo(() => calculateStairs(input), [input])
+  const turned = input.turns.length > 0
+  const layout = useMemo(() => (turned ? calculateLayout(input, r) : null), [turned, input, r])
+  const flightTreads = resolveFlightTreads(input, r.risers).treads
 
   const stacked = input.framing === "stacked-frames"
   const outer = input.framing === "outer-stringers"
@@ -196,8 +203,12 @@ const StairsPage = () => {
                   <dd>{r.treads}</dd>
                 </div>
                 <div>
-                  <dt>Run</dt>
-                  <dd>{m(r.totalRun)}</dd>
+                  <dt>{layout ? "Footprint" : "Run"}</dt>
+                  <dd>
+                    {layout
+                      ? `${((layout.bbox.maxX - layout.bbox.minX) / 1000).toFixed(1)}×${((layout.bbox.maxY - layout.bbox.minY) / 1000).toFixed(1)}`
+                      : m(r.totalRun)}
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -219,6 +230,12 @@ const StairsPage = () => {
               max={6000}
               step={50}
               onChange={(v) => set("width", Math.max(300, v))}
+            />
+            <LayoutEditor
+              flights={input.flights}
+              turns={input.turns}
+              treads={flightTreads}
+              onChange={(flights, turns) => setInput((s) => ({ ...s, flights, turns }))}
             />
           </fieldset>
 
@@ -407,7 +424,42 @@ const StairsPage = () => {
             <p>{complianceText}</p>
           </div>
 
-          {r.treads === 0 ? (
+          {layout ? (
+            <>
+              {layout.errors.map((e) => (
+                <p key={e} className={styles.error}>
+                  ✕ {e}
+                </p>
+              ))}
+              <div className={styles.diagramCard}>
+                <h2>From above</h2>
+                <TurnedPlan input={input} layout={layout} />
+                <DiagramLegend
+                  riserBoards={input.riserBoards}
+                  hasRip={layout.flights.some((f) => f.boards.some((b) => b.ripped)) || layout.turns.some((t) => t.regions.some((g) => g.boards.some((b) => b.ripped)))}
+                  angled={layout.taperedPieces > 0}
+                  stacked={stacked}
+                  outer={outer}
+                  posts={layout.turns.some((t) => t.posts.length > 0) || layout.flights.some((f) => f.posts.length > 0)}
+                />
+              </div>
+              {layout.flights
+                .filter((f) => f.treads > 0)
+                .map((f) => {
+                  const next = layout.turns[f.index]
+                  const top = next ? (next.spec.kind === "landing" ? "Landing" : "Winder") : "Deck"
+                  return (
+                    <div key={f.index} className={styles.diagramCard}>
+                      <h2>
+                        Flight {f.index + 1} side view: {f.baseHeight > 0 ? `+${Math.round(f.baseHeight)}` : "ground"} up to{" "}
+                        {top.toLowerCase()} at +{Math.round(f.topHeight)}
+                      </h2>
+                      <StairElevation input={f.subInput} result={f.sub} topLabel={top} />
+                    </div>
+                  )
+                })}
+            </>
+          ) : r.treads === 0 ? (
             <p className={styles.note}>That&apos;s a single step — no stair framing needed.</p>
           ) : (
             <>
@@ -435,13 +487,105 @@ const StairsPage = () => {
               </button>
             </p>
           )}
-          {notes.map((n) => (
+          {[...notes, ...(layout?.notes ?? [])].map((n) => (
             <p key={n} className={styles.note}>
               ⚠ {n}
             </p>
           ))}
 
-          {r.treads > 0 && (
+          {layout && (
+            <div className={styles.resultsGrid}>
+              <SpecCard
+                title="Steps"
+                rows={[
+                  { label: "Rise", value: `${r.risers} × ${mm(r.rise)}` },
+                  { label: "Going", value: mm(r.going) },
+                  { label: "Pitch", value: `${r.pitchDeg.toFixed(1)}°` },
+                  { label: "2R + G", value: mm(r.twoRPlusG) },
+                  {
+                    label: "Longest climb",
+                    value: `${m(layout.maxRiseBetweenLandings)} between landings`,
+                  },
+                ]}
+              />
+              <SpecCard
+                title="Flights"
+                rows={layout.flights.map((f) => ({
+                  label: `Flight ${f.index + 1}`,
+                  value:
+                    f.treads === 0
+                      ? "one riser, no stringers"
+                      : stacked
+                        ? `${f.treads} treads, ${f.sub.frames.list.length} stacked frames`
+                        : `${f.treads} treads · ${outer ? 2 : f.sub.supports.count} × ${f.sub.timberDepth}×${input.stringerThickness} at ${mm(f.sub.stringer.topEdgeLength)}${f.sub.stringer.posts.length ? ` · ${f.sub.stringer.posts.length} post line${f.sub.stringer.posts.length > 1 ? "s" : ""}` : ""}`,
+                }))}
+                note="Each flight is framed like a straight stair of its own (the framing type and sizes above), from the ground or the turn below up to the next turn or the deck. Its stringers sit on the landing or winder platform below and plumb-cut against the edge of the one above."
+                noteToggle
+              />
+              {layout.turns.map((t) => (
+                <SpecCard
+                  key={t.index}
+                  title={`Turn ${t.index + 1}: ${t.spec.angle}° ${t.spec.direction}, ${t.spec.kind === "landing" ? "landing" : `${t.regions.length} winders`}`}
+                  rows={[
+                    ...(t.spec.kind === "landing"
+                      ? [
+                          { label: "Level", value: `+${Math.round(t.regions[0].height)}` },
+                          { label: "Length", value: mm(t.length) },
+                        ]
+                      : [
+                          {
+                            label: "Levels",
+                            value: t.regions.map((g) => `+${Math.round(g.height)}`).join(", "),
+                          },
+                          { label: "Going at centre", value: mm(t.regions[0].going) },
+                          { label: "Going at outside", value: mm(t.regions[0].outerGoing) },
+                        ]),
+                    {
+                      label: "Platform",
+                      value: `${m(t.frames[0].perimeter)} round, ${t.joistDepth}×${input.stringerThickness} joists${t.frames[0].joists.length ? ` + ${t.frames[0].joists.length} inside` : ""}`,
+                    },
+                    ...t.frames.slice(1).map((fr) => ({
+                      label: `Winder frame ${fr.level}`,
+                      value: `${mm(fr.height)} high, ${m(fr.perimeter)} round${fr.joists.length ? ` + ${fr.joists.length} joists` : ""}`,
+                    })),
+                    {
+                      label: "Posts",
+                      value: t.onPads
+                        ? "sits on pads (too low for posts)"
+                        : `${t.posts.length} × ${POST_SIZE}×${POST_SIZE} H5, ${mm(t.postLength)} long`,
+                    },
+                  ]}
+                  note={
+                    t.spec.kind === "landing"
+                      ? `A platform: a frame of ${t.joistDepth} × ${input.stringerThickness} round the outside with joists at the board-span spacing inside, on ${POST_SIZE} × ${POST_SIZE} H5 posts set ${POST_EMBED} mm in concrete at the corners (and no more than 1.2 m apart). Landings want to be at least as wide as the stair and 900 mm long.`
+                      : `The bottom winder is a platform covering the whole turn, on posts like a landing. Each winder above is a frame ${mm(r.rise)} high sitting on the one below, covering its own tread and every winder after it, so the winders stack up like the stacked-frames stair. Winder goings are taken at the centre of the stair width (the pitch line). They converge to a point at the inside corner, which wants a newel post. Check winder rules against D1/AS1.`
+                  }
+                  noteToggle
+                />
+              ))}
+              {(() => {
+                const stock = planMixedStock(layout.boardPieces)
+                return (
+                  <SpecCard
+                    title="Decking boards"
+                    rows={[
+                      { label: "Pieces", value: `${layout.boardPieces.length}` },
+                      { label: "Angled cuts", value: `${layout.taperedPieces}` },
+                      {
+                        label: "Total",
+                        value: `${(layout.boardPieces.reduce((a, p) => a + p, 0) / 1000).toFixed(1)} m`,
+                      },
+                      { label: "Buy", value: stock ? `${stock.lengths} × ${stock.lengthM.toFixed(1)} m` : "—" },
+                    ]}
+                    note="Boards on flights run across the stair. On a landing they run parallel to its front edge, and on each winder parallel to that winder's nosing, so the back boards are cut on an angle (shown in amber)."
+                    noteToggle
+                  />
+                )
+              })()}
+            </div>
+          )}
+
+          {!layout && r.treads > 0 && (
             <div className={styles.resultsGrid}>
               <SpecCard
                 title="Steps"
