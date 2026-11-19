@@ -26,6 +26,14 @@ export const STAIR_ANCHOR_LABELS: Record<StairAnchor, string> = {
   far: "Its farther edge",
 }
 
+/** how the stair meets the top of the wall */
+export type StairTop = "wallRiser" | "onWall"
+
+export const STAIR_TOP_LABELS: Record<StairTop, string> = {
+  wallRiser: "The wall is the last riser — the top tread stops at the wall's face",
+  onWall: "The top tread is level with the top — the stair has its own last riser",
+}
+
 export interface SiteStair {
   id: string
   /** e.g. "Steps to the lawn" */
@@ -40,6 +48,13 @@ export interface SiteStair {
   /** degrees between the wall (walking from its start to its end) and the
    * way down the stair: 90 comes straight out from the wall */
   angleDeg: number
+  /** mm above the wall's ground where the stair finishes at the bottom —
+   * the ground there's often built up with fill */
+  bottomOffsetMm: number
+  /** mm above (or below, negative) the top of the wall where it finishes
+   * at the top */
+  topOffsetMm: number
+  top: StairTop
   /** the stairs calculator's inputs; totalRise is overwritten from the wall */
   input: StairInput
 }
@@ -61,6 +76,9 @@ export const newSiteStair = (segmentIndex: number, segLengthM: number): SiteStai
   distanceM: Math.round((segLengthM / 2) * 100) / 100,
   anchor: "centre",
   angleDeg: 90,
+  bottomOffsetMm: 0,
+  topOffsetMm: 0,
+  top: "wallRiser",
   input: { ...DEFAULT_INPUT },
 })
 
@@ -117,6 +135,9 @@ export const siteFromData = (raw: unknown): SiteProject => {
         distanceM: Math.max(0, num(s.distanceM, 0)),
         anchor: s.anchor === "near" || s.anchor === "far" ? s.anchor : "centre",
         angleDeg: Math.min(MAX_STAIR_ANGLE_DEG, Math.max(MIN_STAIR_ANGLE_DEG, num(s.angleDeg, 90))),
+        bottomOffsetMm: num(s.bottomOffsetMm, 0),
+        topOffsetMm: num(s.topOffsetMm, 0),
+        top: s.top === "onWall" ? "onWall" : "wallRiser",
         input: stairInputFromData(s.input),
       }),
     )
@@ -152,6 +173,10 @@ export interface StairPlacement {
   /** m, the ground in front of the wall and the top of the wall there */
   groundLevelM: number
   topLevelM: number
+  /** m, where the stair finishes at the bottom and the top: the wall's
+   * levels with the stair's offsets */
+  bottomLevelM: number
+  stairTopLevelM: number
   /** the calculator's inputs with the rise taken off the wall */
   input: StairInput
   result: StairResult
@@ -200,8 +225,10 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
 
   const levels = levelsAt(profile, Math.min(seg.endXM, Math.max(seg.startXM, centreXM)))
   if (!levels) return null
-  const riseMm = Math.round((levels.topLevelM - levels.groundLevelM) * 1000)
-  if (riseMm < 100) problems.push(`The wall's only ${Math.max(0, riseMm)} mm high there — too low for a step.`)
+  const bottomLevelM = levels.groundLevelM + stair.bottomOffsetMm / 1000
+  const stairTopLevelM = levels.topLevelM + stair.topOffsetMm / 1000
+  const riseMm = Math.round((stairTopLevelM - bottomLevelM) * 1000)
+  if (riseMm < 100) problems.push(`It's only ${Math.max(0, riseMm)} mm from the bottom to the top there — too little for a step.`)
   const input: StairInput = { ...stair.input, totalRise: Math.max(100, riseMm) }
   const result = calculateStairs(input)
   const layout = calculateLayout(input, result)
@@ -222,7 +249,10 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
   // its back corner touches the face (the gap at the other corner is
   // filled in on site)
   const outM = faceM + (stair.input.width / 2000) * Math.abs(Math.cos(theta))
-  const topMid = { xM: onLine.xM + n.xM * outM, yM: onLine.yM + n.yM * outM }
+  // a top tread level with the top sits in front of the wall, so the
+  // stair's own last riser is a going further out
+  const topTreadM = stair.top === "onWall" ? result.going / 1000 : 0
+  const topMid = { xM: onLine.xM + n.xM * outM + down.xM * topTreadM, yM: onLine.yM + n.yM * outM + down.yM * topTreadM }
   const fixedOnLine = pointAtDistance(points, fixedXM)
   const fixedPoint = { xM: fixedOnLine.xM + n.xM * faceM, yM: fixedOnLine.yM + n.yM * faceM }
 
@@ -240,6 +270,12 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
   }
 
   const treads = [...layout.flights.flatMap((f) => f.treadPolys), ...layout.turns.map((t) => t.polygon)].map((poly) => poly.map(toPlan))
+  if (topTreadM > 0) {
+    // the top tread, between the wall and the last riser
+    const [l, r] = [toPlan(eL), toPlan(eR)]
+    const back = (q: PlanPoint) => ({ xM: q.xM - down.xM * topTreadM, yM: q.yM - down.yM * topTreadM })
+    treads.push([l, r, back(r), back(l)])
+  }
   if (layout.errors.length) problems.push(...layout.errors)
 
   return {
@@ -248,6 +284,8 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
     fixedXM,
     groundLevelM: levels.groundLevelM,
     topLevelM: levels.topLevelM,
+    bottomLevelM,
+    stairTopLevelM,
     input,
     result,
     layout,

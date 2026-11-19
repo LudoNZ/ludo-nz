@@ -9,7 +9,9 @@ import {
   newSiteStair,
   SiteStair,
   STAIR_ANCHOR_LABELS,
+  STAIR_TOP_LABELS,
   StairAnchor,
+  StairTop,
   StairPlacement,
 } from "@/components/site/siteProject"
 import type { EditorAddOnContext } from "../retaining-walls/retainingWallEditor"
@@ -59,8 +61,9 @@ const StairsCard: React.FC<{
       {(stairs.length === 0 || stairs.some((s) => s.id === selectedId)) && (
         <p className={styles.hint}>
           Stairs from the top of the wall down to the ground in front of it. Pin the top tread to a point along the wall,
-          measured from a corner or wall end. The total rise is the wall&apos;s height there — top of the wall to the
-          ground in front — and the ground at the bottom is taken as level with the ground at the wall.
+          measured from a corner or wall end. The rise comes off the wall there — from its ground, raised by any fill
+          where the stair finishes, up to its top, plus or minus what you set. The wall can be the last riser, or the top
+          tread can sit level with the top.
         </p>
       )}
 
@@ -212,10 +215,45 @@ const StairsCard: React.FC<{
                       max={MAX_STAIR_ANGLE_DEG}
                       onCommit={(v) => v !== null && update(st.id, { angleDeg: v })}
                     />
+                    <UnitField
+                      id={key("bottom")}
+                      label="Bottom: finished ground above the wall's ground (mm)"
+                      value={st.bottomOffsetMm}
+                      scale={1}
+                      step={10}
+                      min={-1000}
+                      max={2000}
+                      onCommit={(v) => v !== null && update(st.id, { bottomOffsetMm: v })}
+                    />
+                    <UnitField
+                      id={key("topOffset")}
+                      label="Top: finishes above the top of the wall (mm, − for below)"
+                      value={st.topOffsetMm}
+                      scale={1}
+                      step={10}
+                      min={-2000}
+                      max={1000}
+                      onCommit={(v) => v !== null && update(st.id, { topOffsetMm: v })}
+                    />
+                    <div className={styles.field}>
+                      <label htmlFor={key("top")}>At the top</label>
+                      <select id={key("top")} value={st.top} onChange={(e) => update(st.id, { top: e.target.value as StairTop })}>
+                        {(Object.keys(STAIR_TOP_LABELS) as StairTop[]).map((t) => (
+                          <option key={t} value={t}>
+                            {STAIR_TOP_LABELS[t]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   {p && (
                     <p className={styles.status}>
-                      Top of the wall there is RL {p.topLevelM.toFixed(3)}, the ground in front RL {p.groundLevelM.toFixed(3)}.
+                      From the wall there: top RL {p.topLevelM.toFixed(3)}, ground RL {p.groundLevelM.toFixed(3)}. The stair runs from RL{" "}
+                      {p.bottomLevelM.toFixed(3)} at the bottom{st.bottomOffsetMm ? ` (${st.bottomOffsetMm > 0 ? "+" : ""}${Math.round(st.bottomOffsetMm)} fill)` : ""} up to RL{" "}
+                      {p.stairTopLevelM.toFixed(3)}
+                      {st.topOffsetMm ? ` (${st.topOffsetMm > 0 ? "+" : ""}${Math.round(st.topOffsetMm)} on the top of the wall)` : ""} —{" "}
+                      {p.input.totalRise} mm of rise.
+                      {st.top === "onWall" && " The top tread, level with the top, isn't in the stair's cut list below — add it in."}
                     </p>
                   )}
                   {p && (
@@ -224,7 +262,7 @@ const StairsCard: React.FC<{
                       <StairsPage
                         value={p.input}
                         onChange={(input) => update(st.id, { input: { ...input, totalRise: st.input.totalRise } })}
-                        riseNote="From the wall: its height where the stair comes off it"
+                        riseNote="From the wall: the bottom to the top levels set above"
                       />
                     </div>
                   )}
