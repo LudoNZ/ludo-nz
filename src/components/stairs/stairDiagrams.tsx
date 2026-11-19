@@ -1,5 +1,6 @@
 "use client"
 
+import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { POST_EMBED, POST_SIZE, Pt, StairInput, StairResult } from "./stairs"
 import styles from "./stairDiagrams.module.scss"
 
@@ -90,175 +91,177 @@ export const StairElevation: React.FC<{
   const runDimY = hasPosts ? POST_EMBED + font * 0.8 : dimOffset
 
   return (
-    <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Stair side elevation, to scale">
-      {/* ground */}
-      {groundHatch}
-      <line x1={minX} y1={0} x2={maxX} y2={0} className={styles.ground} strokeWidth={stroke * 2} />
+    <DiagramExplorer label="Side view">
+      <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Stair side elevation, to scale">
+        {/* ground */}
+        {groundHatch}
+        <line x1={minX} y1={0} x2={maxX} y2={0} className={styles.ground} strokeWidth={stroke * 2} />
 
-      {/* deck */}
-      <rect
-        x={xTop}
-        y={-(H - t)}
-        width={JOIST_THICKNESS}
-        height={JOIST_DEPTH}
-        className={styles.deckFrame}
-        strokeWidth={stroke}
-      />
-      {/* packing/trimmer under the joist where the stringer's plumb cut
-          hangs below it — something solid to bolt the stringer top to */}
-      {result.stringer.plumbCutHeight > 0 && result.stringer.polygon.length > 0 && (() => {
-        const joistBottom = H - t - JOIST_DEPTH
-        const plumbBottom = Math.max(0, result.rise * treads - t - result.stringer.plumbCutHeight)
-        return plumbBottom < joistBottom ? (
-          <rect
-            x={xTop}
-            y={-joistBottom}
-            width={JOIST_THICKNESS}
-            height={joistBottom - plumbBottom}
-            className={styles.packing}
-            strokeWidth={stroke}
-          />
-        ) : null
-      })()}
-      <rect x={xTop + JOIST_THICKNESS} y={-(H - t)} width={DECK_SHOWN} height={JOIST_DEPTH * 0.6} className={styles.deckFrameFaint} />
-      <rect x={deckBoardX} y={-H} width={xTop + DECK_SHOWN + JOIST_THICKNESS - deckBoardX} height={t} className={styles.deckBoard} strokeWidth={stroke} />
-      <text x={xTop + JOIST_THICKNESS + DECK_SHOWN / 2} y={-H - font * 0.6} fontSize={font} className={styles.label} textAnchor="middle">
-        {topLabel}
-      </text>
+        {/* deck */}
+        <rect
+          x={xTop}
+          y={-(H - t)}
+          width={JOIST_THICKNESS}
+          height={JOIST_DEPTH}
+          className={styles.deckFrame}
+          strokeWidth={stroke}
+        />
+        {/* packing/trimmer under the joist where the stringer's plumb cut
+            hangs below it — something solid to bolt the stringer top to */}
+        {result.stringer.plumbCutHeight > 0 && result.stringer.polygon.length > 0 && (() => {
+          const joistBottom = H - t - JOIST_DEPTH
+          const plumbBottom = Math.max(0, result.rise * treads - t - result.stringer.plumbCutHeight)
+          return plumbBottom < joistBottom ? (
+            <rect
+              x={xTop}
+              y={-joistBottom}
+              width={JOIST_THICKNESS}
+              height={joistBottom - plumbBottom}
+              className={styles.packing}
+              strokeWidth={stroke}
+            />
+          ) : null
+        })()}
+        <rect x={xTop + JOIST_THICKNESS} y={-(H - t)} width={DECK_SHOWN} height={JOIST_DEPTH * 0.6} className={styles.deckFrameFaint} />
+        <rect x={deckBoardX} y={-H} width={xTop + DECK_SHOWN + JOIST_THICKNESS - deckBoardX} height={t} className={styles.deckBoard} strokeWidth={stroke} />
+        <text x={xTop + JOIST_THICKNESS + DECK_SHOWN / 2} y={-H - font * 0.6} fontSize={font} className={styles.label} textAnchor="middle">
+          {topLabel}
+        </text>
 
-      {/* support posts part way up, set in concrete below ground */}
-      {result.stringer.posts.map((p) => (
-        <g key={`post${p.x}`}>
-          <rect
-            x={p.x - POST_SIZE}
-            y={0}
-            width={POST_SIZE * 2}
-            height={POST_EMBED}
-            className={styles.footing}
-            strokeWidth={stroke}
-          />
-          <rect
-            x={p.x - POST_SIZE / 2}
-            y={-p.height}
-            width={POST_SIZE}
-            height={p.height + POST_EMBED - 50}
-            className={styles.post}
-            strokeWidth={stroke}
-          />
-        </g>
-      ))}
+        {/* support posts part way up, set in concrete below ground */}
+        {result.stringer.posts.map((p) => (
+          <g key={`post${p.x}`}>
+            <rect
+              x={p.x - POST_SIZE}
+              y={0}
+              width={POST_SIZE * 2}
+              height={POST_EMBED}
+              className={styles.footing}
+              strokeWidth={stroke}
+            />
+            <rect
+              x={p.x - POST_SIZE / 2}
+              y={-p.height}
+              width={POST_SIZE}
+              height={p.height + POST_EMBED - 50}
+              className={styles.post}
+              strokeWidth={stroke}
+            />
+          </g>
+        ))}
 
-      {/* stringer */}
-      {result.stringer.polygon.length > 0 && (
-        <polygon points={pts(result.stringer.polygon)} className={styles.stringer} strokeWidth={stroke} />
-      )}
+        {/* stringer */}
+        {result.stringer.polygon.length > 0 && (
+          <polygon points={pts(result.stringer.polygon)} className={styles.stringer} strokeWidth={stroke} />
+        )}
 
-      {/* wedge blocks */}
-      {result.wedges.polygons.map((poly, i) => (
-        <polygon key={i} points={pts(poly)} className={styles.wedge} strokeWidth={stroke} />
-      ))}
+        {/* wedge blocks */}
+        {result.wedges.polygons.map((poly, i) => (
+          <polygon key={i} points={pts(poly)} className={styles.wedge} strokeWidth={stroke} />
+        ))}
 
-      {/* stacked step frames: each box's side joist, with the front and
-          back rails in section at its ends */}
-      {result.frames.list.map((f) => (
-        <g key={f.step}>
-          <rect x={f.x0} y={-f.y1} width={f.depth} height={f.height} className={styles.stringer} strokeWidth={stroke} />
-          <rect
-            x={f.x0}
-            y={-f.y1}
-            width={input.stringerThickness}
-            height={f.height}
-            className={styles.wedge}
-            strokeWidth={stroke}
-          />
-          <rect
-            x={f.x1 - input.stringerThickness}
-            y={-f.y1}
-            width={input.stringerThickness}
-            height={f.height}
-            className={styles.wedge}
-            strokeWidth={stroke}
-          />
-        </g>
-      ))}
+        {/* stacked step frames: each box's side joist, with the front and
+            back rails in section at its ends */}
+        {result.frames.list.map((f) => (
+          <g key={f.step}>
+            <rect x={f.x0} y={-f.y1} width={f.depth} height={f.height} className={styles.stringer} strokeWidth={stroke} />
+            <rect
+              x={f.x0}
+              y={-f.y1}
+              width={input.stringerThickness}
+              height={f.height}
+              className={styles.wedge}
+              strokeWidth={stroke}
+            />
+            <rect
+              x={f.x1 - input.stringerThickness}
+              y={-f.y1}
+              width={input.stringerThickness}
+              height={f.height}
+              className={styles.wedge}
+              strokeWidth={stroke}
+            />
+          </g>
+        ))}
 
-      {/* outer-stringer type: riser joists end on and nogs, behind the
-          near stringer (so drawn see-through, dashed) */}
-      {result.riserJoists.nogs
-        .filter((n, i, all) => all.findIndex((m) => m.tread === n.tread) === i)
-        .map((n) => (
+        {/* outer-stringer type: riser joists end on and nogs, behind the
+            near stringer (so drawn see-through, dashed) */}
+        {result.riserJoists.nogs
+          .filter((n, i, all) => all.findIndex((m) => m.tread === n.tread) === i)
+          .map((n) => (
+            <rect
+              key={`nog${n.tread}`}
+              x={n.x0}
+              y={-n.y1}
+              width={n.x1 - n.x0}
+              height={n.y1 - n.y0}
+              className={styles.nog}
+              strokeWidth={stroke}
+            />
+          ))}
+        {result.riserJoists.list.map((j) => (
           <rect
-            key={`nog${n.tread}`}
-            x={n.x0}
-            y={-n.y1}
-            width={n.x1 - n.x0}
-            height={n.y1 - n.y0}
-            className={styles.nog}
+            key={`rj${j.index}`}
+            x={j.x0}
+            y={-j.y1}
+            width={j.x1 - j.x0}
+            height={j.height}
+            className={styles.riserJoist}
             strokeWidth={stroke}
           />
         ))}
-      {result.riserJoists.list.map((j) => (
-        <rect
-          key={`rj${j.index}`}
-          x={j.x0}
-          y={-j.y1}
-          width={j.x1 - j.x0}
-          height={j.height}
-          className={styles.riserJoist}
-          strokeWidth={stroke}
-        />
-      ))}
 
-      {riserRects}
-      {treadRects}
+        {riserRects}
+        {treadRects}
 
-      {/* total rise, in front of the bottom step */}
-      <g className={styles.dim}>
-        <line x1={front - dimOffset} y1={0} x2={front - dimOffset} y2={-H} strokeWidth={stroke} />
-        <line x1={front - dimOffset - font * 0.4} y1={-H} x2={front - dimOffset + font * 0.4} y2={-H} strokeWidth={stroke} />
-        <line x1={front - dimOffset - font * 0.4} y1={0} x2={front - dimOffset + font * 0.4} y2={0} strokeWidth={stroke} />
-        <text
-          x={front - dimOffset - font * 0.5}
-          y={-H / 2}
-          fontSize={font}
-          className={styles.dimText}
-          textAnchor="middle"
-          transform={`rotate(-90 ${front - dimOffset - font * 0.5} ${-H / 2})`}
-        >
-          {Math.round(H)} rise
-        </text>
-      </g>
-
-      {/* total run, below ground */}
-      {treads > 0 && (
+        {/* total rise, in front of the bottom step */}
         <g className={styles.dim}>
-          <line x1={0} y1={runDimY} x2={xTop} y2={runDimY} strokeWidth={stroke} />
-          <line x1={0} y1={runDimY - font * 0.4} x2={0} y2={runDimY + font * 0.4} strokeWidth={stroke} />
-          <line x1={xTop} y1={runDimY - font * 0.4} x2={xTop} y2={runDimY + font * 0.4} strokeWidth={stroke} />
-          <text x={xTop / 2} y={runDimY + font * 1.15} fontSize={font} className={styles.dimText} textAnchor="middle">
-            {Math.round(result.totalRun)} run
-          </text>
-        </g>
-      )}
-
-      {/* one step's R and G */}
-      {k > 0 && (
-        <g className={styles.stepDim}>
-          <text x={(k - 0.5) * G} y={-(k * R) - font * 0.5} fontSize={font * 0.85} textAnchor="middle" className={styles.dimText}>
-            G {Math.round(G)}
-          </text>
+          <line x1={front - dimOffset} y1={0} x2={front - dimOffset} y2={-H} strokeWidth={stroke} />
+          <line x1={front - dimOffset - font * 0.4} y1={-H} x2={front - dimOffset + font * 0.4} y2={-H} strokeWidth={stroke} />
+          <line x1={front - dimOffset - font * 0.4} y1={0} x2={front - dimOffset + font * 0.4} y2={0} strokeWidth={stroke} />
           <text
-            x={(k - 1) * G - (input.riserBoards ? t : 0) - font * 0.3}
-            y={-((k - 0.5) * R) + font * 0.3}
-            fontSize={font * 0.85}
-            textAnchor="end"
+            x={front - dimOffset - font * 0.5}
+            y={-H / 2}
+            fontSize={font}
             className={styles.dimText}
+            textAnchor="middle"
+            transform={`rotate(-90 ${front - dimOffset - font * 0.5} ${-H / 2})`}
           >
-            R {Math.round(R)}
+            {Math.round(H)} rise
           </text>
         </g>
-      )}
-    </svg>
+
+        {/* total run, below ground */}
+        {treads > 0 && (
+          <g className={styles.dim}>
+            <line x1={0} y1={runDimY} x2={xTop} y2={runDimY} strokeWidth={stroke} />
+            <line x1={0} y1={runDimY - font * 0.4} x2={0} y2={runDimY + font * 0.4} strokeWidth={stroke} />
+            <line x1={xTop} y1={runDimY - font * 0.4} x2={xTop} y2={runDimY + font * 0.4} strokeWidth={stroke} />
+            <text x={xTop / 2} y={runDimY + font * 1.15} fontSize={font} className={styles.dimText} textAnchor="middle">
+              {Math.round(result.totalRun)} run
+            </text>
+          </g>
+        )}
+
+        {/* one step's R and G */}
+        {k > 0 && (
+          <g className={styles.stepDim}>
+            <text x={(k - 0.5) * G} y={-(k * R) - font * 0.5} fontSize={font * 0.85} textAnchor="middle" className={styles.dimText}>
+              G {Math.round(G)}
+            </text>
+            <text
+              x={(k - 1) * G - (input.riserBoards ? t : 0) - font * 0.3}
+              y={-((k - 0.5) * R) + font * 0.3}
+              fontSize={font * 0.85}
+              textAnchor="end"
+              className={styles.dimText}
+            >
+              R {Math.round(R)}
+            </text>
+          </g>
+        )}
+      </svg>
+    </DiagramExplorer>
   )
 }
 
@@ -302,55 +305,57 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
   }
 
   return (
-    <svg viewBox={viewBox} className={`${styles.svg} ${styles.planSvg}`} role="img" aria-label="Stair plan view, to scale">
-      <rect x={xTop - riserT - nosing} y={-pad * 0.4} width={maxX - xTop} height={W + pad * 0.8} className={styles.deckBoard} />
-      <text x={xTop + 150} y={W / 2} fontSize={font} className={styles.label} textAnchor="middle" dominantBaseline="middle">
-        Deck
-      </text>
-      {boards}
-      {result.riserJoists.list.map((j) => (
-        <rect
-          key={`rj${j.index}`}
-          x={j.x0}
-          y={b}
-          width={j.x1 - j.x0}
-          height={W - 2 * b}
-          className={styles.stringerHidden}
-          strokeWidth={stroke}
-        />
-      ))}
-      {result.riserJoists.nogs.map((n, i) => {
-        const lines = result.riserJoists.nogLines
-        const y = lines[i % lines.length]
-        return (
+    <DiagramExplorer label="Plan, from above">
+      <svg viewBox={viewBox} className={`${styles.svg} ${styles.planSvg}`} role="img" aria-label="Stair plan view, to scale">
+        <rect x={xTop - riserT - nosing} y={-pad * 0.4} width={maxX - xTop} height={W + pad * 0.8} className={styles.deckBoard} />
+        <text x={xTop + 150} y={W / 2} fontSize={font} className={styles.label} textAnchor="middle" dominantBaseline="middle">
+          Deck
+        </text>
+        {boards}
+        {result.riserJoists.list.map((j) => (
           <rect
-            key={`nog${i}`}
-            x={n.x0}
-            y={y - b / 2}
-            width={n.x1 - n.x0}
-            height={b}
+            key={`rj${j.index}`}
+            x={j.x0}
+            y={b}
+            width={j.x1 - j.x0}
+            height={W - 2 * b}
             className={styles.stringerHidden}
             strokeWidth={stroke}
           />
-        )
-      })}
-      {stringerLines.map((y) => (
-        <rect
-          key={y}
-          x={supportStart}
-          y={y - input.stringerThickness / 2}
-          width={xTop - supportStart}
-          height={input.stringerThickness}
-          className={styles.stringerHidden}
-          strokeWidth={stroke}
-        />
-      ))}
-      <text x={(front + xTop) / 2} y={W + pad * 1.2} fontSize={font} className={styles.dimText} textAnchor="middle">
-        {Math.round(W)} wide · {outer
-          ? `2 stringers, nogs between at ${Math.round(result.supports.spacing)} centres`
-          : `${result.supports.count} ${stacked ? "joists per frame" : "stringers"} at ${Math.round(result.supports.spacing)} centres`}
-      </text>
-    </svg>
+        ))}
+        {result.riserJoists.nogs.map((n, i) => {
+          const lines = result.riserJoists.nogLines
+          const y = lines[i % lines.length]
+          return (
+            <rect
+              key={`nog${i}`}
+              x={n.x0}
+              y={y - b / 2}
+              width={n.x1 - n.x0}
+              height={b}
+              className={styles.stringerHidden}
+              strokeWidth={stroke}
+            />
+          )
+        })}
+        {stringerLines.map((y) => (
+          <rect
+            key={y}
+            x={supportStart}
+            y={y - input.stringerThickness / 2}
+            width={xTop - supportStart}
+            height={input.stringerThickness}
+            className={styles.stringerHidden}
+            strokeWidth={stroke}
+          />
+        ))}
+        <text x={(front + xTop) / 2} y={W + pad * 1.2} fontSize={font} className={styles.dimText} textAnchor="middle">
+          {Math.round(W)} wide · {outer
+            ? `2 stringers, nogs between at ${Math.round(result.supports.spacing)} centres`
+            : `${result.supports.count} ${stacked ? "joists per frame" : "stringers"} at ${Math.round(result.supports.spacing)} centres`}
+        </text>
+      </svg>
+    </DiagramExplorer>
   )
 }
 

@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { StairInput } from "./stairs"
 import { StairLayout } from "./layout"
 import { STAIR_MEMBER_LABELS, StairMember, buildStairScene, stairMembers } from "./stairRender3d"
+import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import styles from "./stairRenderView.module.scss"
 
 /** the attribute on <html> that tells the print stylesheet to print just
@@ -35,6 +36,11 @@ const StairRenderView: React.FC<{
       return next
     })
   const svgRef = useRef<SVGSVGElement>(null)
+  // dragging right swings the stair round to the right; down tips it toward you
+  const handleOrbit = useCallback((dx: number, dy: number) => {
+    setAzimuthDeg((a) => ((((a - dx * 0.4 + 180) % 360) + 360) % 360) - 180)
+    setElevationDeg((e) => Math.min(75, Math.max(5, e + dy * 0.3)))
+  }, [])
 
   const scene = useMemo(() => buildStairScene(input, layout, { azimuthDeg, elevationDeg, hidden }), [input, layout, azimuthDeg, elevationDeg, hidden])
 
@@ -90,42 +96,49 @@ const StairRenderView: React.FC<{
     img.src = url
   }
 
+  const memberToggles = (
+    <div className={styles.members} role="group" aria-label="Members shown">
+      {members.map((m) => (
+        <label key={m} className={styles.memberToggle}>
+          <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />
+          {STAIR_MEMBER_LABELS[m]}
+        </label>
+      ))}
+    </div>
+  )
+
   return (
     <div className={styles.renderRoot}>
-      {scene ? (
-        <div className={styles.printArea}>
-          <svg
-            ref={svgRef}
-            viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`}
-            className={styles.svg}
-            role="img"
-            aria-label="Shaded 3D view of the stair"
-          >
-            <defs>
-              <linearGradient id="stairRenderSky" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="#eef3f7" />
-                <stop offset="1" stopColor="#ffffff" />
-              </linearGradient>
-            </defs>
-            <rect x={scene.viewBox.x} y={scene.viewBox.y} width={scene.viewBox.w} height={scene.viewBox.h} fill="url(#stairRenderSky)" />
-            {scene.polygons.map((p, i) => (
-              <polygon key={i} points={p.points} fill={p.fill} stroke={p.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" />
-            ))}
-          </svg>
-          {caption && <p className={styles.caption}>{caption}</p>}
-        </div>
-      ) : (
-        <p className={styles.empty}>Everything&apos;s hidden — tick a member below to show it.</p>
-      )}
-
-      <div className={styles.members} role="group" aria-label="Members shown">
-        {members.map((m) => (
-          <label key={m} className={styles.memberToggle}>
-            <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />
-            {STAIR_MEMBER_LABELS[m]}
-          </label>
-        ))}
+      {/* stays mounted with everything hidden, so full-screen doesn't drop out */}
+      <div className={styles.printArea}>
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} toolbar={memberToggles}>
+          {scene ? (
+            <svg
+              ref={svgRef}
+              viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`}
+              className={styles.svg}
+              role="img"
+              aria-label="Shaded 3D view of the stair"
+            >
+              <defs>
+                <linearGradient id="stairRenderSky" gradientUnits="userSpaceOnUse" x1="0" y1={scene.viewBox.y} x2="0" y2={scene.viewBox.y + scene.viewBox.h}>
+                  <stop offset="0" stopColor="#eef3f7" />
+                  <stop offset="1" stopColor="#ffffff" />
+                </linearGradient>
+              </defs>
+              <rect x={scene.viewBox.x - scene.viewBox.w * 10} y={scene.viewBox.y - scene.viewBox.h * 10} width={scene.viewBox.w * 21} height={scene.viewBox.h * 21} fill="url(#stairRenderSky)" />
+              {scene.polygons.map((p, i) => (
+                <polygon key={i} points={p.points} fill={p.fill} stroke={p.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" />
+              ))}
+            </svg>
+          ) : (
+            <p className={styles.empty}>Everything&apos;s hidden — tick a member to show it.</p>
+          )}
+        </DiagramExplorer>
+        {caption && <p className={styles.caption}>{caption}</p>}
       </div>
+
+      {memberToggles}
 
       <div className={styles.controls}>
         <label className={styles.slider}>

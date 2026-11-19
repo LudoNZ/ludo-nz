@@ -1,0 +1,212 @@
+.root {
+  position: relative;
+}
+
+// a fixed-height pane: the drawing takes the whole height
+.fill {
+  height: 100%;
+
+  .viewport,
+  .content {
+    height: 100%;
+  }
+}
+
+.content {
+  transform-origin: 0 0;
+}
+
+// the magnifier in the drawing's corner
+.enter {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  color: var(--color-primary);
+  cursor: zoom-in;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+
+  svg {
+    width: 1.3rem;
+    height: 1.3rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+  }
+
+  &:hover {
+    background: var(--background);
+  }
+}
+
+// ── full screen ──────────────────────────────────────────────────────
+.exploring {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  color: var(--foreground);
+
+  .viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    // every gesture is ours in here: no page scroll or browser zoom
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  .content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    // the drawing fits the screen, whatever size it was on the page
+    > :global(svg) {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      max-width: none;
+    }
+  }
+}
+
+.topBar,
+.bottomBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.6rem max(0.75rem, env(safe-area-inset-right)) 0.6rem max(0.75rem, env(safe-area-inset-left));
+}
+
+.topBar {
+  padding-top: max(0.6rem, env(safe-area-inset-top));
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.bottomBar {
+  padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+  border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+
+  &:empty {
+    display: none;
+  }
+}
+
+.title {
+  font-size: 0.95rem;
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  overflow: hidden;
+
+  button {
+    min-height: 2.25rem;
+    padding: 0 0.9rem;
+    border: none;
+    background: none;
+    color: var(--foreground);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .modeActive {
+    background: var(--color-primary);
+    color: #fff;
+  }
+}
+
+.done {
+  min-height: 2.25rem;
+  padding: 0 1.1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+// over the drawing, bottom right, thumb-sized (inside the viewport)
+.zoomButtons {
+  position: absolute;
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 1;
+
+  button {
+    width: 2.75rem;
+    height: 2.75rem;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--color-primary);
+    border-radius: 0.6rem;
+    background: color-mix(in srgb, var(--background) 92%, transparent);
+    color: var(--color-primary);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+
+  svg {
+    width: 1.2rem;
+    height: 1.2rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+}
+
+.hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+@media print {
+  .enter {
+    display: none;
+  }
+}

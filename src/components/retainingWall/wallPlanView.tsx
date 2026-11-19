@@ -1,5 +1,6 @@
 "use client"
 
+import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
@@ -159,132 +160,136 @@ const WallPlanView: React.FC<{
 
   return (
     <div className={styles.planRoot}>
-      <svg
-        ref={svgRef}
-        viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
-        className={styles.svg}
-        role="img"
-        aria-label="Plan view of the wall, seen from above"
-      >
-        {/* retained ground: a band of soil along the uphill side */}
-        <polygon points={band.map((p) => `${p.xM},${p.yM}`).join(" ")} className={styles.retainedBand} />
+      <DiagramExplorer label="Wall plan">
+        <svg
+          ref={svgRef}
+          viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+          className={styles.svg}
+          role="img"
+          aria-label="Plan view of the wall, seen from above"
+        >
+          {/* retained ground: a band of soil along the uphill side */}
+          <polygon points={band.map((p) => `${p.xM},${p.yM}`).join(" ")} className={styles.retainedBand} />
 
-        {points.slice(0, -1).map((a, i) => {
-          const b = points[i + 1]
-          const selected = selectedSegment === i
-          return (
-            <g key={`seg-${i}`}>
-              <line
-                x1={a.xM}
-                y1={a.yM}
-                x2={b.xM}
-                y2={b.yM}
-                className={selected ? styles.wallLineSelected : styles.wallLine}
-                strokeWidth={strokeW * (selected ? 1.6 : 1)}
+          {points.slice(0, -1).map((a, i) => {
+            const b = points[i + 1]
+            const selected = selectedSegment === i
+            return (
+              <g key={`seg-${i}`}>
+                <line
+                  x1={a.xM}
+                  y1={a.yM}
+                  x2={b.xM}
+                  y2={b.yM}
+                  className={selected ? styles.wallLineSelected : styles.wallLine}
+                  strokeWidth={strokeW * (selected ? 1.6 : 1)}
+                />
+                {/* fat invisible stroke so a run is tappable on a phone */}
+                <line
+                  x1={a.xM}
+                  y1={a.yM}
+                  x2={b.xM}
+                  y2={b.yM}
+                  className={styles.wallHit}
+                  strokeWidth={handleR * 3}
+                  onClick={() => onSelectSegment(i)}
+                  role="button"
+                  aria-label={`Wall ${segmentLabel(i)}, ${lengths[i].toFixed(2)} metres — tap to view its elevation`}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      onSelectSegment(i)
+                    }
+                  }}
+                />
+              </g>
+            )
+          })}
+
+          {/* posts, where the layout actually puts them */}
+          {profile?.posts.map((post) => {
+            const at = pointAtDistance(points, post.xM)
+            const size = postSize(post.widthM)
+            return (
+              <rect
+                key={`post-${post.index}`}
+                x={at.xM - size / 2}
+                y={at.yM - size / 2}
+                width={size}
+                height={size}
+                className={post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post}
+                strokeWidth={strokeW * 0.4}
               />
-              {/* fat invisible stroke so a run is tappable on a phone */}
-              <line
-                x1={a.xM}
-                y1={a.yM}
-                x2={b.xM}
-                y2={b.yM}
-                className={styles.wallHit}
-                strokeWidth={handleR * 3}
-                onClick={() => onSelectSegment(i)}
+            )
+          })}
+
+          {/* run labels, placed clear of each other and of the walls (see
+              placeLabels) — on the low side where there's room */}
+          {labelTexts.map((text, i) => {
+            const at = labelSpots[i]
+            return (
+              <text
+                key={`label-${i}`}
+                x={at.xM}
+                y={at.yM}
+                fontSize={fontSize}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className={selectedSegment === i ? styles.labelSelected : styles.label}
+              >
+                {text}
+              </text>
+            )
+          })}
+
+          {/* "+" on each run: adds a corner there, ready to drag out */}
+          {(readOnly ? [] : points.slice(0, -1)).map((a, i) => {
+            const b = points[i + 1]
+            const cx = (a.xM + b.xM) / 2
+            const cy = (a.yM + b.yM) / 2
+            const arm = handleR * 0.55
+            return (
+              <g
+                key={`add-${i}`}
+                className={styles.addHandle}
+                onClick={() => onChange(insertCorner(points, i))}
                 role="button"
-                aria-label={`Wall ${segmentLabel(i)}, ${lengths[i].toFixed(2)} metres — tap to view its elevation`}
+                aria-label={`Add a corner to wall ${segmentLabel(i)}`}
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault()
-                    onSelectSegment(i)
+                    onChange(insertCorner(points, i))
                   }
                 }}
-              />
-            </g>
-          )
-        })}
+              >
+                <circle cx={cx} cy={cy} r={handleR * 2} className={styles.handleHit} />
+                <circle cx={cx} cy={cy} r={handleR} className={styles.addHandleDot} strokeWidth={strokeW * 0.5} />
+                <line x1={cx - arm} y1={cy} x2={cx + arm} y2={cy} className={styles.addHandleCross} strokeWidth={strokeW * 0.6} />
+                <line x1={cx} y1={cy - arm} x2={cx} y2={cy + arm} className={styles.addHandleCross} strokeWidth={strokeW * 0.6} />
+              </g>
+            )
+          })}
 
-        {/* posts, where the layout actually puts them */}
-        {profile?.posts.map((post) => {
-          const at = pointAtDistance(points, post.xM)
-          const size = postSize(post.widthM)
-          return (
-            <rect
-              key={`post-${post.index}`}
-              x={at.xM - size / 2}
-              y={at.yM - size / 2}
-              width={size}
-              height={size}
-              className={post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post}
-              strokeWidth={strokeW * 0.4}
-            />
-          )
-        })}
-
-        {/* run labels, placed clear of each other and of the walls (see
-            placeLabels) — on the low side where there's room */}
-        {labelTexts.map((text, i) => {
-          const at = labelSpots[i]
-          return (
-            <text
-              key={`label-${i}`}
-              x={at.xM}
-              y={at.yM}
-              fontSize={fontSize}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className={selectedSegment === i ? styles.labelSelected : styles.label}
-            >
-              {text}
-            </text>
-          )
-        })}
-
-        {/* "+" on each run: adds a corner there, ready to drag out */}
-        {(readOnly ? [] : points.slice(0, -1)).map((a, i) => {
-          const b = points[i + 1]
-          const cx = (a.xM + b.xM) / 2
-          const cy = (a.yM + b.yM) / 2
-          const arm = handleR * 0.55
-          return (
+          {/* draggable ends and corners */}
+          {points.map((p, i) => (
             <g
-              key={`add-${i}`}
-              className={styles.addHandle}
-              onClick={() => onChange(insertCorner(points, i))}
-              role="button"
-              aria-label={`Add a corner to wall ${segmentLabel(i)}`}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  onChange(insertCorner(points, i))
-                }
-              }}
+              key={`vertex-${i}`}
+              className={styles.vertex}
+              // its own drag, not the explorer's pan
+              data-explore-skip
+              onPointerDown={handlePointerDown(i)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
             >
-              <circle cx={cx} cy={cy} r={handleR * 2} className={styles.handleHit} />
-              <circle cx={cx} cy={cy} r={handleR} className={styles.addHandleDot} strokeWidth={strokeW * 0.5} />
-              <line x1={cx - arm} y1={cy} x2={cx + arm} y2={cy} className={styles.addHandleCross} strokeWidth={strokeW * 0.6} />
-              <line x1={cx} y1={cy - arm} x2={cx} y2={cy + arm} className={styles.addHandleCross} strokeWidth={strokeW * 0.6} />
+              <circle cx={p.xM} cy={p.yM} r={handleR * 2.4} className={styles.handleHit} />
+              <circle cx={p.xM} cy={p.yM} r={handleR * 1.15} className={styles.vertexDot} strokeWidth={strokeW * 0.6} />
             </g>
-          )
-        })}
-
-        {/* draggable ends and corners */}
-        {points.map((p, i) => (
-          <g
-            key={`vertex-${i}`}
-            className={styles.vertex}
-            onPointerDown={handlePointerDown(i)}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-          >
-            <circle cx={p.xM} cy={p.yM} r={handleR * 2.4} className={styles.handleHit} />
-            <circle cx={p.xM} cy={p.yM} r={handleR * 1.15} className={styles.vertexDot} strokeWidth={strokeW * 0.6} />
-          </g>
-        ))}
-      </svg>
+          ))}
+        </svg>
+      </DiagramExplorer>
 
       <div className={styles.legend}>
         <span>

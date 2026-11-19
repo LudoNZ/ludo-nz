@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { BoardHighlight, WallProfile } from "./postProfile"
 import { CalcSettings } from "./calcSettings"
 import { PlanPoint, RetainedSide } from "./wallPlan"
 import { buildRenderScene } from "./wallRender3d"
+import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import styles from "./wallRenderView.module.scss"
 
 /** the attribute on <html> that tells the print stylesheet to print just
@@ -55,6 +56,12 @@ const WallRenderView: React.FC<{
   const [elevationDeg, setElevationDeg] = useState(26)
   const [showFootings, setShowFootings] = useState(showFootingsInitially)
   const svgRef = useRef<SVGSVGElement>(null)
+  // dragging right swings the wall round to the right; down tips it toward
+  // you — within the sliders' range
+  const handleOrbit = useCallback((dx: number, dy: number) => {
+    setAzimuthDeg((a) => Math.min(75, Math.max(-75, a - dx * 0.4)))
+    setElevationDeg((e) => Math.min(60, Math.max(5, e + dy * 0.3)))
+  }, [])
 
   const scene = useMemo(
     () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex }, highlight),
@@ -110,6 +117,13 @@ const WallRenderView: React.FC<{
     img.src = url
   }
 
+  const footingsToggle = (
+    <label className={styles.check}>
+      <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
+      Show footings
+    </label>
+  )
+
   if (!scene) return null
   const { viewBox: vb, strokeW } = scene
   const markerR = Math.max(vb.w, vb.h) * 0.028
@@ -117,59 +131,61 @@ const WallRenderView: React.FC<{
   return (
     <div className={`${styles.renderRoot} ${compact ? styles.compact : ""}`}>
       <div className={styles.printArea}>
-        <svg
-          ref={svgRef}
-          viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
-          className={styles.svg}
-          role="img"
-          aria-label="Shaded 3D view of the wall"
-        >
-          <defs>
-            <linearGradient id="wallRenderSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#eef3f7" />
-              <stop offset="1" stopColor="#ffffff" />
-            </linearGradient>
-          </defs>
-          <rect x={vb.x} y={vb.y} width={vb.w} height={vb.h} fill="url(#wallRenderSky)" />
-          {scene.polygons.map((p, i) => (
-            <polygon
-              key={i}
-              points={p.points}
-              fill={p.fill}
-              stroke={p.stroke}
-              strokeWidth={strokeW}
-              strokeLinejoin="round"
-              opacity={p.opacity}
-              onClick={onSelectPost && p.post !== undefined ? () => onSelectPost(p.post!) : undefined}
-              style={onSelectPost && p.post !== undefined ? { cursor: "pointer" } : undefined}
-            />
-          ))}
-          {scene.focus && focusPostIndex !== null && (
-            // a pin over the focused post: its number in a blue disc
-            <g pointerEvents="none">
-              <line
-                x1={scene.focus.x}
-                y1={scene.focus.y - markerR * 0.3}
-                x2={scene.focus.x}
-                y2={scene.focus.y - markerR * 1.6}
-                stroke="#2a78d6"
-                strokeWidth={strokeW * 2}
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} fill={compact} toolbar={footingsToggle}>
+          <svg
+            ref={svgRef}
+            viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+            className={styles.svg}
+            role="img"
+            aria-label="Shaded 3D view of the wall"
+          >
+            <defs>
+              <linearGradient id="wallRenderSky" gradientUnits="userSpaceOnUse" x1="0" y1={vb.y} x2="0" y2={vb.y + vb.h}>
+                <stop offset="0" stopColor="#eef3f7" />
+                <stop offset="1" stopColor="#ffffff" />
+              </linearGradient>
+            </defs>
+            <rect x={vb.x - vb.w * 10} y={vb.y - vb.h * 10} width={vb.w * 21} height={vb.h * 21} fill="url(#wallRenderSky)" />
+            {scene.polygons.map((p, i) => (
+              <polygon
+                key={i}
+                points={p.points}
+                fill={p.fill}
+                stroke={p.stroke}
+                strokeWidth={strokeW}
+                strokeLinejoin="round"
+                opacity={p.opacity}
+                onClick={onSelectPost && p.post !== undefined ? () => onSelectPost(p.post!) : undefined}
+                style={onSelectPost && p.post !== undefined ? { cursor: "pointer" } : undefined}
               />
-              <circle cx={scene.focus.x} cy={scene.focus.y - markerR * 2.4} r={markerR} fill="#2a78d6" stroke="#ffffff" strokeWidth={strokeW * 2} />
-              <text
-                x={scene.focus.x}
-                y={scene.focus.y - markerR * 2.4}
-                fill="#ffffff"
-                fontSize={markerR * 1.05}
-                fontWeight={700}
-                textAnchor="middle"
-                dominantBaseline="central"
-              >
-                {focusPostIndex + 1}
-              </text>
-            </g>
-          )}
-        </svg>
+            ))}
+            {scene.focus && focusPostIndex !== null && (
+              // a pin over the focused post: its number in a blue disc
+              <g pointerEvents="none">
+                <line
+                  x1={scene.focus.x}
+                  y1={scene.focus.y - markerR * 0.3}
+                  x2={scene.focus.x}
+                  y2={scene.focus.y - markerR * 1.6}
+                  stroke="#2a78d6"
+                  strokeWidth={strokeW * 2}
+                />
+                <circle cx={scene.focus.x} cy={scene.focus.y - markerR * 2.4} r={markerR} fill="#2a78d6" stroke="#ffffff" strokeWidth={strokeW * 2} />
+                <text
+                  x={scene.focus.x}
+                  y={scene.focus.y - markerR * 2.4}
+                  fill="#ffffff"
+                  fontSize={markerR * 1.05}
+                  fontWeight={700}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                >
+                  {focusPostIndex + 1}
+                </text>
+              </g>
+            )}
+          </svg>
+        </DiagramExplorer>
         {caption && <p className={styles.caption}>{caption}</p>}
       </div>
       {highlight.length > 0 && (
@@ -187,10 +203,7 @@ const WallRenderView: React.FC<{
           <span>Tilt</span>
           <input type="range" min={5} max={60} step={1} value={elevationDeg} onChange={(e) => setElevationDeg(Number(e.target.value))} />
         </label>
-        <label className={styles.check}>
-          <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
-          Show footings
-        </label>
+        {footingsToggle}
         {!compact && (
           <div className={styles.actions}>
             <button type="button" className={styles.actionButton} onClick={handlePrint}>
