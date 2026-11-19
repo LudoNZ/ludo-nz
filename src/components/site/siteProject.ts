@@ -11,11 +11,13 @@ import { DEFAULT_INPUT, FlightSpec, FramingType, FRAMING_LABELS, StairInput, Sta
 import { StairLayout, calculateLayout } from "../stairs/layout"
 import { newBlankWall, wallFromData, WallProject } from "../retainingWall/wallProject"
 import { WallProfile } from "../retainingWall/postProfile"
-import { PlanPoint, pointAtDistance, RetainedSide, sideNormal } from "../retainingWall/wallPlan"
+import { PlanPoint, pointAtDistance, RetainedSide, segmentLabel, sideNormal } from "../retainingWall/wallPlan"
 import type { Pt } from "../stairs/stairs"
 import { StairMember, stairSolids } from "../stairs/stairRender3d"
 import type { RenderExtra } from "../retainingWall/wallRender3d"
 import type { ElevationExtra } from "../retainingWall/wallProfileDiagram"
+import type { AddedMaterial } from "../retainingWall/pricing"
+import { combineOrder, CombinedOrderLine, stairLabourHours, stairOrder, StairOrderLine } from "../stairs/stairMaterials"
 
 export const MIN_STAIR_ANGLE_DEG = 30
 export const MAX_STAIR_ANGLE_DEG = 150
@@ -58,7 +60,11 @@ export interface SiteStair {
    * at the top */
   topOffsetMm: number
   top: StairTop
-  /** the stairs calculator's inputs; totalRise is overwritten from the wall */
+  /** hours to build it, for the estimate; null = a rough allowance from
+   * its size (see stairLabourHours) */
+  labourHours: number | null
+  /** the stairs calculator's inputs; totalRise is kept in step with the
+   * wall (the stair opened in the calculator on its own reads it) */
   input: StairInput
 }
 
@@ -82,6 +88,7 @@ export const newSiteStair = (segmentIndex: number, segLengthM: number): SiteStai
   bottomOffsetMm: 0,
   topOffsetMm: 0,
   top: "wallRiser",
+  labourHours: null,
   input: { ...DEFAULT_INPUT },
 })
 
@@ -141,6 +148,7 @@ export const siteFromData = (raw: unknown): SiteProject => {
         bottomOffsetMm: num(s.bottomOffsetMm, 0),
         topOffsetMm: num(s.topOffsetMm, 0),
         top: s.top === "onWall" ? "onWall" : "wallRiser",
+        labourHours: typeof s.labourHours === "number" && Number.isFinite(s.labourHours) && s.labourHours >= 0 ? s.labourHours : null,
         input: stairInputFromData(s.input),
       }),
     )
@@ -386,4 +394,78 @@ export function stairElevationExtra(p: StairPlacement, points: PlanPoint[], prof
     fixedXM: p.fixedXM,
     label: `${p.stair.label || "Stairs"} · ${p.result.risers} × ${Math.round(p.result.rise)}`,
   }
+}
+
+// ── what the stairs need: the order, the estimate, the proposal ───────
+
+/** Everything to buy for one placed stair — with its own top tread when
+ * it's level with the top of the wall. */
+export const placedStairOrder = (p: StairPlacement): StairOrderLine[] => stairOrder(p.input, p.result, p.layout, { extraTopTread: p.stair.top === "onWall" })
+
+export const placedStairName = (p: StairPlacement, n: number) => p.stair.label || `Stairs ${n + 1}`
+
+/** hours to build it: set by hand, or the rough allowance */
+export const placedStairHours = (p: StairPlacement) => p.stair.labourHours ?? stairLabourHours(p.result, p.layout)
+
+/** Every stair's order added up, with which stair each line is for. */
+export const siteStairOrder = (placements: StairPlacement[]): CombinedOrderLine[] =>
+  combineOrder(placements.flatMap((p, n) => placedStairOrder(p).map((line) => ({ line, from: placements.length > 1 ? placedStairName(p, n) : "" }))))
+
+const normSize = (v: string) => v.replace(/\s/g, "").toLowerCase()
+const stockText = (lines: CombinedOrderLine[]) => lines.map((l) => `${l.count} × ${l.lengthM?.toFixed(1)} m`).join(", ")
+
+/** The stairs as estimate lines: timber and decking by the metre (one line
+ * a size, every length added up), posts by the metre, post concrete with
+ * 10% over, screws each, and labour. */
+export function siteStairEstimate(placements: StairPlacement[]): AddedMaterial[] {
+  if (!placements.length) return []
+  const order = siteStairOrder(placements)
+  const out: AddedMaterial[] = []
+  const byMaterial = new Map<string, CombinedOrderLine[]>()
+  for (const l of order) if (l.lengthM !== null) byMaterial.set(`${l.kind}|${l.material}`, [...(byMaterial.get(`${l.kind}|${l.material}`) ?? []), l])
+  for (const lines of byMaterial.values()) {
+    const first = lines[0]
+    const metres = lines.reduce((a, l) => a + l.count * (l.lengthM ?? 0), 0)
+    out.push({
+      key: `stairs:${first.kind}:${normSize(first.size)}`,
+      category: first.kind === "posts" ? "posts" : "timber",
+      description: `Stairs — ${first.material}`,
+      detail: stockText(lines),
+      quantity: Number(metres.toFixed(2)),
+      unit: "m",
+      size: first.size,
+    })
+  }
+  const concrete = order.filter((l) => l.kind === "concrete").reduce((a, l) => a + l.count, 0)
+  if (concrete > 0)
+    out.push({ key: "stairs:concrete", category: "concrete", description: "Stairs — concrete for posts", detail: `${concrete.toFixed(3)} m³ + 10% waste`, quantity: Number((concrete * 1.1).toFixed(3)), unit: "m³" })
+  const screws = order.filter((l) => l.kind === "screws").reduce((a, l) => a + l.count, 0)
+  if (screws > 0) out.push({ key: "stairs:screws", category: "fixings", description: "Stairs — decking screws", quantity: screws, unit: "each", priceUnit: "each" })
+  const hours = placements.reduce((a, p) => a + placedStairHours(p), 0)
+  if (hours > 0)
+    out.push({
+      key: "stairs:labour",
+      category: "labour",
+      description: "Labour — stairs",
+      detail: placements.map((p, n) => `${placedStairName(p, n)}: ${placedStairHours(p)} h`).join(", "),
+      quantity: Number(hours.toFixed(1)),
+      unit: "hours",
+    })
+  return out
+}
+
+/** The stairs in the proposal's scope of works, one item each. */
+export function siteStairScope(placements: StairPlacement[], wallCount: number): string[] {
+  return placements.map((p) => {
+    const { input: i, result: r, stair: st } = p
+    const wall = wallCount > 1 ? `wall ${segmentLabel(st.segmentIndex)}` : "the wall"
+    const turns = p.layout.turns.length
+    const framing =
+      i.framing === "stacked-frames" ? "stacked timber step frames" : i.framing === "outer-stringers" ? "two outer stringers with riser joists" : "timber stringers with wedge blocks"
+    const name = st.label ? `${st.label}: build` : "Build"
+    const fill = st.bottomOffsetMm > 0 ? `, landing on ground built up ${Math.round(st.bottomOffsetMm)} mm` : ""
+    const top = st.top === "wallRiser" ? ", the wall being the top riser" : ", with its top tread level with the top of the wall"
+    const posts = r.stringer.posts.length > 0 || p.layout.turns.some((t) => !t.onPads && t.posts.length) ? " Support posts concreted in." : ""
+    return `${name} a timber stair down from ${wall}, ${i.width} mm wide: ${r.risers} risers of ${Math.round(r.rise)} mm and ${Math.round(r.going)} mm goings${turns ? `, with ${turns} turn${turns > 1 ? "s" : ""}` : ""}${top}${fill}. Framed in H3.2 ${framing}, with ${i.boardWidth} × ${i.boardThickness} decking treads${i.riserBoards ? " and riser boards" : ""}.${posts}`
+  })
 }

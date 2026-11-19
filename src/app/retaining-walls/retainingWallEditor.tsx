@@ -41,7 +41,7 @@ import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/ret
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import BoardEndsModal from "./boardEndsModal"
 import PileSetupModal, { PileSetup } from "./pileSetupModal"
-import { buildEstimate, type EstimateSettings } from "@/components/retainingWall/pricing"
+import { buildEstimate, type AddedMaterial, type EstimateSettings } from "@/components/retainingWall/pricing"
 import { usePriceLibrary } from "@/components/retainingWall/usePriceLibrary"
 import EstimateCard from "@/components/retainingWall/estimateCard"
 import ProposalView from "@/components/retainingWall/proposalView"
@@ -94,6 +94,10 @@ export interface EditorAddOns {
   cards?: (ctx: EditorAddOnContext) => ReactNode
   /** their entries in the side rail, after Obstructions */
   rail?: RailSection[]
+  /** priced into the estimate (and so the proposal) after the wall's lines */
+  estimate?: (ctx: EditorAddOnContext) => AddedMaterial[]
+  /** added to the proposal's scope of works, before the clean-up */
+  scope?: (ctx: EditorAddOnContext) => string[]
 }
 
 /** The retaining wall calculator itself, with no idea where its wall is
@@ -486,11 +490,6 @@ const RetainingWallEditor: React.FC<{
   const totals = profile ? (shownSegment !== null ? profile.segmentTotals[shownSegment] : profile) : null
   const forWall = shownSegment !== null ? ` — Wall ${segmentLabel(shownSegment)}` : ""
 
-  // ---- price estimate: always the whole wall, whichever wall is shown ----
-  // (cheap enough to rebuild each render, like the profile itself)
-  const estimate = profile
-    ? buildEstimate(profile, profile, totalLength(planPoints), calcSettings.gravelBaseAllowanceM > 0, priceLibrary.library.items, estimateSettings)
-    : null
 
   // ---- pile setup (see PileSetupModal) ----
   const pileSetup: PileSetup = {
@@ -917,6 +916,21 @@ const RetainingWallEditor: React.FC<{
   // where the side panel can jump to — it leaves out any that aren't on
   // the page right now (no results until the wall has a height, say)
   const addOnContext: EditorAddOnContext = { profile, planPoints, retainedSide, locked, shownSegment: shownSegment ?? 0, endName }
+
+  // ---- price estimate: always the whole wall, whichever wall is shown ----
+  // (cheap enough to rebuild each render, like the profile itself)
+  const estimate = profile
+    ? buildEstimate(
+        profile,
+        profile,
+        totalLength(planPoints),
+        calcSettings.gravelBaseAllowanceM > 0,
+        priceLibrary.library.items,
+        estimateSettings,
+        Date.now(),
+        addOns?.estimate?.(addOnContext),
+      )
+    : null
 
   const railSections: RailSection[] = [
     { id: "rw-top", label: "Top", icon: <TopIcon /> },
@@ -1740,6 +1754,7 @@ const RetainingWallEditor: React.FC<{
                   onPrinted={onProposalPrinted}
                   onClose={closeProposal}
                   extras={addOns?.render3d?.(addOnContext)}
+                  extraScope={addOns?.scope?.(addOnContext)}
                 />
               )}
               {/* not locked either: holes are measured on site, after the

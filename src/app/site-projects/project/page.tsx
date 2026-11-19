@@ -7,12 +7,24 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
-import { placeStair, SiteProject, SiteStair, StairPlacement, stairElevationExtra, stairRenderExtra } from "@/components/site/siteProject"
+import {
+  placeStair,
+  SiteProject,
+  SiteStair,
+  siteStairEstimate,
+  siteStairOrder,
+  siteStairScope,
+  StairPlacement,
+  stairElevationExtra,
+  stairRenderExtra,
+} from "@/components/site/siteProject"
+import StairOrderCard from "@/components/stairs/stairOrderCard"
 import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
 import type { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
 import { deleteSiteProject, loadSiteProject, ProjectLocation, saveSiteProject } from "@/components/site/siteProjectStore"
 import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../retaining-walls/retainingWallEditor"
 import StairsCard, { StairsPlanOverlay } from "../stairsCard"
+import { stairCalculatorHref } from "../stairLink"
 
 const SAVE_DELAY_MS = 1000
 
@@ -144,6 +156,30 @@ const SiteProjectEditor = () => {
     if (latest.current.site) latest.current.site = { ...latest.current.site, stairs: next }
     schedule()
   }
+  const changeStairsRef = useRef(changeStairs)
+  changeStairsRef.current = changeStairs
+
+  // a stair edited in the calculator on its own (another tab) saves
+  // straight to the project: pick that up on coming back, unless there's
+  // something here still to save
+  useEffect(() => {
+    if (!location) return
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible" || pending.current) return
+      try {
+        const found = await loadSiteProject(location, projectId)
+        const site = latest.current.site
+        if (!found || !site || pending.current) return
+        if (JSON.stringify(found.site.stairs) === JSON.stringify(site.stairs)) return
+        latest.current.site = { ...site, stairs: found.site.stairs }
+        setStairs(found.site.stairs)
+      } catch {
+        // offline or refused: keep what's here
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [location, projectId])
 
   // every stair worked out against the wall as it is — once per change of
   // the wall or the stairs, shared by the plan and the card
@@ -158,6 +194,20 @@ const SiteProjectEditor = () => {
       if (p) value.set(s.id, p)
     }
     placementCache.current = { key, value }
+    // keep each stair's saved rise in step with the wall, so the stair
+    // opened in the calculator on its own shows the same stair (after
+    // this render: it's a change of the project's state)
+    const stale = [...value.values()].filter((p) => p.stair.input.totalRise !== p.input.totalRise)
+    if (stale.length) {
+      const rises = new Map(stale.map((p) => [p.stair.id, p.input.totalRise]))
+      setTimeout(() => {
+        const site = latest.current.site
+        if (!site) return
+        const next = site.stairs.map((st) => (rises.has(st.id) && st.input.totalRise !== rises.get(st.id) ? { ...st, input: { ...st.input, totalRise: rises.get(st.id) as number } } : st))
+        if (next.every((st, i) => st === site.stairs[i])) return
+        changeStairsRef.current(next)
+      }, 0)
+    }
     return value
   }
 
@@ -193,7 +243,10 @@ const SiteProjectEditor = () => {
     elevation: elevationFor,
     onSelectElevationExtra: pickStair,
     selectedElevationExtraId: selectedStair,
-    rail: [{ id: "site-stairs", label: "Stairs", icon: <StairIcon /> }],
+    rail: [
+      { id: "site-stairs", label: "Stairs", icon: <StairIcon /> },
+      ...(stairs.length ? [{ id: "site-stair-order", label: "Stair order", icon: <StairIcon /> }] : []),
+    ],
     planOverlay: (ctx, sizes) => (
       <StairsPlanOverlay
         placements={[...placementsFor(ctx).values()]}
@@ -206,9 +259,34 @@ const SiteProjectEditor = () => {
       />
     ),
     planShapes: (ctx) => [...placementsFor(ctx).values()].flatMap((p) => p.treads),
-    cards: (ctx) => (
-      <StairsCard ctx={ctx} stairs={stairs} placements={placementsFor(ctx)} onChange={changeStairs} selectedId={selectedStair} onSelect={setSelectedStair} />
-    ),
+    cards: (ctx) => {
+      const placements = placementsFor(ctx)
+      return (
+        <>
+          <StairsCard
+            ctx={ctx}
+            stairs={stairs}
+            placements={placements}
+            onChange={changeStairs}
+            selectedId={selectedStair}
+            onSelect={setSelectedStair}
+            calculatorHref={(stairId) => stairCalculatorHref(projectId, stairId)}
+          />
+          {placements.size > 0 && (
+            <div id="site-stair-order">
+              <StairOrderCard
+                title={placements.size > 1 ? "Stair material order — all stairs" : "Stair material order"}
+                lines={siteStairOrder([...placements.values()])}
+                intro="What to order for the stairs, as stock lengths. The wall's own boards and posts are in its materials and board order below."
+                note="Each stair is cut from its own lengths (offcuts aren't shared between stairs). Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%. Handrails, barriers, bolts and the fixing of the top to the wall aren't included. The same lines, priced, are in the estimate."
+              />
+            </div>
+          )}
+        </>
+      )
+    },
+    estimate: (ctx) => siteStairEstimate([...placementsFor(ctx).values()]),
+    scope: (ctx) => siteStairScope([...placementsFor(ctx).values()], ctx.profile?.segments.length ?? 1),
   }
 
   const rename = (n: string) => {

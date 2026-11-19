@@ -38,7 +38,7 @@ const Field: React.FC<{ value: string; placeholder: string; block?: boolean }> =
   )
 
 /** The scope of works, written from the wall itself. */
-function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: PlanPoint[], topCapEnabled: boolean, settings: EstimateSettings): string[] {
+function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: PlanPoint[], topCapEnabled: boolean, settings: EstimateSettings, extra: string[] = []): string[] {
   const valid = totals.postIndices.map((i) => profile.posts[i])
   const lengthM = totalLength(planPoints)
   const runs = planPoints.length - 1
@@ -60,6 +60,7 @@ function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: Pla
     `Supply and fix H4 treated facing boards to the posts (${boards} boards), finished with a top board along the top of the wall${topCapEnabled ? " and a capping board over it" : ""}.`,
   ]
   if (settings.includeDrainage) items.push("Drainage behind the wall: a drainage coil bedded in free-draining metal, led to an outlet.")
+  items.push(...extra)
   for (const x of settings.extraLines) if (x.description.trim()) items.push(x.description.trim().replace(/\.?$/, "."))
   items.push("Clean up the work area on completion.")
   return items
@@ -89,7 +90,9 @@ const ProposalView: React.FC<{
   onClose: () => void
   /** things from other calculators drawn with the wall in the render */
   extras?: RenderExtra[]
-}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose, extras }) => {
+  /** scope items from other calculators (stairs), after the wall's own */
+  extraScope?: string[]
+}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose, extras, extraScope }) => {
   const c = { ...BLANK_COMPANY, ...company }
   const p = settings.proposal
   const setP = (patch: Partial<ProposalDetails>) => onChange({ ...settings, proposal: { ...p, ...patch } })
@@ -131,7 +134,7 @@ const ProposalView: React.FC<{
   const validUntil = new Date(dated.getTime() + p.validDays * 86_400_000)
   const priced = estimate.lines.filter((l) => l.unitCost !== null)
   const unpriced = estimate.lines.length - priced.length
-  const scope = scopeItems(profile, totals, planPoints, topCapEnabled, settings)
+  const scope = scopeItems(profile, totals, planPoints, topCapEnabled, settings, extraScope)
   const exclusions = p.exclusions.split("\n").map((s) => s.trim()).filter(Boolean)
   const sell = (v: number) => v * estimate.sellFactor
 

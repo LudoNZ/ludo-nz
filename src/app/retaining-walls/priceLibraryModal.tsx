@@ -28,6 +28,7 @@ const DEFAULT_UNIT: Record<PriceCategory, PriceUnit> = {
   posts: "m",
   boards: "m",
   topCap: "m",
+  timber: "m",
   concrete: "m³",
   gravel: "m³",
   labour: "hour",
@@ -289,13 +290,13 @@ const PriceLibraryModal: React.FC<{
                             <span>Item</span>
                             <input value={item.name} placeholder="Description" onChange={(e) => setItem(item.id, { name: e.target.value })} />
                           </label>
-                          {cat.id === "posts" && (
+                          {(cat.id === "posts" || cat.id === "timber") && (
                             <label className={styles.sizeField}>
-                              <span>Post size</span>
+                              <span>{cat.id === "posts" ? "Post size" : "Size"}</span>
                               <input
                                 value={item.sizeLabel ?? ""}
-                                list="priceLibraryPostSizes"
-                                placeholder="Any size"
+                                list={cat.id === "posts" ? "priceLibraryPostSizes" : undefined}
+                                placeholder={cat.id === "posts" ? "Any size" : "e.g. 140 x 45"}
                                 onChange={(e) => setItem(item.id, { sizeLabel: e.target.value || undefined })}
                               />
                             </label>

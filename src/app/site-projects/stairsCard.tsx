@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import Button from "@/components/button/button"
 import { segmentLabel } from "@/components/retainingWall/wallPlan"
 import { MAIN_PRIVATE, SERVICE } from "@/components/stairs/stairs"
@@ -13,7 +14,9 @@ import {
   StairAnchor,
   StairTop,
   StairPlacement,
+  placedStairHours,
 } from "@/components/site/siteProject"
+import { stairLabourHours } from "@/components/stairs/stairMaterials"
 import type { EditorAddOnContext } from "../retaining-walls/retainingWallEditor"
 import { UnitField } from "../retaining-walls/obstructionsCard"
 import StairsPage from "../stairs/stairsPage"
@@ -35,7 +38,9 @@ const StairsCard: React.FC<{
   onChange: (next: SiteStair[]) => void
   selectedId: string | null
   onSelect: (id: string | null) => void
-}> = ({ ctx, stairs, placements, onChange, selectedId, onSelect }) => {
+  /** the stairs calculator opened on one of these stairs */
+  calculatorHref: (stairId: string) => string
+}> = ({ ctx, stairs, placements, onChange, selectedId, onSelect, calculatorHref }) => {
   const { profile, locked, endName } = ctx
   const segments = profile?.segments ?? []
   const update = (id: string, patch: Partial<SiteStair>) => onChange(stairs.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -253,8 +258,28 @@ const StairsCard: React.FC<{
                       {p.stairTopLevelM.toFixed(3)}
                       {st.topOffsetMm ? ` (${st.topOffsetMm > 0 ? "+" : ""}${Math.round(st.topOffsetMm)} on the top of the wall)` : ""} —{" "}
                       {p.input.totalRise} mm of rise.
-                      {st.top === "onWall" && " The top tread, level with the top, isn't in the stair's cut list below — add it in."}
+                      {st.top === "onWall" && " The top tread, level with the top, is in the material order (its own frame and boards)."}
                     </p>
+                  )}
+                  {p && (
+                    <div className={styles.grid}>
+                      <UnitField
+                        id={key("hours")}
+                        label={`Labour for the estimate (hours${st.labourHours === null ? ", rough allowance" : ""})`}
+                        value={placedStairHours(p)}
+                        scale={1}
+                        step={0.5}
+                        min={0}
+                        max={500}
+                        onCommit={(v) => update(st.id, { labourHours: v === null || v === stairLabourHours(p.result, p.layout) ? null : v })}
+                      />
+                      <div className={styles.field}>
+                        <label>The stairs calculator</label>
+                        <Link href={calculatorHref(st.id)} target="_blank" onClick={(e) => e.stopPropagation()}>
+                          Open this stair in the calculator ↗
+                        </Link>
+                      </div>
+                    </div>
                   )}
                   {p && (
                     // the full stairs calculator, run off this stair's inputs
@@ -263,6 +288,7 @@ const StairsCard: React.FC<{
                         value={p.input}
                         onChange={(input) => update(st.id, { input: { ...input, totalRise: st.input.totalRise } })}
                         riseNote="From the wall: the bottom to the top levels set above"
+                        extraTopTread={st.top === "onWall"}
                       />
                     </div>
                   )}

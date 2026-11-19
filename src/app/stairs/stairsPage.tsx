@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { ReactNode, useMemo, useState } from "react"
 import SpecCard from "@/components/structures/specCard"
 import { DiagramLegend, StairElevation, StairPlan } from "@/components/stairs/stairDiagrams"
 import {
@@ -24,6 +24,8 @@ import { calculateLayout, resolveFlightTreads } from "@/components/stairs/layout
 import TurnedPlan from "@/components/stairs/turnedPlan"
 import StairRenderView from "@/components/stairs/stairRenderView"
 import { planMixedStock } from "@/components/stairs/stairs"
+import { combineOrder, stairOrder } from "@/components/stairs/stairMaterials"
+import StairOrderCard from "@/components/stairs/stairOrderCard"
 import LayoutEditor from "./layoutEditor"
 import styles from "./stairsPage.module.scss"
 
@@ -82,7 +84,13 @@ const StairsPage: React.FC<{
   /** the total rise is set from outside (the height of the wall the stair
    * comes down from) — shown read only, with why */
   riseNote?: string
-}> = ({ value, onChange, riseNote }) => {
+  /** in place of the page's own heading and intro (a stair opened from a
+   * site project) */
+  header?: ReactNode
+  /** the stair has its own top tread (stepping onto a wall, not a deck):
+   * its frame and boards go in the order */
+  extraTopTread?: boolean
+}> = ({ value, onChange, riseNote, header, extraTopTread }) => {
   const [own, setOwn] = useState<StairInput>(DEFAULT_INPUT)
   const input = value ?? own
   const setInput = (next: StairInput | ((s: StairInput) => StairInput)) => {
@@ -90,7 +98,7 @@ const StairsPage: React.FC<{
     if (value) onChange?.(resolved)
     else setOwn(resolved)
   }
-  const embedded = value !== undefined
+  const embedded = value !== undefined && header === undefined
   const set = <K extends keyof StairInput>(key: K, v: StairInput[K]) => setInput((s) => ({ ...s, [key]: v }))
 
   const r = useMemo(() => calculateStairs(input), [input])
@@ -99,6 +107,10 @@ const StairsPage: React.FC<{
   // the 3D view works off the plan layout for straight stairs too
   const renderLayout = useMemo(() => layout ?? calculateLayout(input, r), [layout, input, r])
   const flightTreads = resolveFlightTreads(input, r.risers).treads
+  const order = useMemo(
+    () => combineOrder(stairOrder(input, r, layout, { extraTopTread }).map((line) => ({ line, from: "" }))),
+    [input, r, layout, extraTopTread],
+  )
 
   const stacked = input.framing === "stacked-frames"
   const outer = input.framing === "outer-stringers"
@@ -148,7 +160,8 @@ const StairsPage: React.FC<{
 
   return (
     <div className={embedded ? styles.embedded : styles.stairsPage}>
-      {!embedded && (
+      {header}
+      {!embedded && header === undefined && (
         <>
           <h1>Stairs Calculator</h1>
           <p className={styles.intro}>
@@ -835,6 +848,12 @@ const StairsPage: React.FC<{
           )}
         </div>
       </div>
+
+      <StairOrderCard
+        lines={order}
+        intro="Everything above as stock lengths to order: framing in SG8 H3.2, posts H5, decking at the board size set."
+        note={`Lengths are the cheapest standard length to cut the pieces from (offcuts used where they fit, a 5 mm saw cut each), with no other waste allowance. Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%.${extraTopTread ? " Includes the top tread's frame and boards." : ""} Handrails, barriers, fixings to the deck and bolts aren't included.`}
+      />
 
       <p className={styles.disclaimer}>
         Rise and going limits are from NZ Building Code clause D1 (D1/AS1): main private stairs max{" "}

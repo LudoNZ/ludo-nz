@@ -11,12 +11,13 @@ import type { ProfileTotals, WallProfile } from "./postProfile"
 
 // ── price library ────────────────────────────────────────────────────
 
-export type PriceCategory = "posts" | "boards" | "topCap" | "concrete" | "gravel" | "labour" | "fixings" | "drainage" | "other"
+export type PriceCategory = "posts" | "boards" | "topCap" | "timber" | "concrete" | "gravel" | "labour" | "fixings" | "drainage" | "other"
 
 export const PRICE_CATEGORIES: { id: PriceCategory; label: string; hint: string }[] = [
   { id: "posts", label: "Posts", hint: "Per lineal metre, or by length (round poles: a post is priced at the shortest length it fits in). Set the post size to match the wall's posts" },
   { id: "boards", label: "Facing boards", hint: "Facing courses and the top board, per lineal metre" },
   { id: "topCap", label: "Top cap", hint: "Per lineal metre" },
+  { id: "timber", label: "Stair timber", hint: "Framing and decking for stairs, per lineal metre. Set the size (e.g. 140 x 45) to match what the stairs use" },
   { id: "concrete", label: "Concrete", hint: "Per m³ (ready-mix) or per bag" },
   { id: "gravel", label: "Gravel", hint: "Per m³, for gravel pads when used" },
   { id: "labour", label: "Labour", hint: "Per hour" },
@@ -410,6 +411,22 @@ export function postPurchaseLengthsM(profile: WallProfile, postIndices: number[]
   return bySize
 }
 
+/** A line from another calculator on the site (a stair's timber, say),
+ * priced from the library like the wall's own. */
+export interface AddedMaterial {
+  /** stable: a hand-picked price is kept under it */
+  key: string
+  category: PriceCategory
+  description: string
+  detail?: string
+  quantity: number
+  unit: string
+  /** picked automatically only from items of this size (sizeLabel) */
+  size?: string
+  /** …or only from items priced in this unit */
+  priceUnit?: PriceUnit
+}
+
 /** Everything priced, line by line, from the wall's quantities. */
 export function buildEstimate(
   profile: WallProfile,
@@ -419,6 +436,7 @@ export function buildEstimate(
   library: PriceItem[],
   settings: EstimateSettings,
   now = Date.now(),
+  added: AddedMaterial[] = [],
 ): Estimate {
   const lines: EstimateLine[] = []
   /** the item for a line: one picked by hand, else the best match. With
@@ -554,6 +572,15 @@ export function buildEstimate(
   if (settings.includeDrainage) add("drainage", "drainage", "Drainage behind the wall", Number(wallLengthM.toFixed(2)), "m")
   if (settings.includeFixings) add("fixings", "fixings", "Fixings", Number(wallLengthM.toFixed(2)), "m", "allowance per metre of wall")
   add("labour", "labour", "Labour", Number(totals.labor.totalHours.toFixed(1)), "hours", "set out, drill and set posts, board up")
+
+  // from other calculators on the site (stairs)
+  for (const a of added) {
+    const matches: ((i: PriceItem) => boolean)[] = []
+    if (a.size) matches.push((i) => normSize(i.sizeLabel ?? "") === normSize(a.size ?? ""))
+    if (a.priceUnit) matches.push((i) => i.unit === a.priceUnit && !i.lengthPrices?.length)
+    if (!a.size && !a.priceUnit) matches.push((i) => !i.lengthPrices?.length)
+    add(a.key, a.category, a.description, a.quantity, a.unit, a.detail, matches)
+  }
 
   for (const x of settings.extraLines) {
     lines.push({
