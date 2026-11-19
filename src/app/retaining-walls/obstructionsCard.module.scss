@@ -44,6 +44,26 @@
   border-radius: var(--borderRadius);
 }
 
+.summary {
+  font-size: 0.88rem;
+  opacity: 0.85;
+}
+
+.item:not(.itemSelected) {
+  cursor: pointer;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.6rem;
+
+  .itemHeader {
+    margin-bottom: 0.2rem;
+  }
+
+  .status,
+  .warn {
+    margin-top: 0.2rem;
+  }
+}
+
 .itemSelected {
   composes: item;
   border-color: #2a78d6;

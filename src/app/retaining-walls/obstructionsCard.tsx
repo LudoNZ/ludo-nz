@@ -67,7 +67,11 @@ const UnitField: React.FC<{
 /** What an obstruction means for the posts, in a line. */
 function statusOf(zone: ProfileObstruction | undefined, profile: WallProfile, maxBoardM: number): { text: string; warn: boolean } {
   if (!zone) return { text: "", warn: false }
-  if (!zone.onWall) return { text: "⚠ It's past the end of its wall — move it, or pick another wall.", warn: true }
+  if (!zone.onWall)
+    return {
+      text: "⚠ It's past the end of its wall — move it, or pick another wall.",
+      warn: true,
+    }
   const list = (ids: number[]) => ids.map((i) => `#${i + 1}`).join(", ")
   if (zone.clashPostIndices.length)
     return {
@@ -110,7 +114,19 @@ const ObstructionsCard: React.FC<{
   selectedId: string | null
   onSelect: (id: string | null) => void
   locked: boolean
-}> = ({ obstructions, onChange, profile, standardClearances, onStandardClearancesChange, defaultSegment, endName, maxBoardM, selectedId, onSelect, locked }) => {
+}> = ({
+  obstructions,
+  onChange,
+  profile,
+  standardClearances,
+  onStandardClearancesChange,
+  defaultSegment,
+  endName,
+  maxBoardM,
+  selectedId,
+  onSelect,
+  locked,
+}) => {
   const segments = profile?.segments ?? []
   const update = (id: string, patch: Partial<Obstruction>) => onChange(obstructions.map((o) => (o.id === id ? { ...o, ...patch } : o)))
   const standardFor = (type: ObstructionType) => standardClearances[type] ?? DEFAULT_OBSTRUCTION_CLEARANCE_M
@@ -133,12 +149,13 @@ const ObstructionsCard: React.FC<{
           Add obstruction
         </Button>
       </div>
-      <p className={styles.hint}>
-        A pipe, cable or root the wall has to cross. Set where its centre line crosses — measured from a corner or wall
-        end — the angle it crosses at, how deep it is and how wide, and the clearance to keep round it. Posts go either
-        side of it so no hole reaches into the clearance zone. Drag it along the wall in the plan, or turn it by its
-        round handle.
-      </p>
+      {(obstructions.length === 0 || obstructions.some((o) => o.id === selectedId)) && (
+        <p className={styles.hint}>
+          A pipe, cable or root the wall has to cross. Set where its centre line crosses — measured from a corner or wall end — the angle it crosses at, how
+          deep it is and how wide, and the clearance to keep round it. Posts go either side of it so no hole reaches into the clearance zone. Drag it along the
+          wall in the plan, or turn it by its round handle.
+        </p>
+      )}
 
       <fieldset disabled={locked} className={styles.lockable}>
         {obstructions.map((o, n) => {
@@ -152,7 +169,7 @@ const ObstructionsCard: React.FC<{
               key={o.id}
               className={selected ? styles.itemSelected : styles.item}
               style={{ borderLeftColor: OBSTRUCTION_TYPES[o.type].color }}
-              onFocus={() => onSelect(o.id)}
+              onFocus={selected ? () => onSelect(o.id) : undefined}
               onClick={() => onSelect(o.id)}
             >
               <div className={styles.itemHeader}>
@@ -163,9 +180,24 @@ const ObstructionsCard: React.FC<{
                   <button
                     type="button"
                     className={styles.link}
+                    aria-expanded={selected}
                     onClick={(e) => {
                       e.stopPropagation()
-                      const copy = { ...o, id: Math.random().toString(36).slice(2, 10), distanceM: Math.round((o.distanceM + 0.5) * 100) / 100 }
+                      onSelect(selected ? null : o.id)
+                    }}
+                  >
+                    {selected ? "Done" : "Edit"}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.link}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const copy = {
+                        ...o,
+                        id: Math.random().toString(36).slice(2, 10),
+                        distanceM: Math.round((o.distanceM + 0.5) * 100) / 100,
+                      }
                       onChange([...obstructions, copy])
                       onSelect(copy.id)
                     }}
@@ -185,111 +217,131 @@ const ObstructionsCard: React.FC<{
                   </button>
                 </span>
               </div>
-              <div className={styles.grid}>
-                <div className={styles.field}>
-                  <label htmlFor={key("type")}>Type</label>
-                  <select id={key("type")} value={o.type} onChange={(e) => update(o.id, { type: e.target.value as ObstructionType })}>
-                    {OBSTRUCTION_TYPE_LIST.map((t) => (
-                      <option key={t} value={t}>
-                        {OBSTRUCTION_TYPES[t].label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor={key("label")}>Name (optional)</label>
-                  <input
-                    id={key("label")}
-                    key={`${key("label")}-${o.label}`}
-                    type="text"
-                    placeholder="e.g. SW 100 to sump"
-                    defaultValue={o.label}
-                    onBlur={(e) => e.target.value !== o.label && update(o.id, { label: e.target.value.trim() })}
+              {!selected && (
+                <p className={styles.summary}>
+                  {segments.length > 1 ? `Wall ${segmentLabel(o.segmentIndex)} · ` : ""}
+                  {o.distanceM.toFixed(2)} m from {endName(o.segmentIndex, o.from)} · {Math.round(o.angleDeg)}° · {Math.round(o.depthM * 1000)} deep ·{" "}
+                  {Math.round(o.sizeM * 1000)} wide · {Math.round((o.clearanceM ?? standardFor(o.type)) * 1000)} clear
+                </p>
+              )}
+              {selected && (
+                <div className={styles.grid}>
+                  <div className={styles.field}>
+                    <label htmlFor={key("type")}>Type</label>
+                    <select
+                      id={key("type")}
+                      value={o.type}
+                      onChange={(e) =>
+                        update(o.id, {
+                          type: e.target.value as ObstructionType,
+                        })
+                      }
+                    >
+                      {OBSTRUCTION_TYPE_LIST.map((t) => (
+                        <option key={t} value={t}>
+                          {OBSTRUCTION_TYPES[t].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={styles.field}>
+                    <label htmlFor={key("label")}>Name (optional)</label>
+                    <input
+                      id={key("label")}
+                      key={`${key("label")}-${o.label}`}
+                      type="text"
+                      placeholder="e.g. SW 100 to sump"
+                      defaultValue={o.label}
+                      onBlur={(e) => e.target.value !== o.label && update(o.id, { label: e.target.value.trim() })}
+                    />
+                  </div>
+                  <div className={styles.field}>
+                    <label htmlFor={key("wall")}>Crosses wall</label>
+                    <select
+                      id={key("wall")}
+                      value={o.segmentIndex}
+                      onChange={(e) => {
+                        const i = Number(e.target.value)
+                        update(o.id, {
+                          segmentIndex: i,
+                          distanceM: Math.min(o.distanceM, segments[i]?.lengthM ?? o.distanceM),
+                        })
+                      }}
+                    >
+                      {segments.map((s) => (
+                        <option key={s.index} value={s.index}>
+                          {segments.length > 1 ? `Wall ${segmentLabel(s.index)}` : "The wall"} · {s.lengthM.toFixed(2)} m
+                        </option>
+                      ))}
+                      {!seg && <option value={o.segmentIndex}>A wall that&apos;s gone</option>}
+                    </select>
+                  </div>
+                  <div className={styles.field}>
+                    <label htmlFor={key("from")}>Measured from</label>
+                    <select
+                      id={key("from")}
+                      value={o.from}
+                      onChange={(e) => {
+                        const from = e.target.value as "start" | "end"
+                        // keep it where it is, measured from the other end
+                        const d = seg ? Math.round((seg.lengthM - o.distanceM) * 1000) / 1000 : o.distanceM
+                        update(o.id, { from, distanceM: Math.max(0, d) })
+                      }}
+                    >
+                      <option value="start">{endName(o.segmentIndex, "start")}</option>
+                      <option value="end">{endName(o.segmentIndex, "end")}</option>
+                    </select>
+                  </div>
+                  <UnitField
+                    id={key("distance")}
+                    label="Distance to its centre line (m)"
+                    value={o.distanceM}
+                    scale={1}
+                    step={0.01}
+                    min={0}
+                    max={seg?.lengthM}
+                    onCommit={(v) => v !== null && update(o.id, { distanceM: v })}
+                  />
+                  <UnitField
+                    id={key("angle")}
+                    label="Angle to the wall (°, 90 = square)"
+                    value={o.angleDeg}
+                    scale={1}
+                    step={5}
+                    min={MIN_ANGLE_DEG}
+                    max={MAX_ANGLE_DEG}
+                    onCommit={(v) => v !== null && update(o.id, { angleDeg: v })}
+                  />
+                  <UnitField
+                    id={key("depth")}
+                    label="Depth to its top (mm)"
+                    value={o.depthM}
+                    scale={1000}
+                    step={10}
+                    min={0}
+                    onCommit={(v) => v !== null && update(o.id, { depthM: v })}
+                  />
+                  <UnitField
+                    id={key("size")}
+                    label="Width / diameter (mm)"
+                    value={o.sizeM}
+                    scale={1000}
+                    step={5}
+                    min={5}
+                    onCommit={(v) => v !== null && update(o.id, { sizeM: v })}
+                  />
+                  <UnitField
+                    id={key("clearance")}
+                    label="Clearance all round (mm)"
+                    value={o.clearanceM}
+                    scale={1000}
+                    step={10}
+                    min={0}
+                    placeholder={`Standard — ${Math.round(standardFor(o.type) * 1000)}`}
+                    onCommit={(v) => update(o.id, { clearanceM: v })}
                   />
                 </div>
-                <div className={styles.field}>
-                  <label htmlFor={key("wall")}>Crosses wall</label>
-                  <select
-                    id={key("wall")}
-                    value={o.segmentIndex}
-                    onChange={(e) => {
-                      const i = Number(e.target.value)
-                      update(o.id, { segmentIndex: i, distanceM: Math.min(o.distanceM, segments[i]?.lengthM ?? o.distanceM) })
-                    }}
-                  >
-                    {segments.map((s) => (
-                      <option key={s.index} value={s.index}>
-                        {segments.length > 1 ? `Wall ${segmentLabel(s.index)}` : "The wall"} · {s.lengthM.toFixed(2)} m
-                      </option>
-                    ))}
-                    {!seg && <option value={o.segmentIndex}>A wall that&apos;s gone</option>}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor={key("from")}>Measured from</label>
-                  <select
-                    id={key("from")}
-                    value={o.from}
-                    onChange={(e) => {
-                      const from = e.target.value as "start" | "end"
-                      // keep it where it is, measured from the other end
-                      const d = seg ? Math.round((seg.lengthM - o.distanceM) * 1000) / 1000 : o.distanceM
-                      update(o.id, { from, distanceM: Math.max(0, d) })
-                    }}
-                  >
-                    <option value="start">{endName(o.segmentIndex, "start")}</option>
-                    <option value="end">{endName(o.segmentIndex, "end")}</option>
-                  </select>
-                </div>
-                <UnitField
-                  id={key("distance")}
-                  label="Distance to its centre line (m)"
-                  value={o.distanceM}
-                  scale={1}
-                  step={0.01}
-                  min={0}
-                  max={seg?.lengthM}
-                  onCommit={(v) => v !== null && update(o.id, { distanceM: v })}
-                />
-                <UnitField
-                  id={key("angle")}
-                  label="Angle to the wall (°, 90 = square)"
-                  value={o.angleDeg}
-                  scale={1}
-                  step={5}
-                  min={MIN_ANGLE_DEG}
-                  max={MAX_ANGLE_DEG}
-                  onCommit={(v) => v !== null && update(o.id, { angleDeg: v })}
-                />
-                <UnitField
-                  id={key("depth")}
-                  label="Depth to its top (mm)"
-                  value={o.depthM}
-                  scale={1000}
-                  step={10}
-                  min={0}
-                  onCommit={(v) => v !== null && update(o.id, { depthM: v })}
-                />
-                <UnitField
-                  id={key("size")}
-                  label="Width / diameter (mm)"
-                  value={o.sizeM}
-                  scale={1000}
-                  step={5}
-                  min={5}
-                  onCommit={(v) => v !== null && update(o.id, { sizeM: v })}
-                />
-                <UnitField
-                  id={key("clearance")}
-                  label="Clearance all round (mm)"
-                  value={o.clearanceM}
-                  scale={1000}
-                  step={10}
-                  min={0}
-                  placeholder={`Standard — ${Math.round(standardFor(o.type) * 1000)}`}
-                  onCommit={(v) => update(o.id, { clearanceM: v })}
-                />
-              </div>
+              )}
               {status.text && <p className={status.warn ? styles.warn : styles.status}>{status.text}</p>}
             </div>
           )
@@ -298,8 +350,8 @@ const ObstructionsCard: React.FC<{
         <details className={styles.standards}>
           <summary>Standard clearances</summary>
           <p className={styles.hint}>
-            The clearance each type gets unless it&apos;s set on the obstruction itself — check what the asset owner
-            asks for. These are saved with the calculation settings.
+            The clearance each type gets unless it&apos;s set on the obstruction itself — check what the asset owner asks for. These are saved with the
+            calculation settings.
           </p>
           <div className={styles.grid}>
             {OBSTRUCTION_TYPE_LIST.map((t) => (
