@@ -156,6 +156,12 @@ const RetainingWallEditor: React.FC<{
   // so nothing about the wall gets changed by accident
   const [locked, setLocked] = useState(initial.locked)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  // "Select multiple": every tap adds or drops a post here instead of
+  // opening that one post (shift/ctrl-click does the same on a desktop)
+  const [selectMultiple, setSelectMultiple] = useState(false)
+  const [selection, setSelection] = useState<number[]>([])
+  const multiDepthRef = useRef<HTMLInputElement>(null)
+  const multiDepthModeRef = useRef<HTMLSelectElement>(null)
   const groundInputRef = useRef<HTMLInputElement>(null)
   const topInputRef = useRef<HTMLInputElement>(null)
   const topAfterInputRef = useRef<HTMLInputElement>(null)
@@ -430,6 +436,7 @@ const RetainingWallEditor: React.FC<{
     setMeasuredHoleDepthsMm(follow)
     setPostSizes(follow)
     setHoleDiametersMm(follow)
+    setSelection([])
     // bay heights are keyed by the bay's left post, so the last bay of
     // the unchanged walls at the start is the one *before* keepUpTo
     setBayCourses((counts) => {
@@ -676,6 +683,37 @@ const RetainingWallEditor: React.FC<{
     return Array.from({ length: seg.endPostIndex - index + 1 }, (_, k) => index + k)
   }
 
+  const handleSelectPost = (index: number, additive: boolean) => {
+    if (selectMultiple || additive) {
+      // starting from one post open on its own: it's the first of the selection
+      const current = selection.length === 0 && selectedIndex !== null ? [selectedIndex] : selection
+      const next = current.includes(index) ? current.filter((i) => i !== index) : [...current, index].sort((a, b) => a - b)
+      setSelection(next)
+      setSelectMultiple(true)
+      setSelectedIndex(null)
+    } else {
+      setSelection([])
+      setSelectedIndex(index)
+    }
+  }
+  const endMultiple = () => {
+    setSelectMultiple(false)
+    setSelection([])
+  }
+  /** a hole depth for every selected post, or with "auto" back to worked out */
+  const applyMultiDepth = () => {
+    const mode = multiDepthModeRef.current?.value
+    const depthMm = parseFloat(multiDepthRef.current?.value ?? "")
+    setDepthPoints((dp) => {
+      const next = { ...dp }
+      for (const i of selection) {
+        if ((mode === "lone" || mode === "rake") && depthMm > 0) next[i] = { depthM: depthMm / 1000, mode }
+        else delete next[i]
+      }
+      return next
+    })
+  }
+
   const handleClearControlPoint = () => {
     if (selectedIndex === null) return
     setControlPoints((cp) => {
@@ -690,6 +728,115 @@ const RetainingWallEditor: React.FC<{
     setCalcSettings(settings)
     setCalcSettingsName(name)
   }
+
+  // the panel for "Select multiple": what can be set on many posts at once
+  const selectedPosts = profile ? selection.map((i) => profile.posts[i]).filter(Boolean) : []
+  const commonSize = selectedPosts.length && selectedPosts.every((p) => p.sizeSet && p.sizeLabel === selectedPosts[0].sizeLabel) ? selectedPosts[0].sizeLabel : ""
+  const allSized = selectedPosts.length > 0 && selectedPosts.every((p) => p.sizeSet)
+  const commonAuger =
+    allSized && selectedPosts.every((p) => p.holeSet && Math.abs(p.holeDiameterM - selectedPosts[0].holeDiameterM) < 1e-6)
+      ? Math.round(selectedPosts[0].holeDiameterM * 1000)
+      : null
+  const multiPanel = (
+    <div className={styles.editPanel} key={`multi-${restoreNonce}`}>
+      <h3>
+        {selectedPosts.length === 0
+          ? "Select multiple — tap posts to add them"
+          : `${selectedPosts.length} post${selectedPosts.length > 1 ? "s" : ""} selected: ${postList(selection)}`}
+      </h3>
+      {selectedPosts.length > 0 && (
+        <fieldset disabled={locked} className={styles.lockable}>
+          <div className={styles.editFields}>
+            <div className={styles.field}>
+              <label htmlFor="multiPostSize">Post size</label>
+              <select id="multiPostSize" value={commonSize} onChange={(e) => setSizeFor(selection, e.target.value || null)}>
+                <option value="">{selectedPosts.some((p) => p.sizeSet) && !commonSize ? "Mixed — pick one to set them all" : "Wall's size"}</option>
+                {POST_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              {selectedPosts.some((p) => p.sizeSet) && (
+                <button type="button" className={styles.inlineLink} onClick={() => setSizeFor(selection, null)}>
+                  Back to the wall&apos;s size
+                </button>
+              )}
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="multiAuger">Auger for these holes (mm)</label>
+              <input
+                id="multiAuger"
+                key={`multi-auger-${selection.join(",")}-${commonAuger ?? "auto"}-${allSized}`}
+                type="number"
+                min={50}
+                step={25}
+                inputMode="numeric"
+                list="augerSizes"
+                disabled={!allSized}
+                placeholder={allSized ? "Auto — off each post" : "Give them their own size first"}
+                defaultValue={commonAuger ?? ""}
+                onBlur={(e) => {
+                  const mm = parseFloat(e.target.value)
+                  setAugerFor(selection, mm >= 50 ? mm : null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur()
+                }}
+              />
+            </div>
+          </div>
+          <div className={styles.editFields}>
+            <div className={styles.field}>
+              <label htmlFor="multiDepth">Hole depth below ground (mm)</label>
+              <input
+                id="multiDepth"
+                ref={multiDepthRef}
+                type="number"
+                min={50}
+                step={50}
+                inputMode="numeric"
+                placeholder="Leave as they are"
+                onChange={() => {
+                  if (multiDepthModeRef.current && multiDepthModeRef.current.value === "auto") multiDepthModeRef.current.value = "lone"
+                }}
+              />
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="multiDepthMode">Depth applies to</label>
+              <select id="multiDepthMode" ref={multiDepthModeRef} defaultValue="auto">
+                <option value="auto">Worked out — not set by hand</option>
+                <option value="lone">Each of these posts only</option>
+                <option value="rake">Rake points — holes between rake to the next one</option>
+              </select>
+            </div>
+          </div>
+          {selectedPosts.some((p) => postFitDiameterM(p.sizeLabel) > p.holeDiameterM + 1e-9) && (
+            <p className={styles.cornerNote}>⚠ The auger is too small for at least one of these posts — it won&apos;t fit down the hole.</p>
+          )}
+          {selectedPosts.some((p) => postWidthM(p.sizeLabel) < postWidthM(p.tableSizeLabel) - 1e-6) && (
+            <p className={styles.cornerNote}>⚠ At least one of these posts is smaller than the reference table gives for it.</p>
+          )}
+        </fieldset>
+      )}
+      <p className={styles.cornerNote}>Tap a post to add it, or tap it again to take it out. On a computer, shift- or ctrl-click does the same.</p>
+      <div className={styles.editActions}>
+        {selectedPosts.length > 0 && (
+          <Button size="small" onClick={applyMultiDepth} disabled={locked}>
+            Save depth
+          </Button>
+        )}
+        {selectedPosts.length > 0 && (
+          <Button size="small" variant="secondary" onClick={() => setSelection([])}>
+            Clear selection
+          </Button>
+        )}
+        <Button size="small" variant="secondary" onClick={endMultiple}>
+          Done
+        </Button>
+      </div>
+    </div>
+  )
 
   // where the side panel can jump to — it leaves out any that aren't on
   // the page right now (no results until the wall has a height, say)
@@ -1110,12 +1257,15 @@ const RetainingWallEditor: React.FC<{
               settings={calcSettings}
               topCapEnabled={topCapEnabled}
               selectedIndex={selectedIndex}
-              onSelectPost={setSelectedIndex}
+              selectedIndices={selection}
+              onSelectPost={handleSelectPost}
               segmentIndex={shownSegment}
               mirrored={mirrored}
               highlight={boardHighlight}
               belowDrawing={
-                selectedPost && (
+                selectMultiple ? (
+                  multiPanel
+                ) : selectedPost && (
                   <div className={styles.editPanel} key={`${selectedPost.index}-${restoreNonce}`}>
                     <h3>Post #{selectedPost.index + 1}</h3>
                     <fieldset disabled={locked} className={styles.lockable}>
@@ -1280,6 +1430,17 @@ const RetainingWallEditor: React.FC<{
                           Reset to raked
                         </Button>
                       )}
+                      <Button
+                        size="small"
+                        variant="secondary"
+                        onClick={() => {
+                          setSelection([selectedPost.index])
+                          setSelectMultiple(true)
+                          setSelectedIndex(null)
+                        }}
+                      >
+                        Select multiple
+                      </Button>
                       <Button size="small" variant="secondary" onClick={() => setSelectedIndex(null)}>
                         Close
                       </Button>

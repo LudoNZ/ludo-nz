@@ -10,6 +10,12 @@ import styles from "./wallProfileDiagram.module.scss"
 const formatLevel = (relativeM: number, rlDatumM: number): string =>
   rlDatumM !== 0 ? `RL ${(rlDatumM + relativeM).toFixed(3)}` : `${relativeM.toFixed(2)} m`
 
+/** "150 x 150mm" → "□150", "200mm round" → "Ø200" */
+const shortSize = (label: string) => {
+  const n = label.match(/\d+/)?.[0] ?? label
+  return /round/i.test(label) ? `Ø${n}` : `□${n}`
+}
+
 /** Interactive front elevation of a raked (or, with no control points set,
  * perfectly uniform) wall: sloped ground and top-of-wall lines through
  * every post's own level, each post drawn at its own height and embedment,
@@ -23,18 +29,15 @@ const formatLevel = (relativeM: number, rlDatumM: number): string =>
  * (reads a WallProfile, not the generic PostSpec/RailSpec), unlike the
  * structures/ components, since a raked profile has no single uniform
  * spec to describe it. */
-/** "150 x 150mm" → "□150", "200mm round" → "Ø200" */
-const shortSize = (label: string) => {
-  const n = label.match(/\d+/)?.[0] ?? label
-  return /round/i.test(label) ? `Ø${n}` : `□${n}`
-}
-
 const WallProfileDiagram: React.FC<{
   profile: WallProfile
   settings: CalcSettings
   topCapEnabled: boolean
   selectedIndex: number | null
-  onSelectPost: (index: number) => void
+  /** more posts picked out along with it — see "Select multiple" */
+  selectedIndices?: number[]
+  /** `additive` when shift/ctrl/cmd was held: add to the selection */
+  onSelectPost: (index: number, additive: boolean) => void
   segmentIndex?: number | null
   mirrored?: boolean
   /** boards to pick out — the ones cut from a chosen length on the order */
@@ -42,7 +45,7 @@ const WallProfileDiagram: React.FC<{
   /** shown between the drawing and the legend — the selected post's
    * controls, right where it was picked */
   belowDrawing?: React.ReactNode
-}> = ({ profile, settings, topCapEnabled, selectedIndex, onSelectPost, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
+}> = ({ profile, settings, topCapEnabled, selectedIndex, selectedIndices = [], onSelectPost, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
   const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
@@ -257,7 +260,7 @@ const WallProfileDiagram: React.FC<{
                     className={styles.cornerMark}
                   />
                 )}
-                {p.index === selectedIndex && (
+                {(p.index === selectedIndex || selectedIndices.includes(p.index)) && (
                   <rect
                     x={px - p.widthM}
                     y={y(p.topLevelM) - fontSize * 0.6}
@@ -275,14 +278,14 @@ const WallProfileDiagram: React.FC<{
                   width={Math.max(p.widthM, fontSize) * 1.6}
                   height={p.retainedHeightM + p.embedmentM}
                   className={styles.hitArea}
-                  onClick={() => onSelectPost(p.index)}
+                  onClick={(e) => onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)}
                   role="button"
                   aria-label={`Post ${p.index + 1} — ground ${formatLevel(p.groundLevelM, rlDatumM)}, top ${formatLevel(p.topLevelM, rlDatumM)}${p.needsEngineer ? " — needs engineer design" : ""} — tap to edit`}
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
-                      onSelectPost(p.index)
+                      onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)
                     }
                   }}
                 />
