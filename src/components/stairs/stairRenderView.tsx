@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react"
 import { StairInput } from "./stairs"
 import { StairLayout } from "./layout"
-import { buildStairScene } from "./stairRender3d"
+import { STAIR_MEMBER_LABELS, StairMember, buildStairScene, stairMembers } from "./stairRender3d"
 import styles from "./stairRenderView.module.scss"
 
 /** the attribute on <html> that tells the print stylesheet to print just
@@ -26,13 +26,17 @@ const StairRenderView: React.FC<{
 }> = ({ input, layout, caption }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-35)
   const [elevationDeg, setElevationDeg] = useState(28)
-  const [showBoards, setShowBoards] = useState(true)
+  const [hidden, setHidden] = useState<ReadonlySet<StairMember>>(() => new Set())
+  const members = useMemo(() => stairMembers(input, layout), [input, layout])
+  const toggle = (m: StairMember) =>
+    setHidden((h) => {
+      const next = new Set(h)
+      if (!next.delete(m)) next.add(m)
+      return next
+    })
   const svgRef = useRef<SVGSVGElement>(null)
 
-  const scene = useMemo(
-    () => buildStairScene(input, layout, { azimuthDeg, elevationDeg, showBoards }),
-    [input, layout, azimuthDeg, elevationDeg, showBoards],
-  )
+  const scene = useMemo(() => buildStairScene(input, layout, { azimuthDeg, elevationDeg, hidden }), [input, layout, azimuthDeg, elevationDeg, hidden])
 
   const handlePrint = () => {
     const root = document.documentElement
@@ -60,7 +64,11 @@ const StairRenderView: React.FC<{
     clone.setAttribute("xmlns", "http://www.w3.org/2000/svg")
     clone.setAttribute("width", String(widthPx))
     clone.setAttribute("height", String(heightPx))
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }))
+    const url = URL.createObjectURL(
+      new Blob([new XMLSerializer().serializeToString(clone)], {
+        type: "image/svg+xml",
+      }),
+    )
     const img = new Image()
     img.onload = () => {
       const canvas = document.createElement("canvas")
@@ -82,25 +90,41 @@ const StairRenderView: React.FC<{
     img.src = url
   }
 
-  if (!scene) return null
-  const { viewBox: vb, strokeW } = scene
-
   return (
     <div className={styles.renderRoot}>
-      <div className={styles.printArea}>
-        <svg ref={svgRef} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} className={styles.svg} role="img" aria-label="Shaded 3D view of the stair">
-          <defs>
-            <linearGradient id="stairRenderSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#eef3f7" />
-              <stop offset="1" stopColor="#ffffff" />
-            </linearGradient>
-          </defs>
-          <rect x={vb.x} y={vb.y} width={vb.w} height={vb.h} fill="url(#stairRenderSky)" />
-          {scene.polygons.map((p, i) => (
-            <polygon key={i} points={p.points} fill={p.fill} stroke={p.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
-          ))}
-        </svg>
-        {caption && <p className={styles.caption}>{caption}</p>}
+      {scene ? (
+        <div className={styles.printArea}>
+          <svg
+            ref={svgRef}
+            viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`}
+            className={styles.svg}
+            role="img"
+            aria-label="Shaded 3D view of the stair"
+          >
+            <defs>
+              <linearGradient id="stairRenderSky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#eef3f7" />
+                <stop offset="1" stopColor="#ffffff" />
+              </linearGradient>
+            </defs>
+            <rect x={scene.viewBox.x} y={scene.viewBox.y} width={scene.viewBox.w} height={scene.viewBox.h} fill="url(#stairRenderSky)" />
+            {scene.polygons.map((p, i) => (
+              <polygon key={i} points={p.points} fill={p.fill} stroke={p.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" />
+            ))}
+          </svg>
+          {caption && <p className={styles.caption}>{caption}</p>}
+        </div>
+      ) : (
+        <p className={styles.empty}>Everything&apos;s hidden — tick a member below to show it.</p>
+      )}
+
+      <div className={styles.members} role="group" aria-label="Members shown">
+        {members.map((m) => (
+          <label key={m} className={styles.memberToggle}>
+            <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />
+            {STAIR_MEMBER_LABELS[m]}
+          </label>
+        ))}
       </div>
 
       <div className={styles.controls}>
@@ -111,10 +135,6 @@ const StairRenderView: React.FC<{
         <label className={styles.slider}>
           <span>Tilt</span>
           <input type="range" min={5} max={75} step={1} value={elevationDeg} onChange={(e) => setElevationDeg(Number(e.target.value))} />
-        </label>
-        <label className={styles.check}>
-          <input type="checkbox" checked={showBoards} onChange={(e) => setShowBoards(e.target.checked)} />
-          Show decking
         </label>
         <div className={styles.actions}>
           <button type="button" className={styles.actionButton} onClick={handlePrint}>

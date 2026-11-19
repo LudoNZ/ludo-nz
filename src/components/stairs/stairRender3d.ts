@@ -17,14 +17,63 @@ import { StairLayout, overlapDepth, rightOf } from "./layout"
 type V3 = [number, number, number]
 type V2 = [number, number]
 
+/** the kinds of part the model is made of, each shown or hidden as a set */
+export type StairMember =
+  | "stringers"
+  | "wedges"
+  | "frames"
+  | "riserJoists"
+  | "nogs"
+  | "platforms"
+  | "bearers"
+  | "posts"
+  | "treadBoards"
+  | "riserBoards"
+  | "deck"
+
+export const STAIR_MEMBER_LABELS: Record<StairMember, string> = {
+  stringers: "Stringers",
+  wedges: "Wedge blocks",
+  frames: "Step frames",
+  riserJoists: "Riser joists",
+  nogs: "Nogs",
+  platforms: "Landing / winder frames",
+  bearers: "Bearers",
+  posts: "Posts",
+  treadBoards: "Tread boards",
+  riserBoards: "Riser boards",
+  deck: "Deck",
+}
+
+/** Which members this stair has, in the order they're listed. */
+export function stairMembers(input: StairInput, layout: StairLayout): StairMember[] {
+  const stacked = input.framing === "stacked-frames"
+  const outer = input.framing === "outer-stringers"
+  const flights = layout.flights.filter((f) => f.treads > 0)
+  const has: Record<StairMember, boolean> = {
+    stringers: !stacked && flights.length > 0,
+    wedges: !stacked && flights.length > 0,
+    frames: stacked && flights.length > 0,
+    riserJoists: outer && flights.length > 0,
+    nogs: outer && flights.some((f) => f.sub.riserJoists.nogs.length > 0),
+    platforms: layout.turns.length > 0,
+    bearers: !stacked && flights.some((f) => f.sub.stringer.bearer && f.sub.stringer.posts.length > 0),
+    posts: (!stacked && flights.some((f) => f.sub.stringer.posts.length > 0)) || layout.turns.some((t) => !t.onPads && t.posts.length > 0),
+    treadBoards: true,
+    riserBoards: input.riserBoards,
+    deck: layout.flights.length > 0,
+  }
+  return (Object.keys(STAIR_MEMBER_LABELS) as StairMember[]).filter((m) => has[m])
+}
+
 export interface StairRenderOptions {
   /** degrees, how far the camera swings round from straight in front of
    * the bottom step (positive = round to the right) */
   azimuthDeg: number
   /** degrees above horizontal */
   elevationDeg: number
-  /** false = framing only, to see how it goes together */
-  showBoards: boolean
+  /** members left out, to see how it goes together */
+  hidden: ReadonlySet<StairMember>
 }
 
 export interface StairRenderPolygon {
@@ -223,7 +272,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   const outer = input.framing === "outer-stringers"
 
   const solids: Solid[] = []
-  const put = (s: Solid | null) => s && solids.push(s)
+  const put = (kind: StairMember, s: Solid | null) => s && !options.hidden.has(kind) && solids.push(s)
 
   // ── flights ──────────────────────────────────────────────────────────
   layout.flights.forEach((fl) => {
@@ -235,19 +284,19 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
 
     if (k > 0) {
       if (stacked) {
-        s.frames.list.forEach((fr) => put(box(f, fr.x0, fr.x1, 0, W, fr.y0, fr.y1, COLORS.framing)))
+        s.frames.list.forEach((fr) => put("frames", box(f, fr.x0, fr.x1, 0, W, fr.y0, fr.y1, COLORS.framing)))
       } else {
         const lines = s.supports.positions.filter((_, i, all) => !outer || i === 0 || i === all.length - 1)
         lines.forEach((c) => {
-          put(extrudeAcross(f, s.stringer.polygon, c - b / 2, c + b / 2, COLORS.framing))
-          s.wedges.polygons.forEach((w) => put(extrudeAcross(f, w, c - b / 2, c + b / 2, COLORS.wedge)))
+          put("stringers", extrudeAcross(f, s.stringer.polygon, c - b / 2, c + b / 2, COLORS.framing))
+          s.wedges.polygons.forEach((w) => put("wedges", extrudeAcross(f, w, c - b / 2, c + b / 2, COLORS.wedge)))
         })
         if (outer) {
-          s.riserJoists.list.forEach((j) => put(box(f, j.x0, j.x1, b, W - b, j.y0, j.y1, COLORS.joist)))
+          s.riserJoists.list.forEach((j) => put("riserJoists", box(f, j.x0, j.x1, b, W - b, j.y0, j.y1, COLORS.joist)))
           const nl = s.riserJoists.nogLines
           s.riserJoists.nogs.forEach((n, i) => {
             const c = nl[i % nl.length]
-            put(box(f, n.x0, n.x1, c - b / 2, c + b / 2, n.y0, n.y1, COLORS.joist))
+            put("nogs", box(f, n.x0, n.x1, c - b / 2, c + b / 2, n.y0, n.y1, COLORS.joist))
           })
         }
         // posts part way up, their tops at the stringer's underside (taken
@@ -256,36 +305,34 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
         s.stringer.posts.forEach((p) => {
           if (s.stringer.bearer) {
             const top = p.height - slope * (BEARER_WIDTH / 2)
-            put(box(f, p.x - BEARER_WIDTH / 2, p.x + BEARER_WIDTH / 2, 0, W, top - BEARER_DEPTH, top, COLORS.joist))
+            put("bearers", box(f, p.x - BEARER_WIDTH / 2, p.x + BEARER_WIDTH / 2, 0, W, top - BEARER_DEPTH, top, COLORS.joist))
             const n = s.stringer.postsPerLine
             for (let i = 0; i < n; i++) {
               const c = POST_SIZE / 2 + ((W - POST_SIZE) * i) / Math.max(1, n - 1)
-              put(box(f, p.x - POST_SIZE / 2, p.x + POST_SIZE / 2, c - POST_SIZE / 2, c + POST_SIZE / 2, -fl.baseHeight, top - BEARER_DEPTH, COLORS.post))
+              put("posts", box(f, p.x - POST_SIZE / 2, p.x + POST_SIZE / 2, c - POST_SIZE / 2, c + POST_SIZE / 2, -fl.baseHeight, top - BEARER_DEPTH, COLORS.post))
             }
           } else {
             const top = p.height - slope * (POST_SIZE / 2)
             lines.forEach((c) =>
-              put(box(f, p.x - POST_SIZE / 2, p.x + POST_SIZE / 2, c - POST_SIZE / 2, c + POST_SIZE / 2, -fl.baseHeight, top, COLORS.post)),
+              put("posts", box(f, p.x - POST_SIZE / 2, p.x + POST_SIZE / 2, c - POST_SIZE / 2, c + POST_SIZE / 2, -fl.baseHeight, top, COLORS.post)),
             )
           }
         })
       }
     }
 
-    if (options.showBoards) {
-      for (let i = 1; i <= k; i++) {
-        const front = (i - 1) * G - riserT - s.nosing
-        s.treadBoards.forEach((bd) => put(box(f, front + bd.offset, front + bd.offset + bd.width, 0, W, i * R - t, i * R, COLORS.decking)))
-      }
-      // every riser up the flight, the top one onto the turn or the deck
-      if (input.riserBoards)
-        for (let i = 1; i <= k + 1; i++) {
-          const base = (i - 1) * R
-          s.riserBoardPieces.forEach((p) =>
-            put(box(f, (i - 1) * G - t, (i - 1) * G, 0, W, base + p.offset, base + p.offset + p.width, COLORS.decking)),
-          )
-        }
+    for (let i = 1; i <= k; i++) {
+      const front = (i - 1) * G - riserT - s.nosing
+      s.treadBoards.forEach((bd) => put("treadBoards", box(f, front + bd.offset, front + bd.offset + bd.width, 0, W, i * R - t, i * R, COLORS.decking)))
     }
+    // every riser up the flight, the top one onto the turn or the deck
+    if (input.riserBoards)
+      for (let i = 1; i <= k + 1; i++) {
+        const base = (i - 1) * R
+        s.riserBoardPieces.forEach((p) =>
+          put("riserBoards", box(f, (i - 1) * G - t, (i - 1) * G, 0, W, base + p.offset, base + p.offset + p.width, COLORS.decking)),
+        )
+      }
   })
 
   // ── turns: a platform on posts, winder frames stacked on it ──────────
@@ -293,7 +340,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
     tn.frames.forEach((fm, j) => {
       const top = tn.regions[j].height - t
       const bottom = j === 0 ? Math.max(0, top - tn.joistDepth) : tn.regions[j - 1].height - t
-      put(prism(fm.poly, bottom, top, COLORS.framing))
+      put("platforms", prism(fm.poly, bottom, top, COLORS.framing))
     })
     if (!tn.onPads) {
       const mid = tn.polygon.reduce((acc, p) => ({ x: acc.x + p.x / tn.polygon.length, y: acc.y + p.y / tn.polygon.length }), { x: 0, y: 0 })
@@ -324,21 +371,19 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
           [h, h],
           [-h, h],
         ].map(([u, v]) => ({ x: c.x + d.x * u + a.x * v, y: c.y + d.y * u + a.y * v }))
-        put(prism(foot, 0, height, COLORS.post))
+        put("posts", prism(foot, 0, height, COLORS.post))
       })
     }
-    if (options.showBoards) {
-      tn.regions.forEach((rg, j) => {
-        rg.boards.forEach((st) => put(prism(st.poly, rg.height - t, rg.height, COLORS.decking)))
-        // the riser up onto each winder past the first (the first's is the
-        // flight's top riser)
-        if (input.riserBoards && j > 0) {
-          const n = rg.normal
-          const back = (p: Pt) => ({ x: p.x - n.x * t, y: p.y - n.y * t })
-          put(prism([back(rg.frontA), back(rg.frontB), rg.frontB, rg.frontA], tn.regions[j - 1].height, rg.height - t, COLORS.decking))
-        }
-      })
-    }
+    tn.regions.forEach((rg, j) => {
+      rg.boards.forEach((st) => put("treadBoards", prism(st.poly, rg.height - t, rg.height, COLORS.decking)))
+      // the riser up onto each winder past the first (the first's is the
+      // flight's top riser)
+      if (input.riserBoards && j > 0) {
+        const n = rg.normal
+        const back = (p: Pt) => ({ x: p.x - n.x * t, y: p.y - n.y * t })
+        put("riserBoards", prism([back(rg.frontA), back(rg.frontB), rg.frontB, rg.frontA], tn.regions[j - 1].height, rg.height - t, COLORS.decking))
+      }
+    })
   })
 
   // ── the deck at the top ──────────────────────────────────────────────
@@ -360,15 +405,15 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
     const depth = DECK_DEPTHS.find((dp) => clear(rect(dp, 0, 0))) ?? DECK_DEPTHS[DECK_DEPTHS.length - 1]
     const mL = DECK_MARGINS.find((m) => clear(rect(depth, m, 0))) ?? 0
     const mR = DECK_MARGINS.find((m) => clear(rect(depth, mL, m))) ?? 0
-    put(prism(rect(depth, mL, mR), H - t, H, COLORS.deckTop))
-    put(prism(rect(depth, mL, mR), H - t - DECK_JOIST_DEPTH, H - t, COLORS.deckFascia))
+    put("deck", prism(rect(depth, mL, mR), H - t, H, COLORS.deckTop))
+    put("deck", prism(rect(depth, mL, mR), H - t - DECK_JOIST_DEPTH, H - t, COLORS.deckFascia))
     // posts under the deck's corners
     const p = POST_SIZE
     const postTop = H - t - DECK_JOIST_DEPTH
     if (postTop > 150)
       for (const u of [x0 + p, x0 + depth - p])
         for (const v of [-mL + p, W + mR - p])
-          put(box(f, u - p / 2, u + p / 2, v - p / 2, v + p / 2, 0, postTop, COLORS.post))
+          put("deck", box(f, u - p / 2, u + p / 2, v - p / 2, v + p / 2, 0, postTop, COLORS.post))
   }
 
   if (!solids.length) return null

@@ -107,3 +107,40 @@
     }
   }
 }
+
+// one checkbox per kind of member, to strip the model back to its framing
+.members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+}
+
+.memberToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.45rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+
+  input {
+    margin: 0;
+    accent-color: var(--color-primary);
+  }
+
+  &:has(input:not(:checked)) {
+    opacity: 0.55;
+  }
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--borderRadius);
+}
