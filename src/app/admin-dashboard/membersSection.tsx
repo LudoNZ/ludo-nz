@@ -16,6 +16,18 @@ import {
 } from "./memberActions"
 import styles from "./membersSection.module.scss"
 
+/** A server action's thrown error, readable: in production Next hides the
+ * message, and the usual cause is this page being from before the site
+ * was last updated (its buttons then call server code that's gone). */
+const serverErrorText = (e: unknown, fallback: string) => {
+  const msg = e instanceof Error ? e.message : ""
+  if (!msg) return fallback
+  if (/Server Components render|Server Action|failed to find/i.test(msg)) {
+    return `${fallback}. The site may have been updated since this page was opened: refresh the page (Ctrl+Shift+R) and try again.`
+  }
+  return msg
+}
+
 const inviteLink = (id: string) => `${window.location.origin}/register?invite=${id}`
 
 const formatDate = (s: string | null) =>
@@ -108,7 +120,7 @@ export default function MembersSection() {
       setAccounts(result.accounts)
       setError("")
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load members")
+      setError(serverErrorText(e, "Couldn't load members"))
     } finally {
       setLoading(false)
     }
@@ -125,7 +137,7 @@ export default function MembersSection() {
       await action()
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That didn't work")
+      setError(serverErrorText(e, "That didn't work"))
     } finally {
       setBusy(null)
     }
@@ -147,7 +159,7 @@ export default function MembersSection() {
       setNewFeatures([])
       await refresh()
     } catch (e) {
-      setInviteError(e instanceof Error ? e.message : "Couldn't create the invite")
+      setInviteError(serverErrorText(e, "Couldn't create the invite"))
     } finally {
       setBusy(null)
     }

@@ -103,7 +103,7 @@ export async function listMembers(idToken: string): Promise<{ members: MemberRow
   return { members, accounts }
 }
 
-export async function createInvite(
+async function createInviteUnsafe(
   idToken: string,
   /** email blank: an open invite, where they enter their own name and email */
   input: { email: string; name: string; features: string[]; expiresInDays?: number },
@@ -135,6 +135,21 @@ export async function createInvite(
       expiresAt,
     })
   return { ok: true, id, expiresAt: expiresAt.toDate().toISOString() }
+}
+
+/** Errors come back as a message rather than thrown: a thrown error's
+ * message is hidden in production, which made a failed invite impossible
+ * to diagnose from the page. The full error goes to the server log. */
+export async function createInvite(
+  idToken: string,
+  input: { email: string; name: string; features: string[]; expiresInDays?: number },
+): Promise<{ ok: true; id: string; expiresAt: string } | { ok: false; error: string }> {
+  try {
+    return await createInviteUnsafe(idToken, input)
+  } catch (e) {
+    console.error("createInvite failed:", e)
+    return { ok: false, error: `Couldn't create the invite: ${e instanceof Error ? e.message : String(e)}` }
+  }
 }
 
 /** Change what a member can use. Takes effect on their next page load. */
