@@ -63,6 +63,14 @@ export interface WallProject {
   augerDiameterMm: number | null
   /** e.g. "150mm round"; null = each post's size comes from the table */
   postSizeOverride: string | null
+  /** with no wall-wide size: each post sized from the table at its own
+   * height, rather than every post the biggest any of them needs */
+  gradePostSizes: boolean
+  /** sizes picked by hand for single posts, keyed by post index */
+  postSizes: Record<string, string>
+  /** mm, the auger for single holes, keyed by post index — only used on
+   * a post with its own size in postSizes */
+  holeDiametersMm: Record<string, number>
   /** mm, drilled depth below ground; null = worked out per post */
   holeDepthOverrideMm: number | null
   /** mm, how far each post is held up off the gravel base pad, the gap
@@ -137,6 +145,9 @@ export const newBlankWall = (): WallProject => ({
   rlDatumM: 0,
   augerDiameterMm: null,
   postSizeOverride: null,
+  gradePostSizes: false,
+  postSizes: {},
+  holeDiametersMm: {},
   holeDepthOverrideMm: null,
   pileStandoffMm: 0,
   runSpacing: [],
@@ -185,6 +196,13 @@ export const wallFromData = (data: unknown): WallProject => {
     rlDatumM: typeof d.rlDatumM === "number" && Number.isFinite(d.rlDatumM) ? d.rlDatumM : 0,
     augerDiameterMm: typeof d.augerDiameterMm === "number" && d.augerDiameterMm > 0 ? d.augerDiameterMm : null,
     postSizeOverride: typeof d.postSizeOverride === "string" && d.postSizeOverride ? d.postSizeOverride : null,
+    gradePostSizes: Boolean(d.gradePostSizes),
+    postSizes: Object.fromEntries(
+      Object.entries(typeof d.postSizes === "object" && d.postSizes !== null ? d.postSizes : {}).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
+      )
+    ),
+    holeDiametersMm: Object.fromEntries(Object.entries(numberMap(d.holeDiametersMm)).filter(([, n]) => n > 0)),
     holeDepthOverrideMm: typeof d.holeDepthOverrideMm === "number" && d.holeDepthOverrideMm > 0 ? d.holeDepthOverrideMm : null,
     pileStandoffMm: typeof d.pileStandoffMm === "number" && d.pileStandoffMm > 0 ? Math.round(d.pileStandoffMm) : 0,
     runSpacing: Array.isArray(d.runSpacing) ? d.runSpacing.map(runSpacingFromData) : [],
@@ -237,7 +255,7 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "holeDepthOverrideMm" | "pileStandoffMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "gradePostSizes" | "postSizes" | "holeDiametersMm" | "holeDepthOverrideMm" | "pileStandoffMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
   rakedTopBoard: wall.rakedTopBoard,
   boardsToPostOutside: wall.boardsToPostOutside,
@@ -246,6 +264,9 @@ export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "po
   depthPoints: wall.depthPoints,
   augerDiameterM: wall.augerDiameterMm ? wall.augerDiameterMm / 1000 : null,
   postSizeLabel: wall.postSizeOverride,
+  gradePostSizes: wall.gradePostSizes,
+  postSizes: wall.postSizes,
+  holeDiametersM: Object.fromEntries(Object.entries(wall.holeDiametersMm).map(([k, mm]) => [k, mm / 1000])),
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,
   pileStandoffM: wall.pileStandoffMm ? wall.pileStandoffMm / 1000 : 0,
 })

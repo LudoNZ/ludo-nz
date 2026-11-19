@@ -23,6 +23,12 @@ const formatLevel = (relativeM: number, rlDatumM: number): string =>
  * (reads a WallProfile, not the generic PostSpec/RailSpec), unlike the
  * structures/ components, since a raked profile has no single uniform
  * spec to describe it. */
+/** "150 x 150mm" → "□150", "200mm round" → "Ø200" */
+const shortSize = (label: string) => {
+  const n = label.match(/\d+/)?.[0] ?? label
+  return /round/i.test(label) ? `Ø${n}` : `□${n}`
+}
+
 const WallProfileDiagram: React.FC<{
   profile: WallProfile
   settings: CalcSettings
@@ -76,6 +82,7 @@ const WallProfileDiagram: React.FC<{
   }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored])
 
   const { fontSize, strokeW, viewBox, maxTop } = geometry
+  const mixedSizes = new Set(profile.posts.filter((p) => !p.needsEngineer).map((p) => p.sizeLabel)).size > 1
   const { rlDatumM } = profile
   // `allPosts` stays the full list, since bays and joints refer to posts
   // by index; `posts`/`bays` are just what this view actually draws
@@ -326,6 +333,27 @@ const WallProfileDiagram: React.FC<{
             className={styles.topLine}
             strokeWidth={strokeW * 0.7}
           />
+          {/* with posts of more than one size on the wall, each post's size
+              over its top — underlined where it was picked for that post */}
+          {mixedSizes &&
+            posts.map((p, k) => {
+              const label = shortSize(p.sizeLabel)
+              // no wider than the gap to the nearer neighbouring post
+              const gapM = Math.min(...[posts[k - 1], posts[k + 1]].filter(Boolean).map((q) => Math.abs(q.xM - p.xM)))
+              const size = Math.min(fontSize * 0.6, (gapM * 0.9) / (label.length * 0.62))
+              return (
+                <text
+                  key={`size-${p.index}`}
+                  x={X(p.xM)}
+                  y={y(p.topLevelM) - fontSize * (topCapEnabled ? 0.9 : 0.5)}
+                  fontSize={size}
+                  textAnchor="middle"
+                  className={p.sizeSet ? styles.sizeLabelSet : styles.sizeLabel}
+                >
+                  {label}
+                </text>
+              )
+            })}
           {/* how far each step goes up (+) or down (−), in courses, over its post */}
           {posts.map((p) => {
             const before = bays.find((bay) => bay.rightIndex === p.index)
@@ -426,6 +454,12 @@ const WallProfileDiagram: React.FC<{
         <span>
           <span className={styles.controlDotSwatch} /> Set by hand — others rake between these
         </span>
+        {mixedSizes && (
+          <span>
+            <span className={styles.sizeLabelSwatch}>Ø150</span> Post size (□ square, Ø round) — underlined where it was
+            picked for that post
+          </span>
+        )}
         {profile.posts.some((p) => p.depthSet === "rake") && (
           <span>
             <span className={`${styles.controlDotSwatch} ${styles.depthRakeSwatch}`} /> Hole depth set — holes between

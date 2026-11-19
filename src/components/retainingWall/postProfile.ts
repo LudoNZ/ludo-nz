@@ -98,6 +98,14 @@ export interface ProfilePost {
   needsEngineer: boolean
   sizeLabel: string
   widthM: number
+  /** true when this post's size was picked by hand for it alone */
+  sizeSet: boolean
+  /** the size and hole diameter this post would have without its own
+   * size — what the rest of the wall works out to here */
+  wallSizeLabel: string
+  wallHoleDiameterM: number
+  /** true when this post's hole has its own auger size */
+  holeSet: boolean
   /** m, how deep the hole is drilled below this post's ground level —
    * structural embedment plus the gravel base pad */
   embedmentM: number
@@ -275,6 +283,17 @@ export interface ProfileOverrides {
   /** m — the post is held this far up off the gravel base pad, and the
    * gap under it filled with concrete (0 = it stands on the pad) */
   pileStandoffM?: number | null
+  /** with no wall-wide size set: size each post from the table at its own
+   * height (bigger posts where the wall is taller) instead of giving
+   * every post the biggest size any of them needs */
+  gradePostSizes?: boolean
+  /** sizes picked by hand for individual posts, keyed by post index —
+   * these win over every wall-wide setting */
+  postSizes?: Record<number, string> | null
+  /** m, the auger for individual holes, keyed by post index. Only used on
+   * a post that has its own size (postSizes); the rest of the wall keeps
+   * the wall's auger. */
+  holeDiametersM?: Record<number, number> | null
 }
 
 /** m³ of concrete for one hole `embedmentM` deep: the hole above its
@@ -843,6 +862,10 @@ export function buildWallProfile(
       needsEngineer,
       sizeLabel,
       widthM,
+      sizeSet: false,
+      holeSet: false,
+      wallSizeLabel: sizeLabel,
+      wallHoleDiameterM: holeDiameterM,
       embedmentM,
       depthSet: null,
       tableSizeLabel,
@@ -854,23 +877,41 @@ export function buildWallProfile(
     }
   })
 
+  /** gives post `p` a size (and, optionally, its own hole diameter), and
+   * works its hole out again to suit */
+  const resizePost = (p: ProfilePost, sizeLabel: string, holeDiameterM: number | null = null) => {
+    p.sizeLabel = sizeLabel
+    p.widthM = postWidthM(sizeLabel)
+    p.holeDiameterM = holeDiameterM ?? augerDiameterM ?? p.widthM * settings.holeDiameterMultiplier
+    p.holeVolumeM3 = calcHoleVolumeM3(p.holeDiameterM, p.embedmentM)
+    const concreteDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
+    p.concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(p.holeDiameterM, concreteDepthM) - postSectionAreaM2(sizeLabel) * concreteDepthM)
+  }
+
   // By default every pile on the wall is the same: the biggest size the
   // table calls for at any post (a pile at the tall end sets it for all).
-  // Picking a size by hand overrides this.
-  if (!postSizeOverride) {
+  // Grading leaves each post on the table's size for its own height
+  // instead. Picking a size for the whole wall overrides both.
+  if (!postSizeOverride && !overrides.gradePostSizes) {
     const sizable = posts.filter((p) => !p.needsEngineer)
     if (sizable.length > 0) {
       const biggest = sizable.reduce((best, p) =>
         postSectionAreaM2(p.tableSizeLabel) > postSectionAreaM2(best) + 1e-9 ? p.tableSizeLabel : best, sizable[0].tableSizeLabel)
-      for (const p of posts) {
-        p.sizeLabel = biggest
-        p.widthM = postWidthM(biggest)
-        p.holeDiameterM = augerDiameterM ?? p.widthM * settings.holeDiameterMultiplier
-        p.holeVolumeM3 = calcHoleVolumeM3(p.holeDiameterM, p.embedmentM)
-        const concreteDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM)
-        p.concreteVolumeM3 = Math.max(0, calcHoleVolumeM3(p.holeDiameterM, concreteDepthM) - postSectionAreaM2(biggest) * concreteDepthM)
-      }
+      for (const p of posts) resizePost(p, biggest)
     }
+  }
+
+  // sizes picked for single posts win over all of that, and a post with
+  // its own size can have its own auger
+  for (const p of posts) {
+    p.wallSizeLabel = p.sizeLabel
+    p.wallHoleDiameterM = p.holeDiameterM
+    const size = overrides.postSizes?.[p.index]
+    if (!size) continue
+    const hole = overrides.holeDiametersM?.[p.index]
+    resizePost(p, size, hole && hole > 0 ? hole : null)
+    p.sizeSet = true
+    p.holeSet = Boolean(hole && hole > 0)
   }
 
   // hand-set hole depths, applied over the worked-out ones above

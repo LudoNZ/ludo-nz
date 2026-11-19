@@ -33,7 +33,7 @@ import {
   segmentLengths,
   totalLength,
 } from "@/components/retainingWall/wallPlan"
-import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS } from "@/components/retainingWall/calcSettings"
+import { boardStockLengths, CalcSettings, findReferenceRow, POST_SIZE_OPTIONS, postFitDiameterM, postWidthM } from "@/components/retainingWall/calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SOIL_LABELS, SoilType } from "@/components/retainingWall/retainingWallCalc"
 import { SavedCalcSettings, subscribeToCalcSettingsList } from "@/components/retainingWall/retainingWallData"
 import BoardEndsModal from "./boardEndsModal"
@@ -57,6 +57,8 @@ const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
 const AUGER_SIZES_MM = [200, 250, 300, 350, 400, 450, 500, 600]
 /** how long the floating undo bar stays up after each change */
 const UNDO_VISIBLE_MS = 10_000
+/** the post size box's value for "each post sized for its own height" */
+const GRADED = "__graded"
 
 /** The retaining wall calculator itself, with no idea where its wall is
  * kept: it starts from `initial` (read once, on mount — the caller mounts
@@ -91,6 +93,13 @@ const RetainingWallEditor: React.FC<{
   // one post size / one hole depth for the whole wall, replacing what the
   // reference table would work out post by post; blank = calculated
   const [postSizeOverride, setPostSizeOverride] = useState(initial.postSizeOverride ?? "")
+  // with Auto: each post sized from the table at its own height, instead
+  // of every post the biggest size any of them needs
+  const [gradePostSizes, setGradePostSizes] = useState(initial.gradePostSizes)
+  // sizes picked for single posts, and their own augers (mm) — keyed by
+  // post index, so they follow their posts like the hand-set levels
+  const [postSizes, setPostSizes] = useState<Record<string, string>>(initial.postSizes)
+  const [holeDiametersMm, setHoleDiametersMm] = useState<Record<string, number>>(initial.holeDiametersMm)
   const [holeDepth, setHoleDepth] = useState(initial.holeDepthOverrideMm ? String(initial.holeDepthOverrideMm) : "")
   // per wall: a hand-set post count or spacing; null = the table's
   const [runSpacing, setRunSpacing] = useState<(RunSpacing | null)[]>(initial.runSpacing)
@@ -166,7 +175,7 @@ const RetainingWallEditor: React.FC<{
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
   const holeDepthParsed = parseFloat(holeDepth)
   const holeDepthOverrideMm = holeDepthParsed > 0 ? holeDepthParsed : null
-  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, holeDepthOverrideMm, pileStandoffMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
+  const overrides = overridesForWall({ augerDiameterMm, postSizeOverride: postSizeOverride || null, gradePostSizes, postSizes, holeDiametersMm, holeDepthOverrideMm, pileStandoffMm, runSpacing, rakedTopBoard, depthPoints, boardsToPostOutside, steppedWalls, bayCourses })
 
   // ---- change history / undo ----
   // Every saveable change (spotted by the report effect below) pushes the
@@ -269,6 +278,9 @@ const RetainingWallEditor: React.FC<{
     setRlDatum(String(wall.rlDatumM))
     setAugerDiameter(wall.augerDiameterMm ? String(wall.augerDiameterMm) : "")
     setPostSizeOverride(wall.postSizeOverride ?? "")
+    setGradePostSizes(wall.gradePostSizes)
+    setPostSizes(wall.postSizes)
+    setHoleDiametersMm(wall.holeDiametersMm)
     setHoleDepth(wall.holeDepthOverrideMm ? String(wall.holeDepthOverrideMm) : "")
     setPileStandoffMm(wall.pileStandoffMm)
     setRunSpacing(wall.runSpacing)
@@ -335,6 +347,9 @@ const RetainingWallEditor: React.FC<{
       rlDatumM,
       augerDiameterMm,
       postSizeOverride: postSizeOverride || null,
+      gradePostSizes,
+      postSizes,
+      holeDiametersMm,
       holeDepthOverrideMm,
       pileStandoffMm,
       runSpacing,
@@ -361,7 +376,7 @@ const RetainingWallEditor: React.FC<{
     if (restoringRef.current) restoringRef.current = false
     else recordChangeRef.current(JSON.parse(previous) as WallProject, wall)
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
+  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, gradePostSizes, postSizes, holeDiametersMm, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
 
   // Hand-set levels and depths are keyed by post index, so whenever the
   // post layout changes — a wall reshaped, a post added, different soil,
@@ -413,6 +428,8 @@ const RetainingWallEditor: React.FC<{
     setControlPoints(follow)
     setDepthPoints(follow)
     setMeasuredHoleDepthsMm(follow)
+    setPostSizes(follow)
+    setHoleDiametersMm(follow)
     // bay heights are keyed by the bay's left post, so the last bay of
     // the unchanged walls at the start is the one *before* keepUpTo
     setBayCourses((counts) => {
@@ -625,6 +642,40 @@ const RetainingWallEditor: React.FC<{
     })
   }
 
+  /** gives posts `indices` their own size, or with null puts them back
+   * on the wall's — which also drops any auger set for their holes */
+  const setSizeFor = (indices: number[], size: string | null) => {
+    if (locked) return
+    setPostSizes((current) => {
+      const next = { ...current }
+      for (const i of indices) {
+        if (size) next[String(i)] = size
+        else delete next[String(i)]
+      }
+      return next
+    })
+    if (!size) setAugerFor(indices, null)
+  }
+  /** the auger (mm) for holes `indices`, or null for the wall's */
+  const setAugerFor = (indices: number[], mm: number | null) => {
+    if (locked) return
+    setHoleDiametersMm((current) => {
+      const next = { ...current }
+      for (const i of indices) {
+        if (mm && mm > 0) next[String(i)] = mm
+        else delete next[String(i)]
+      }
+      return next
+    })
+  }
+  /** this post and the rest of its wall, to the next corner or the end
+   * (from a corner post, the wall that starts on it) */
+  const restOfWall = (index: number): number[] => {
+    const seg = profile?.segments.find((s) => index >= s.startPostIndex && index < s.endPostIndex) ?? profile?.segments[profile.segments.length - 1]
+    if (!seg) return [index]
+    return Array.from({ length: seg.endPostIndex - index + 1 }, (_, k) => index + k)
+  }
+
   const handleClearControlPoint = () => {
     if (selectedIndex === null) return
     setControlPoints((cp) => {
@@ -760,14 +811,23 @@ const RetainingWallEditor: React.FC<{
       </div>
       <p className={styles.overridesHint}>
         Leave a box on Auto to have it worked out from the reference table (every pile gets the biggest size any
-        post needs; hole depths follow each post&apos;s own height), or set it to use the same value for every post.
+        post needs, or each post its own size for its height; hole depths follow each post&apos;s own height), or set
+        it to use the same value for every post. Tap a post in the elevation to give it a size and auger of its own.
       </p>
       <fieldset disabled={locked} className={styles.lockable}>
       <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
         <div className={styles.field}>
           <label htmlFor="postSize">Post size</label>
-          <select id="postSize" value={postSizeOverride} onChange={(e) => setPostSizeOverride(e.target.value)}>
+          <select
+            id="postSize"
+            value={postSizeOverride || (gradePostSizes ? GRADED : "")}
+            onChange={(e) => {
+              setGradePostSizes(e.target.value === GRADED)
+              setPostSizeOverride(e.target.value === GRADED ? "" : e.target.value)
+            }}
+          >
             <option value="">Auto — one size, the biggest the table needs</option>
+            <option value={GRADED}>Auto — each post sized for its own height</option>
             {POST_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
                 All {size}
@@ -1133,6 +1193,73 @@ const RetainingWallEditor: React.FC<{
                       A rake point works like a hand-set top: the hole bottoms of the posts between two rake points sit on a
                       straight line between them, with the wall&apos;s end posts holding their own worked-out depth.
                     </p>
+                    <div className={styles.editFields}>
+                      <div className={styles.field}>
+                        <label htmlFor="onePostSize">Post size</label>
+                        <select
+                          id="onePostSize"
+                          value={selectedPost.sizeSet ? selectedPost.sizeLabel : ""}
+                          onChange={(e) => setSizeFor([selectedPost.index], e.target.value || null)}
+                        >
+                          <option value="">Wall&apos;s size — {selectedPost.wallSizeLabel}</option>
+                          {POST_SIZE_OPTIONS.map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                          {selectedPost.sizeSet && !POST_SIZE_OPTIONS.includes(selectedPost.sizeLabel) && (
+                            <option value={selectedPost.sizeLabel}>{selectedPost.sizeLabel}</option>
+                          )}
+                        </select>
+                      </div>
+                      {selectedPost.sizeSet && (
+                        <div className={styles.field}>
+                          <label htmlFor="onePostAuger">Auger for this hole (mm)</label>
+                          <input
+                            id="onePostAuger"
+                            key={`auger-${selectedPost.index}-${selectedPost.sizeLabel}-${holeDiametersMm[String(selectedPost.index)] ?? "auto"}`}
+                            type="number"
+                            min={50}
+                            step={25}
+                            inputMode="numeric"
+                            list="augerSizes"
+                            placeholder={`Auto — ${Math.round(selectedPost.holeDiameterM * 1000)}`}
+                            defaultValue={selectedPost.holeSet ? Math.round(selectedPost.holeDiameterM * 1000) : ""}
+                            onBlur={(e) => {
+                              const mm = parseFloat(e.target.value)
+                              setAugerFor([selectedPost.index], mm >= 50 ? mm : null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") e.currentTarget.blur()
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {selectedPost.sizeSet && (
+                      <p className={styles.cornerNote}>
+                        {postWidthM(selectedPost.sizeLabel) < postWidthM(selectedPost.tableSizeLabel) - 1e-6
+                          ? `⚠ Smaller than the ${selectedPost.tableSizeLabel} the reference table gives for this post. `
+                          : ""}
+                        {postFitDiameterM(selectedPost.sizeLabel) > selectedPost.holeDiameterM + 1e-9
+                          ? `⚠ A ${Math.round(selectedPost.holeDiameterM * 1000)}mm hole is too small for this post — it won't fit down it. `
+                          : ""}
+                        This post has its own size; the rest of the wall is {selectedPost.wallSizeLabel} in{" "}
+                        {Math.round(selectedPost.wallHoleDiameterM * 1000)}mm holes.{" "}
+                        <button
+                          type="button"
+                          className={styles.inlineLink}
+                          onClick={() => {
+                            const rest = restOfWall(selectedPost.index)
+                            setSizeFor(rest, selectedPost.sizeLabel)
+                            const mm = holeDiametersMm[String(selectedPost.index)]
+                            if (mm) setAugerFor(rest, mm)
+                          }}
+                        >
+                          Use {selectedPost.sizeLabel} for the rest of this wall
+                        </button>
+                      </p>
+                    )}
                     </fieldset>
                     {selectedPost.isCorner && (
                       <p className={styles.cornerNote}>
