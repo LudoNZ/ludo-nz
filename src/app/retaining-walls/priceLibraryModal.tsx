@@ -153,7 +153,7 @@ const PriceLibraryModal: React.FC<{
                 ? "Couldn't load the price library; showing the last one loaded on this device."
                 : canEdit
                   ? "The one price library: every estimate and proposal uses it. Saved as you go."
-                  : "The one price library: every estimate and proposal uses it. Only an admin can change it."}
+                  : "The one price library: every estimate and proposal uses it. Sign in to change it."}
           {error && <span className={styles.error}> {error}</span>}
         </p>
 

@@ -28,11 +28,11 @@ const writeOfflineCopy = (library: PriceLibrary) => {
 export type LibraryStatus = "loading" | "ready" | "offline" | "error"
 
 /** The one price library (prices and company details), kept in the
- * database. Everyone uses it; only admins can change it. */
+ * database. Everyone uses it; anyone signed in can change it. */
 export function usePriceLibrary() {
   const auth = useAuth()
   const user = auth?.currentUser ?? null
-  const canEdit = !!auth?.isAdmin
+  const canEdit = !!user
   const [library, setLibrary] = useState<PriceLibrary>(() => libraryFromData(undefined))
   const [status, setStatus] = useState<LibraryStatus>("loading")
   const [error, setError] = useState<string | null>(null)
