@@ -304,3 +304,26 @@
   border-bottom: 10px solid #b5651d;
   flex-shrink: 0;
 }
+
+// a hole reaching into an obstruction's clearance zone
+.holeClash {
+  fill: #d9534f;
+  opacity: 0.75;
+}
+
+.holeClashSwatch {
+  background-color: #d9534f;
+}
+
+.obstruction {
+  cursor: pointer;
+}
+
+.obstructionSwatch {
+  width: 14px;
+  height: 10px;
+  display: inline-block;
+  border: 1.5px dashed #4a90c2;
+  background-color: rgba(74, 144, 194, 0.15);
+  flex-shrink: 0;
+}

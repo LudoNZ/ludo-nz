@@ -3,6 +3,7 @@ import { PlanPoint } from "./wallPlan"
 import { LaborEstimate } from "../structures/types"
 import { boardStockLengths, CalcSettings, findReferenceRow, planBoardOrder, postFitDiameterM, postSectionAreaM2, postWidthM } from "./calcSettings"
 import { ENGINEER_HEIGHT_LIMIT_M, SoilType } from "./retainingWallCalc"
+import { clearanceAnchors, holeClashes, Obstruction, ObstructionType, obstructionZone, ObstructionZone } from "./obstructions"
 
 /** A post whose ground level and/or top-of-post level has been set by
  * hand, in metres relative to the RL datum (0 = datum). Every other post
@@ -100,6 +101,10 @@ export interface ProfilePost {
   /** set when this post is pinned at a distance from one end of its run:
    * which run, and its slot in that run's RunSpacing.fixedPosts */
   fixed: { segmentIndex: number; slot: number } | null
+  /** the obstruction this post was put in beside, to keep clear of it */
+  clearOf: string | null
+  /** obstructions whose clearance zone this post's hole reaches into */
+  clashesWith: string[]
   /** true if this post's local retained height is outside DIY territory
    * (over the limit, or <= 0) — its own numbers below are still computed
    * (so the diagram can draw it and flag it), but it's excluded from every
@@ -314,6 +319,13 @@ export function layoutRun(
   }
   const breaks = [0, ...anchors.map((a) => a.atM), lengthM]
   const spans = breaks.slice(1).map((b, i) => b - breaks[i])
+  // the stretch between the two posts either side of an obstruction is
+  // one bay, bridging it — a post in the middle would land in it
+  const bridged = spans.map((_, i) => {
+    const a = anchors[i - 1]?.tag
+    const b = anchors[i]?.tag
+    return a?.kind === "clear" && b?.kind === "clear" && a.obstructionId === b.obstructionId
+  })
 
   let bays: number[]
   if (spacing?.bayCount && spacing.bayCount >= 1) {
@@ -322,15 +334,16 @@ export function layoutRun(
     const total = Math.min(MAX_RUN_BAYS, Math.max(spans.length, Math.round(spacing.bayCount)))
     bays = spans.map(() => 1)
     for (let n = spans.length; n < total; n++) {
-      let widest = 0
+      let widest = -1
       spans.forEach((len, i) => {
-        if (len / bays[i] > spans[widest] / bays[widest] + 1e-9) widest = i
+        if (!bridged[i] && (widest < 0 || len / bays[i] > spans[widest] / bays[widest] + 1e-9)) widest = i
       })
+      if (widest < 0) break
       bays[widest]++
     }
   } else {
     const maxM = spacing?.maxSpacingM && spacing.maxSpacingM > 0 ? spacing.maxSpacingM : tableMaxSpacingM
-    bays = spans.map((len) => Math.min(MAX_RUN_BAYS, bayCountFor(len, maxM)))
+    bays = spans.map((len, i) => (bridged[i] ? 1 : Math.min(MAX_RUN_BAYS, bayCountFor(len, maxM))))
   }
 
   const offsetsM: number[] = []
@@ -391,6 +404,11 @@ export interface ProfileOverrides {
    * a post that has its own size (postSizes); the rest of the wall keeps
    * the wall's auger. */
   holeDiametersM?: Record<number, number> | null
+  /** things in the ground the wall crosses: posts are put either side of
+   * one rather than in its clearance zone */
+  obstructions?: Obstruction[] | null
+  /** m, the standard clearance per type of obstruction */
+  obstructionClearancesM?: Partial<Record<ObstructionType, number>> | null
 }
 
 /** m³ of concrete for one hole `embedmentM` deep: the hole above its
@@ -445,6 +463,18 @@ export interface ProfileTotals {
   labor: LaborEstimate
 }
 
+/** An obstruction's zone along the unfolded wall, with what it means
+ * for the posts as laid out. */
+export interface ProfileObstruction extends ObstructionZone {
+  /** m, the ground level where it crosses */
+  groundLevelM: number
+  /** posts whose holes reach into its clearance zone */
+  clashPostIndices: number[]
+  /** m, the bay it crosses under — between those two posts' centres —
+   * or null if it's past the end of the wall */
+  spanM: number | null
+}
+
 export interface WallProfile extends ProfileTotals {
   rlDatumM: number
   /** true when the top board is laid on the rake — see bayCourseLayout */
@@ -460,6 +490,7 @@ export interface WallProfile extends ProfileTotals {
    * setup. */
   segmentTotals: ProfileTotals[]
   engineerPostIndices: number[]
+  obstructions: ProfileObstruction[]
 }
 
 const DEFAULT_LEVEL = (retainedHeightM: number): ControlPoint => ({ groundLevelM: 0, topLevelM: retainedHeightM })
@@ -813,20 +844,12 @@ export function segmentBayCounts(
 /** Every run's posts as fractions of the way along it (0 to 1, the
  * run's start post first) — the post layout to compare when deciding
  * how hand-set values follow their posts after a change. */
-export function segmentPostFractions(
-  segmentLengthsM: number[],
-  retainedHeightM: number,
-  soil: SoilType,
-  settings: CalcSettings,
-  runSpacing: (RunSpacing | null | undefined)[] | null = null
-): number[][] {
-  if (!(retainedHeightM > 0)) return []
-  const { maxSpacingM } = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
-  return segmentLengthsM
-    .map((l, i) => ({ l, spacing: runSpacing?.[i] }))
-    .filter((r) => r.l > 0)
-    .map((r) => [0, ...layoutRun(r.l, maxSpacingM, r.spacing).offsetsM.map((x) => Math.round((x / r.l) * 1e5) / 1e5)])
-}
+export const postFractions = (profile: WallProfile): number[][] =>
+  profile.segments.map((seg) =>
+    profile.posts
+      .slice(seg.startPostIndex, seg.endPostIndex + 1)
+      .map((p) => Math.round(((p.xM - seg.startXM) / seg.lengthM) * 1e5) / 1e5)
+  )
 
 /** Rebuilds a plan for a design saved before plans existed: a straight
  * wall, with a (still in-line) plan vertex at each post that had been
@@ -894,6 +917,14 @@ export function buildWallProfile(
   // contributes its own starting post
   const postXs: number[] = [0]
   const fixedAt = new Map<number, { segmentIndex: number; slot: number }>()
+  const clearAt = new Map<number, string>()
+  // for deciding where posts go round an obstruction, before any post's
+  // own size or depth is known: the hole the wall-wide settings give
+  const layoutHoleDiameterM =
+    augerDiameterM ?? postWidthM(postSizeOverride ?? layoutRow.postSizeLabel) * settings.holeDiameterMultiplier
+  const layoutHoleDepthM =
+    holeDepthOverrideM ?? Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M) * layoutRow.embedmentRatio + settings.gravelBaseAllowanceM
+  const obstructions = overrides.obstructions ?? []
   const cornerIndices = new Set<number>()
   const segments: ProfileSegment[] = []
   let runStartXM = 0
@@ -901,7 +932,17 @@ export function buildWallProfile(
     const spacing = runsIn[index].spacing
     const stepped = Boolean(runsIn[index].stepped)
     const tableBayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
-    const layout = layoutRun(lengthM, layoutRow.maxSpacingM, spacing)
+    // posts either side of anything in the ground the holes would reach
+    const seg = { startXM: runStartXM, lengthM }
+    const plain = layoutRun(lengthM, layoutRow.maxSpacingM, spacing)
+    const anchors = obstructions
+      .filter((o) => o.segmentIndex === index)
+      .flatMap((o) =>
+        clearanceAnchors(obstructionZone(o, seg, overrides.obstructionClearancesM ?? undefined), runStartXM, lengthM, [0, ...plain.offsetsM], layoutHoleDiameterM, layoutHoleDepthM).map(
+          (atM) => ({ atM, tag: { kind: "clear", obstructionId: o.id } as RunAnchorTag })
+        )
+      )
+    const layout = anchors.length ? layoutRun(lengthM, layoutRow.maxSpacingM, spacing, anchors) : plain
     const bayCount = layout.offsetsM.length
     const startPostIndex = postXs.length - 1
     const xs = [0, ...layout.offsetsM]
@@ -909,6 +950,7 @@ export function buildWallProfile(
       postXs.push(runStartXM + x)
       const tag = layout.tags[k]
       if (tag?.kind === "fixed") fixedAt.set(postXs.length - 1, { segmentIndex: index, slot: tag.slot })
+      if (tag?.kind === "clear") clearAt.set(postXs.length - 1, tag.obstructionId)
     })
     const endPostIndex = postXs.length - 1
     const bayWidths = xs.slice(1).map((x, k) => x - xs[k])
@@ -984,6 +1026,8 @@ export function buildWallProfile(
       isControlPoint: Boolean(controlPoints[i]),
       isCorner: cornerIndices.has(i),
       fixed: fixedAt.get(i) ?? null,
+      clearOf: clearAt.get(i) ?? null,
+      clashesWith: [],
       needsEngineer,
       sizeLabel,
       widthM,
@@ -1084,6 +1128,23 @@ export function buildWallProfile(
     p.concreteVolumeM3 = holeConcreteM3(p.holeDiameterM, p.embedmentM, settings.gravelBaseAllowanceM, standoffM, p.sizeLabel)
     p.postDepthM = Math.max(0, p.embedmentM - settings.gravelBaseAllowanceM - standoffM)
   }
+
+  // the obstructions' zones, and which holes reach into them as built
+  const obstructionZones: ProfileObstruction[] = obstructions.map((o) => {
+    const segment = segments[o.segmentIndex]
+    const zone = obstructionZone(o, segment, overrides.obstructionClearancesM ?? undefined)
+    const clashPostIndices = posts.filter((p) => holeClashes(zone, p.xM, p.holeDiameterM, p.embedmentM)).map((p) => p.index)
+    for (const i of clashPostIndices) posts[i].clashesWith.push(o.id)
+    // ground level where it crosses, between the posts either side
+    const after = posts.findIndex((p) => p.xM >= zone.centreXM - 1e-9)
+    const a = posts[Math.max(0, after - 1)]
+    const b = posts[Math.max(0, after)]
+    const t = b && a && b.xM > a.xM ? (zone.centreXM - a.xM) / (b.xM - a.xM) : 0
+    const groundLevelM = a && b ? a.groundLevelM + (b.groundLevelM - a.groundLevelM) * t : 0
+    // the bay it's bridged by, if it's between two posts
+    const spanM = a && b && after > 0 && b.xM > zone.centreXM ? b.xM - a.xM : null
+    return { ...zone, groundLevelM, clashPostIndices, spanM }
+  })
 
   // Stepped runs: every bay is a whole number of courses high, so the top
   // of the wall is a staircase with its steps at the posts. Worked out
@@ -1247,6 +1308,7 @@ export function buildWallProfile(
       )
     ),
     engineerPostIndices: posts.filter((p) => p.needsEngineer).map((p) => p.index),
+    obstructions: obstructionZones,
   }
 }
 

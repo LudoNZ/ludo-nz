@@ -4,6 +4,7 @@ import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { useId, useMemo } from "react"
 import { bayCourseLayout, BoardHighlight, WallProfile } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
+import { OBSTRUCTION_TYPES } from "./obstructions"
 import { CalcSettings } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
 
@@ -29,6 +30,9 @@ const shortSize = (label: string) => {
  * (reads a WallProfile, not the generic PostSpec/RailSpec), unlike the
  * structures/ components, since a raked profile has no single uniform
  * spec to describe it. */
+/** about the font size the drawing will use, before its extent is known */
+const fontGuess = (posts: { xM: number }[]) => Math.max(posts[posts.length - 1].xM - posts[0].xM, 1) * 0.045
+
 const WallProfileDiagram: React.FC<{
   profile: WallProfile
   settings: CalcSettings
@@ -38,6 +42,9 @@ const WallProfileDiagram: React.FC<{
   selectedIndices?: number[]
   /** `additive` when shift/ctrl/cmd was held: add to the selection */
   onSelectPost: (index: number, additive: boolean) => void
+  /** an obstruction to pick out, and what tapping one does */
+  selectedObstructionId?: string | null
+  onSelectObstruction?: (id: string) => void
   segmentIndex?: number | null
   mirrored?: boolean
   /** boards to pick out — the ones cut from a chosen length on the order */
@@ -45,7 +52,7 @@ const WallProfileDiagram: React.FC<{
   /** shown between the drawing and the legend — the selected post's
    * controls, right where it was picked */
   belowDrawing?: React.ReactNode
-}> = ({ profile, settings, topCapEnabled, selectedIndex, selectedIndices = [], onSelectPost, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
+}> = ({ profile, settings, topCapEnabled, selectedIndex, selectedIndices = [], onSelectPost, selectedObstructionId = null, onSelectObstruction, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
   const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
@@ -63,7 +70,11 @@ const WallProfileDiagram: React.FC<{
     // schematic sliver, same thickness used when actually drawing it
     const capThicknessM = topCapEnabled ? settings.boardCourseHeightM * 0.25 : 0
     const tops = posts.map((p) => p.topLevelM + capThicknessM)
-    const bottoms = posts.map((p) => p.groundLevelM - p.embedmentM)
+    const fromX = posts[0].xM
+    const toX = posts[posts.length - 1].xM
+    const zonesHere = profile.obstructions.filter((z) => z.onWall && z.centreXM >= fromX - 1e-6 && z.centreXM <= toX + 1e-6)
+    // room under the deepest hole, or the deepest obstruction's clearance
+    const bottoms = [...posts.map((p) => p.groundLevelM - p.embedmentM), ...zonesHere.map((z) => z.groundLevelM - z.zoneBottomDepthM - fontGuess(posts) * 1.6)]
     const maxTop = Math.max(...tops)
     const minBottom = Math.min(...bottoms)
     const vExtent = Math.max(maxTop - minBottom, 0.5)
@@ -85,6 +96,9 @@ const WallProfileDiagram: React.FC<{
   }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored])
 
   const { fontSize, strokeW, viewBox, maxTop } = geometry
+  const obstructionsHere = profile.obstructions.filter(
+    (z) => z.onWall && z.centreXM >= profile.posts[fromIndex].xM - 1e-6 && z.centreXM <= profile.posts[toIndex].xM + 1e-6
+  )
   const mixedSizes = new Set(profile.posts.filter((p) => !p.needsEngineer).map((p) => p.sizeLabel)).size > 1
   const { rlDatumM } = profile
   // `allPosts` stays the full list, since bays and joints refer to posts
@@ -207,6 +221,62 @@ const WallProfileDiagram: React.FC<{
             )
           })}
 
+          {/* obstructions in the ground: the clearance zone dashed round it,
+              the thing itself (stretched along the wall when it crosses at
+              an angle), and for the one picked out, how far it is from the
+              end it's measured from */}
+          {obstructionsHere.map((z) => {
+            const o = z.obstruction
+            const type = OBSTRUCTION_TYPES[o.type]
+            const cx = X(z.centreXM)
+            const g = z.groundLevelM
+            const picked = o.id === selectedObstructionId
+            const seg = profile.segments[o.segmentIndex]
+            const endX = o.from === "start" ? seg.startXM : seg.endXM
+            const dimY = y(g - z.zoneBottomDepthM) + fontSize * 0.7
+            const label = o.label || type.label
+            return (
+              <g
+                key={`ob-${o.id}`}
+                className={styles.obstruction}
+                onClick={() => onSelectObstruction?.(o.id)}
+                role={onSelectObstruction ? "button" : undefined}
+                aria-label={`${label}, ${o.distanceM.toFixed(2)} m along — tap to pick it out`}
+              >
+                <rect
+                  x={cx - z.zoneHalfM}
+                  y={y(g - z.zoneTopDepthM)}
+                  width={z.zoneHalfM * 2}
+                  height={z.zoneBottomDepthM - z.zoneTopDepthM}
+                  fill={type.color}
+                  fillOpacity={picked ? 0.22 : 0.12}
+                  stroke={type.color}
+                  strokeWidth={strokeW * (picked ? 0.8 : 0.5)}
+                  strokeDasharray={`${strokeW * 2} ${strokeW * 1.5}`}
+                />
+                {type.shape === "round" ? (
+                  <ellipse cx={cx} cy={y(g - o.depthM - o.sizeM / 2)} rx={z.coreHalfM} ry={o.sizeM / 2} fill={type.color} />
+                ) : (
+                  <rect x={cx - z.coreHalfM} y={y(g - o.depthM)} width={z.coreHalfM * 2} height={o.sizeM} fill={type.color} />
+                )}
+                {picked ? (
+                  <g>
+                    <line x1={X(endX)} x2={cx} y1={dimY} y2={dimY} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                    <line x1={X(endX)} x2={X(endX)} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                    <line x1={cx} x2={cx} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                    <text x={(X(endX) + cx) / 2} y={dimY + fontSize * 0.9} fontSize={fontSize * 0.6} textAnchor="middle" fill={type.color}>
+                      {label} · {Math.round(o.distanceM * 1000)}
+                    </text>
+                  </g>
+                ) : (
+                  <text x={cx} y={dimY + fontSize * 0.2} fontSize={fontSize * 0.5} textAnchor="middle" fill={type.color}>
+                    {label}
+                  </text>
+                )}
+              </g>
+            )
+          })}
+
           {/* holes, drawn before posts so each post sits in front of its own fill */}
           {posts.map((p) => (
             <rect
@@ -216,7 +286,7 @@ const WallProfileDiagram: React.FC<{
               width={p.holeDiameterM}
               height={p.embedmentM}
               rx={p.holeDiameterM * 0.15}
-              className={styles.hole}
+              className={p.clashesWith.length ? styles.holeClash : styles.hole}
             />
           ))}
 
@@ -486,6 +556,17 @@ const WallProfileDiagram: React.FC<{
           <span>
             <span className={`${styles.swatch} ${styles.stepSwatch}`} /> Step in the top of the wall — courses up (+) or
             down (−) at the post
+          </span>
+        )}
+        {obstructionsHere.length > 0 && (
+          <span>
+            <span className={styles.obstructionSwatch} /> Obstruction in the ground, its clearance zone dashed round it
+          </span>
+        )}
+        {profile.posts.some((p) => p.clashesWith.length) && (
+          <span>
+            <span className={`${styles.swatch} ${styles.holeClashSwatch}`} /> Hole reaching into an obstruction&apos;s
+            clearance zone
           </span>
         )}
         {profile.posts.some((p) => p.fixed) && (

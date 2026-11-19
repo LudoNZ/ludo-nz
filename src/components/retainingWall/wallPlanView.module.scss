@@ -450,3 +450,21 @@
   stroke: #b5651d;
   pointer-events: none;
 }
+
+.obstruction {
+  cursor: pointer;
+}
+
+.obstructionHandle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.obstructionSwatch {
+  width: 14px;
+  height: 10px;
+  display: inline-block;
+  border: 1.5px dashed #4a90c2;
+  background-color: rgba(74, 144, 194, 0.15);
+  flex-shrink: 0;
+}

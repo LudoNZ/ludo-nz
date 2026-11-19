@@ -5,6 +5,7 @@ import { useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
 import { WallProfile } from "./postProfile"
+import { MAX_ANGLE_DEG, MIN_ANGLE_DEG, Obstruction, OBSTRUCTION_TYPES } from "./obstructions"
 import {
   appendSegment,
   prependSegment,
@@ -80,8 +81,16 @@ const WallPlanView: React.FC<{
   onSetBayCount: (segmentIndex: number, bayCount: number) => void
   /** locked: the plan can be looked at (and a wall picked) but not changed */
   readOnly?: boolean
+  /** the obstruction picked out (its handles show), and what moving or
+   * turning one does */
+  selectedObstructionId?: string | null
+  onSelectObstruction?: (id: string) => void
+  onObstructionChange?: (id: string, patch: Partial<Obstruction>) => void
 }> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
   onSetBayCount,
+  selectedObstructionId = null,
+  onSelectObstruction,
+  onObstructionChange,
   readOnly = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -155,6 +164,82 @@ const WallPlanView: React.FC<{
     setFrozenView(null)
   }
 
+  // ── obstructions: dragged along their wall, or turned by a handle ──
+  const obDrag = useRef<{ id: string; mode: "move" | "turn"; pointerId: number } | null>(null)
+  /** an obstruction's wall: its start, unit direction, length, and unit
+   * normal toward the retained ground */
+  const runFrame = (segmentIndex: number) => {
+    const a = points[segmentIndex]
+    const b = points[segmentIndex + 1]
+    if (!a || !b) return null
+    const len = Math.hypot(b.xM - a.xM, b.yM - a.yM) || 1
+    const u = { xM: (b.xM - a.xM) / len, yM: (b.yM - a.yM) / len }
+    const n = { xM: 0, yM: 0 }
+    // toward the retained side of travel: "left" of (1, 0) on screen is up
+    if (retainedSide === "left") Object.assign(n, { xM: u.yM, yM: -u.xM })
+    else Object.assign(n, { xM: -u.yM, yM: u.xM })
+    return { a, u, n, len }
+  }
+  const obstructionDraw = (profile?.obstructions ?? [])
+    .filter((z) => z.onWall)
+    .map((z) => {
+      const o = z.obstruction
+      const f = runFrame(o.segmentIndex)
+      if (!f) return null
+      const at = pointAtDistance(points, z.centreXM)
+      const th = (o.angleDeg * Math.PI) / 180
+      // along the obstruction, and square across it
+      const d = { xM: Math.cos(th) * f.u.xM + Math.sin(th) * f.n.xM, yM: Math.cos(th) * f.u.yM + Math.sin(th) * f.n.yM }
+      const e = { xM: -d.yM, yM: d.xM }
+      const reach = Math.max(1.2, scale * 0.12)
+      const strip = (half: number) =>
+        [
+          [-reach, -half],
+          [reach, -half],
+          [reach, half],
+          [-reach, half],
+        ]
+          .map(([s, w]) => `${at.xM + d.xM * s + e.xM * w},${at.yM + d.yM * s + e.yM * w}`)
+          .join(" ")
+      return { z, o, at, d, reach, core: strip(o.sizeM / 2), zone: strip(o.sizeM / 2 + z.clearanceM), f }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
+  const startObDrag = (id: string, mode: "move" | "turn") => (e: React.PointerEvent) => {
+    if (readOnly || !onObstructionChange) return
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    obDrag.current = { id, mode, pointerId: e.pointerId }
+    setFrozenView(fitViewBox(points))
+    onSelectObstruction?.(id)
+  }
+  const moveObDrag = (e: React.PointerEvent) => {
+    const drag = obDrag.current
+    if (!drag || !onObstructionChange) return
+    const q = toPlan(e.clientX, e.clientY)
+    const item = obstructionDraw.find((x) => x.o.id === drag.id)
+    if (!q || !item) return
+    const { f, o, at } = item
+    if (drag.mode === "move") {
+      const t = Math.max(0, Math.min(f.len, (q.xM - f.a.xM) * f.u.xM + (q.yM - f.a.yM) * f.u.yM))
+      const distanceM = Math.round((o.from === "start" ? t : f.len - t) * 100) / 100
+      if (distanceM !== o.distanceM) onObstructionChange(o.id, { distanceM })
+    } else {
+      const vx = q.xM - at.xM
+      const vy = q.yM - at.yM
+      let deg = (Math.atan2(vx * f.n.xM + vy * f.n.yM, vx * f.u.xM + vy * f.u.yM) * 180) / Math.PI
+      // either end of the line will do
+      if (deg < 0) deg += 180
+      const angleDeg = Math.min(MAX_ANGLE_DEG, Math.max(MIN_ANGLE_DEG, Math.round(deg / 5) * 5))
+      if (angleDeg !== o.angleDeg) onObstructionChange(o.id, { angleDeg })
+    }
+  }
+  const endObDrag = (e: React.PointerEvent) => {
+    obDrag.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    setFrozenView(null)
+  }
+
   const band = [...points, ...offsetPolyline(points, retainedSide, scale * 0.05).reverse()]
   const postSize = (widthM: number) => Math.max(widthM, scale * 0.022)
 
@@ -203,6 +288,32 @@ const WallPlanView: React.FC<{
                     }
                   }}
                 />
+              </g>
+            )
+          })}
+
+          {/* obstructions in the ground: the thing itself, its clearance
+              zone dashed either side */}
+          {obstructionDraw.map(({ o, core, zone }) => {
+            const color = OBSTRUCTION_TYPES[o.type].color
+            const picked = o.id === selectedObstructionId
+            return (
+              <g
+                key={`ob-${o.id}`}
+                className={styles.obstruction}
+                onClick={() => onSelectObstruction?.(o.id)}
+                role={onSelectObstruction ? "button" : undefined}
+                aria-label={`${o.label || OBSTRUCTION_TYPES[o.type].label} — tap to pick it out`}
+              >
+                <polygon
+                  points={zone}
+                  fill={color}
+                  fillOpacity={picked ? 0.22 : 0.1}
+                  stroke={color}
+                  strokeWidth={strokeW * 0.35}
+                  strokeDasharray={`${strokeW * 1.2} ${strokeW}`}
+                />
+                <polygon points={core} fill={color} fillOpacity={0.85} />
               </g>
             )
           })}
@@ -291,6 +402,56 @@ const WallPlanView: React.FC<{
               <circle cx={p.xM} cy={p.yM} r={handleR * 1.15} className={styles.vertexDot} strokeWidth={strokeW * 0.6} />
             </g>
           ))}
+          {/* the picked obstruction's handles: drag the middle one along
+              the wall, the round one at its end to turn it */}
+          {!readOnly &&
+            onObstructionChange &&
+            obstructionDraw
+              .filter(({ o }) => o.id === selectedObstructionId)
+              .map(({ o, at, d, reach }) => {
+                const color = OBSTRUCTION_TYPES[o.type].color
+                const tip = { xM: at.xM + d.xM * reach, yM: at.yM + d.yM * reach }
+                return (
+                  <g key={`ob-handles-${o.id}`}>
+                    <line x1={at.xM} y1={at.yM} x2={tip.xM} y2={tip.yM} stroke={color} strokeWidth={strokeW * 0.3} />
+                    <g
+                      className={styles.obstructionHandle}
+                      data-explore-skip
+                      onPointerDown={startObDrag(o.id, "move")}
+                      onPointerMove={moveObDrag}
+                      onPointerUp={endObDrag}
+                      onPointerCancel={endObDrag}
+                      aria-label="Drag to move it along the wall"
+                    >
+                      <circle cx={at.xM} cy={at.yM} r={handleR * 2.4} className={styles.handleHit} />
+                      <rect
+                        x={at.xM - handleR}
+                        y={at.yM - handleR}
+                        width={handleR * 2}
+                        height={handleR * 2}
+                        fill="#fff"
+                        stroke={color}
+                        strokeWidth={strokeW * 0.6}
+                      />
+                    </g>
+                    <g
+                      className={styles.obstructionHandle}
+                      data-explore-skip
+                      onPointerDown={startObDrag(o.id, "turn")}
+                      onPointerMove={moveObDrag}
+                      onPointerUp={endObDrag}
+                      onPointerCancel={endObDrag}
+                      aria-label="Drag to turn it"
+                    >
+                      <circle cx={tip.xM} cy={tip.yM} r={handleR * 2.4} className={styles.handleHit} />
+                      <circle cx={tip.xM} cy={tip.yM} r={handleR} fill="#fff" stroke={color} strokeWidth={strokeW * 0.6} />
+                    </g>
+                    <text x={tip.xM} y={tip.yM - handleR * 1.8} fontSize={fontSize * 0.8} textAnchor="middle" fill={color}>
+                      {o.angleDeg}°
+                    </text>
+                  </g>
+                )
+              })}
         </svg>
       </DiagramExplorer>
 
@@ -304,6 +465,12 @@ const WallPlanView: React.FC<{
         <span>
           <span className={styles.retainedSwatch} /> Retained ground side
         </span>
+        {obstructionDraw.length > 0 && (
+          <span>
+            <span className={styles.obstructionSwatch} /> Obstruction and its clearance — tap one, then drag its square to
+            move it or its circle to turn it
+          </span>
+        )}
       </div>
 
       <div className={styles.segmentTableHead}>

@@ -69,6 +69,11 @@ export function describeWallChange(before: WallProject, after: WallProject): str
   if ((before.pileStandoffMm ?? 0) !== (after.pileStandoffMm ?? 0))
     parts.push(`Pile stand-off ${before.pileStandoffMm ?? 0} mm → ${after.pileStandoffMm ?? 0} mm`)
   if (!same(before.runSpacing, after.runSpacing)) parts.push("Post spacing")
+  if (!same(before.obstructions ?? [], after.obstructions ?? [])) {
+    const a = (before.obstructions ?? []).length
+    const b = (after.obstructions ?? []).length
+    parts.push(b > a ? "Added an obstruction" : b < a ? "Removed an obstruction" : "Obstruction")
+  }
   if (!same(before.steppedWalls, after.steppedWalls)) parts.push("Stepped top")
   if (before.topCapEnabled !== after.topCapEnabled) parts.push(after.topCapEnabled ? "Top cap on" : "Top cap off")
   if (before.rakedTopBoard !== after.rakedTopBoard) parts.push(after.rakedTopBoard ? "Raked top board on" : "Raked top board off")

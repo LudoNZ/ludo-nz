@@ -7,6 +7,7 @@
 import { CalcSettings, DEFAULT_CALC_SETTINGS } from "./calcSettings"
 import { buildWallProfile, ControlPoints, DepthPoints, legacyPlan, ProfileOverrides, RunSpacing } from "./postProfile"
 import { SavedWallDesign } from "./retainingWallData"
+import { Obstruction, obstructionsFromData } from "./obstructions"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
 import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
 import { DEFAULT_ESTIMATE_SETTINGS, EstimateSettings, estimateSettingsFromData } from "./pricing"
@@ -97,6 +98,9 @@ export interface WallProject {
   /** hand-set courses per bay of a stepped wall, keyed by the bay's left
    * post index; a wall with none is worked out from the rake */
   bayCourses: Record<string, number>
+  /** pipes, cables, roots… the wall crosses, each with a clearance zone
+   * the post holes are kept out of */
+  obstructions: Obstruction[]
   /** keyed by post index */
   controlPoints: ControlPoints
   /** hole depths set by hand on individual posts, keyed by post index */
@@ -156,6 +160,7 @@ export const newBlankWall = (): WallProject => ({
   boardOrdersPlaced: [],
   steppedWalls: [],
   bayCourses: {},
+  obstructions: [],
   controlPoints: {},
   depthPoints: {},
   measuredHoleDepthsMm: {},
@@ -224,6 +229,7 @@ export const wallFromData = (data: unknown): WallProject => {
     boardOrdersPlaced: placedOrdersFromData(d.boardOrdersPlaced),
     steppedWalls: Array.isArray(d.steppedWalls) ? d.steppedWalls.map(Boolean) : [],
     bayCourses: Object.fromEntries(Object.entries(numberMap(d.bayCourses)).filter(([, n]) => n >= 1).map(([k, n]) => [k, Math.round(n)])),
+    obstructions: obstructionsFromData(d.obstructions),
     controlPoints: typeof d.controlPoints === "object" && d.controlPoints !== null ? (d.controlPoints as ControlPoints) : {},
     depthPoints: Object.fromEntries(
       Object.entries(typeof d.depthPoints === "object" && d.depthPoints !== null ? d.depthPoints : {})
@@ -260,7 +266,7 @@ export const wallFromDesign = (design: SavedWallDesign): WallProject =>
     calcSettingsName: `From "${design.name}"`,
   })
 
-export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "gradePostSizes" | "postSizes" | "holeDiametersMm" | "holeDepthOverrideMm" | "pileStandoffMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses">): ProfileOverrides => ({
+export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "postSizeOverride" | "gradePostSizes" | "postSizes" | "holeDiametersMm" | "holeDepthOverrideMm" | "pileStandoffMm" | "runSpacing" | "rakedTopBoard" | "depthPoints" | "boardsToPostOutside" | "steppedWalls" | "bayCourses" | "obstructions" | "calcSettings">): ProfileOverrides => ({
   runSpacing: wall.runSpacing,
   rakedTopBoard: wall.rakedTopBoard,
   boardsToPostOutside: wall.boardsToPostOutside,
@@ -274,6 +280,8 @@ export const overridesForWall = (wall: Pick<WallProject, "augerDiameterMm" | "po
   holeDiametersM: Object.fromEntries(Object.entries(wall.holeDiametersMm).map(([k, mm]) => [k, mm / 1000])),
   holeDepthM: wall.holeDepthOverrideMm ? wall.holeDepthOverrideMm / 1000 : null,
   pileStandoffM: wall.pileStandoffMm ? wall.pileStandoffMm / 1000 : 0,
+  obstructions: wall.obstructions,
+  obstructionClearancesM: wall.calcSettings.obstructionClearancesM,
 })
 
 export const profileForWall = (wall: WallProject) =>

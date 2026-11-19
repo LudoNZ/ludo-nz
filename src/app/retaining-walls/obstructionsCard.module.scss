@@ -1,0 +1,135 @@
+.card {
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h3 {
+    font-size: 1.05rem;
+    color: var(--color-primary);
+  }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.hint {
+  font-size: 0.88rem;
+  opacity: 0.8;
+  margin-bottom: 1rem;
+}
+
+.lockable {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+
+  &:disabled {
+    opacity: 0.75;
+  }
+}
+
+.item {
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-left: 6px solid #7a7a7a;
+  border-radius: var(--borderRadius);
+}
+
+.itemSelected {
+  composes: item;
+  border-color: #2a78d6;
+  background-color: rgba(42, 120, 214, 0.06);
+}
+
+.itemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.itemActions {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+
+  @media (max-width: 700px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 420px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  label {
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  input,
+  select {
+    padding: 0.55rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: max(1rem, 16px);
+    font-family: inherit;
+    width: 100%;
+  }
+}
+
+.status {
+  margin-top: 0.6rem;
+  font-size: 0.88rem;
+  opacity: 0.85;
+}
+
+.warn {
+  margin-top: 0.6rem;
+  font-size: 0.88rem;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.standards {
+  margin-top: 0.5rem;
+
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+  }
+}

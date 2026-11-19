@@ -1,3 +1,4 @@
+import type { ObstructionType } from "./obstructions"
 import { SoilType } from "./retainingWallCalc"
 
 /** One row of the reference table a CalcSettings is driven by — banded by
@@ -42,6 +43,9 @@ export interface CalcSettings {
   hoursPerPost: number
   hoursPerBoard: number
   hoursPerM3Backfill: number
+  /** m, the standard clearance kept round each type of obstruction in
+   * the ground; a type with none uses DEFAULT_OBSTRUCTION_CLEARANCE_M */
+  obstructionClearancesM?: Partial<Record<ObstructionType, number>>
 }
 
 export const DEFAULT_CALC_SETTINGS: CalcSettings = {
