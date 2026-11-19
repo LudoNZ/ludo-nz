@@ -275,12 +275,11 @@ export function buildRenderScene(
   const earthFrontN = maxHalf + t
 
   const lowestGround = Math.min(...posts.map((p) => p.groundLevelM))
-  const shownObstructions = options.showFootings ? profile.obstructions.filter((z) => z.onWall && runs[z.obstruction.segmentIndex]) : []
-  const deepest = Math.min(
-    ...posts.map((p) => p.groundLevelM - p.embedmentM),
-    ...shownObstructions.map((z) => z.groundLevelM - z.zoneBottomDepthM)
-  )
-  const slabBottom = options.showFootings ? deepest - 0.15 : lowestGround - 0.3
+  // obstructions always show, seen through the ground like the footings
+  const shownObstructions = profile.obstructions.filter((z) => z.onWall && runs[z.obstruction.segmentIndex])
+  const deepest = Math.min(...posts.map((p) => p.groundLevelM - p.embedmentM))
+  const obstructionBottom = Math.min(...shownObstructions.map((z) => z.groundLevelM - z.zoneBottomDepthM))
+  const slabBottom = Math.min(options.showFootings ? deepest - 0.15 : lowestGround - 0.3, obstructionBottom - 0.1)
 
   const items: Item[] = []
   /** drawn in this order: the low ground; any wall seen from behind
@@ -635,7 +634,7 @@ export function buildRenderScene(
     }
   })
 
-  // ── obstructions in the ground, with the footings: the thing itself
+  // ── obstructions in the ground, seen through it: the thing itself
   // and a faint shell for its clearance, running out under the ground in
   // front and the earth behind ──────────────────────────────────────
   shownObstructions.forEach((z) => {
@@ -665,8 +664,33 @@ export function buildRenderScene(
     if (z.clearanceM > 0) {
       // the clearance shell, cut off at the ground
       const shell = outline(o.sizeM / 2 + z.clearanceM).map(([u, zz]): [number, number] => [u, Math.min(zz, z.groundLevelM - 0.01)])
-      items.push({ faces: extrude(frame, shell, -reach, reach, color), solid: true, key: 3, layer: LAYER.footing, opacity: 0.18 })
+      items.push({ faces: extrude(frame, shell, -reach, reach, color), solid: true, key: 3, layer: LAYER.footing, opacity: 0.22 })
     }
+    // marked out on the ground over it, like service paint: on the low
+    // side at the ground, behind the wall on the retained earth
+    const after = posts.findIndex((p) => p.xM >= z.centreXM - 1e-9)
+    const pa = posts[Math.max(0, after - 1)]
+    const pb = posts[Math.max(0, after)]
+    const k = pb.xM > pa.xM ? (z.centreXM - pa.xM) / (pb.xM - pa.xM) : 0
+    const retainedTop = pa.topAfterM + (pb.topBeforeM - pa.topAfterM) * k - earthDrop + 0.006
+    const lowTop = z.groundLevelM + 0.006
+    const half = Math.max(o.sizeM / 2, 0.04)
+    // where the line meets the wall's two faces, along the obstruction
+    const sin = Math.max(0.26, Math.sin(th))
+    const frontAt = -(Math.max(pa.widthM, pb.widthM) / 2) / sin
+    const backAt = (Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M) / sin
+    const paint = (from: number, to: number, level: number): V3[] =>
+      [
+        [from, -half],
+        [to, -half],
+        [to, half],
+        [from, half],
+      ].map(([t2, w]) => {
+        const q = add(add(at, scale(along, t2)), scale(across, w))
+        return [q[0], q[1], level] as V3
+      })
+    items.push({ faces: [{ pts: paint(-reach, frontAt, lowTop), color }], solid: false, key: 4, layer: LAYER.footing, opacity: 0.95 })
+    items.push({ faces: [{ pts: paint(backAt, reach, retainedTop), color }], solid: false, key: 4, layer: LAYER.footing, opacity: 0.95 })
   })
 
   // sort keys: back to front by depth; a post goes after the boards of

@@ -120,7 +120,7 @@ const WallRenderView: React.FC<{
   const footingsToggle = (
     <label className={styles.check}>
       <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
-      {profile.obstructions.some((z) => z.onWall) ? "Show footings and obstructions" : "Show footings"}
+Show footings
     </label>
   )
 
