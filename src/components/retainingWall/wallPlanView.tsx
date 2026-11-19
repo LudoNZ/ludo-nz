@@ -89,15 +89,16 @@ const WallPlanView: React.FC<{
   /** more to draw on the plan (stairs off the wall, say), in plan metres,
    * given the line weight and text size the plan's drawn at */
   overlay?: (sizes: { strokeW: number; fontSize: number }) => ReactNode
-  /** points the overlay reaches, so the view fits them in too */
-  overlayPoints?: PlanPoint[]
+  /** the shapes the overlay draws, so the view fits them in and the
+   * wall labels keep clear of them */
+  overlayShapes?: PlanPoint[][]
 }> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
   onSetBayCount,
   selectedObstructionId = null,
   onSelectObstruction,
   onObstructionChange,
   overlay,
-  overlayPoints = [],
+  overlayShapes = [],
   readOnly = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -110,7 +111,7 @@ const WallPlanView: React.FC<{
   const editing = editingWalls && !readOnly
   const dragRef = useRef<{ index: number; startClientX: number; startClientY: number; dragging: boolean } | null>(null)
 
-  const view = frozenView ?? fitViewBox([...points, ...overlayPoints])
+  const view = frozenView ?? fitViewBox([...points, ...overlayShapes.flat()])
   const scale = Math.max(view.w, view.h)
   const fontSize = scale * 0.028
   const strokeW = scale * 0.008
@@ -118,7 +119,7 @@ const WallPlanView: React.FC<{
   const lengths = segmentLengths(points)
   const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
   const labelTexts = lengths.map((l, i) => `${segmentLabel(i)} · ${l.toFixed(2)} m`)
-  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, fontSize, view)
+  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, fontSize, view, overlayShapes)
 
   const toPlan = (clientX: number, clientY: number): PlanPoint | null => {
     const svg = svgRef.current
@@ -145,7 +146,7 @@ const WallPlanView: React.FC<{
     if (readOnly) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { index, startClientX: e.clientX, startClientY: e.clientY, dragging: false }
-    setFrozenView(fitViewBox([...points, ...overlayPoints]))
+    setFrozenView(fitViewBox([...points, ...overlayShapes.flat()]))
   }
   const handlePointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current
@@ -217,7 +218,7 @@ const WallPlanView: React.FC<{
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     obDrag.current = { id, mode, pointerId: e.pointerId }
-    setFrozenView(fitViewBox([...points, ...overlayPoints]))
+    setFrozenView(fitViewBox([...points, ...overlayShapes.flat()]))
     onSelectObstruction?.(id)
   }
   const moveObDrag = (e: React.PointerEvent) => {

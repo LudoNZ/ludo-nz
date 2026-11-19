@@ -172,7 +172,7 @@ const SiteProjectEditor = () => {
         {...sizes}
       />
     ),
-    planPoints: (ctx) => [...placementsFor(ctx).values()].flatMap((p) => p.treads.flat()),
+    planShapes: (ctx) => [...placementsFor(ctx).values()].flatMap((p) => p.treads),
     cards: (ctx) => (
       <StairsCard ctx={ctx} stairs={stairs} placements={placementsFor(ctx)} onChange={changeStairs} selectedId={selectedStair} onSelect={setSelectedStair} />
     ),

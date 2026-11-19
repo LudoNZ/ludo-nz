@@ -22,6 +22,8 @@ export function placeLabels(
   retainedSide: RetainedSide,
   fontSize: number,
   view: LabelViewBox,
+  /** other things drawn on the plan to keep clear of (stairs, say) */
+  avoid: PlanPoint[][] = [],
 ): PlanPoint[] {
   type Box = { x0: number; y0: number; x1: number; y1: number }
   const boxAt = (c: PlanPoint, text: string): Box => {
@@ -61,7 +63,14 @@ export function placeLabels(
 
   const runs = points.slice(0, -1).map((a, i) => ({ i, a, b: points[i + 1], len: Math.hypot(points[i + 1].xM - a.xM, points[i + 1].yM - a.yM) }))
   const order = [...runs].sort((p, q) => q.len - p.len)
-  const placed: Box[] = []
+  const placed: Box[] = avoid
+    .filter((shape) => shape.length)
+    .map((shape) => ({
+      x0: Math.min(...shape.map((p) => p.xM)),
+      y0: Math.min(...shape.map((p) => p.yM)),
+      x1: Math.max(...shape.map((p) => p.xM)),
+      y1: Math.max(...shape.map((p) => p.yM)),
+    }))
   const result: PlanPoint[] = runs.map(() => ({ xM: 0, yM: 0 }))
   for (const { i, a, b } of order) {
     const candidates: PlanPoint[] = []

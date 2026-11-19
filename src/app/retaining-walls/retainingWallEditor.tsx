@@ -78,8 +78,9 @@ export interface EditorAddOnContext {
 export interface EditorAddOns {
   /** drawn over the plan, in plan metres */
   planOverlay?: (ctx: EditorAddOnContext, sizes: { strokeW: number; fontSize: number }) => ReactNode
-  /** points the overlay reaches, so the plan fits them in */
-  planPoints?: (ctx: EditorAddOnContext) => PlanPoint[]
+  /** the shapes the overlay draws, so the plan fits them in and keeps
+   * its labels clear of them */
+  planShapes?: (ctx: EditorAddOnContext) => PlanPoint[][]
   /** cards after the obstructions */
   cards?: (ctx: EditorAddOnContext) => ReactNode
   /** their entries in the side rail, after Obstructions */
@@ -1160,7 +1161,7 @@ const RetainingWallEditor: React.FC<{
           onSelectObstruction={setSelectedObstruction}
           onObstructionChange={(id, patch) => !locked && setObstructions((list) => list.map((o) => (o.id === id ? { ...o, ...patch } : o)))}
           overlay={addOns?.planOverlay ? (sizes) => addOns.planOverlay?.(addOnContext, sizes) : undefined}
-          overlayPoints={addOns?.planPoints?.(addOnContext)}
+          overlayShapes={addOns?.planShapes?.(addOnContext)}
         />
       </div>
 
