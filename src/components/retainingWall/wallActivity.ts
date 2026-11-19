@@ -16,6 +16,7 @@ import { addDoc, collection, getDocs, limit, orderBy, query, serverTimestamp, Ti
 import type { User } from "firebase/auth"
 import { firestore } from "../../../firebase/client"
 import type { WallActivity } from "./wallHistory"
+import { logMilestone, type MilestoneAction } from "@/app/retaining-walls/activityActions"
 import type { ProjectLocation } from "./wallProjectStore"
 
 const ACTIVITY = "retainingWallActivity"
@@ -33,7 +34,12 @@ export interface ActivityProject {
   ownerUid: string | null
 }
 
-export interface ActivityEntry extends WallActivity {
+/** everything that can be in the log: the editor's own entries, plus
+ * milestones (a project created, a proposal printed) logged by the server */
+export type ActivityAction = WallActivity["action"] | MilestoneAction
+
+export interface ActivityEntry extends Omit<WallActivity, "action"> {
+  action: ActivityAction
   id: string
   projectKind: ActivityProjectKind
   projectId: string
@@ -81,13 +87,22 @@ export function logWallActivity(project: ActivityProject, activity: WallActivity
   }).catch((err) => console.warn("Logging retaining wall activity failed", err))
 }
 
+/** A milestone: a project created or a proposal printed. Goes through the
+ * server, so it needs a connection; one made offline isn't logged. */
+export function logWallMilestone(project: ActivityProject, action: MilestoneAction, label: string, user: User | null) {
+  void (async () => {
+    const idToken = user ? await user.getIdToken() : null
+    await logMilestone(idToken, { action, projectKind: project.kind, projectId: project.id, projectName: project.name, label })
+  })().catch((err) => console.warn("Logging retaining wall milestone failed", err))
+}
+
 const fromData = (id: string, d: Record<string, unknown>): ActivityEntry => ({
   id,
   projectKind: d.projectKind as ActivityProjectKind,
   projectId: String(d.projectId ?? ""),
   projectName: String(d.projectName ?? "Untitled"),
   ownerUid: (d.ownerUid as string | null) ?? null,
-  action: d.action as WallActivity["action"],
+  action: d.action as ActivityAction,
   label: String(d.label ?? ""),
   fields: Array.isArray(d.fields) ? (d.fields as string[]) : [],
   actorUid: (d.actorUid as string | null) ?? null,

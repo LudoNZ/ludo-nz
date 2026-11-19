@@ -74,7 +74,7 @@
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
   gap: 0.5rem;
 
   @media (max-width: $MAX_PHONE) {
@@ -192,6 +192,11 @@
   }
   &.change {
     color: var(--color-primary);
+  }
+  &.create,
+  &.proposal {
+    color: var(--color-primary);
+    font-weight: 700;
   }
 }
 

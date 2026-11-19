@@ -8,7 +8,7 @@ import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
 import { deleteProject, loadProject, makeProjectPublic, ProjectLocation, saveProject } from "@/components/retainingWall/wallProjectStore"
-import { activityProject, logWallActivity } from "@/components/retainingWall/wallActivity"
+import { activityProject, logWallActivity, logWallMilestone } from "@/components/retainingWall/wallActivity"
 import type { WallActivity } from "@/components/retainingWall/wallHistory"
 import RetainingWallEditor from "../retainingWallEditor"
 
@@ -180,6 +180,14 @@ const ProjectEditor = () => {
     [projectId, auth?.currentUser],
   )
 
+  const handleProposalPrinted = useCallback(
+    (label: string) => {
+      const loc = latest.current.location
+      if (loc) logWallMilestone(activityProject(loc, projectId, latest.current.name), "proposal", label, auth?.currentUser ?? null)
+    },
+    [projectId, auth?.currentUser],
+  )
+
   const rename = (n: string) => {
     setName(n)
     latest.current.name = n
@@ -287,6 +295,7 @@ const ProjectEditor = () => {
       initial={initial}
       onChange={handleWallChange}
       onActivity={handleActivity}
+      onProposalPrinted={handleProposalPrinted}
       projectName={name}
       header={
         <EditorHeader

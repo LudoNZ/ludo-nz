@@ -24,14 +24,15 @@ const ACTION_LABELS: Record<ActivityEntry["action"], string> = {
   redo: "Redo",
   lock: "Locked",
   unlock: "Unlocked",
+  create: "Created",
+  proposal: "Proposal",
 }
 
 const projectKey = (e: ActivityEntry) => `${e.projectKind}/${e.projectId}`
 const personKey = (e: ActivityEntry) => e.actorUid ?? "anon"
 const personLabel = (e: ActivityEntry) => e.actorEmail ?? (e.actorUid ? "Signed in (no email)" : "Signed out")
 
-const formatWhen = (d: Date | null) =>
-  d ? d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "pending"
+const formatWhen = (d: Date | null) => (d ? d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "pending")
 
 interface Group {
   key: string
@@ -39,23 +40,32 @@ interface Group {
   sub: string
   changes: number
   undos: number
+  created: number
+  proposals: number
   others: Set<string>
   last: Date | null
   sample: ActivityEntry
 }
 
-function groupBy(entries: ActivityEntry[], keyOf: (e: ActivityEntry) => string, otherOf: (e: ActivityEntry) => string, labelOf: (e: ActivityEntry) => [string, string]) {
+function groupBy(
+  entries: ActivityEntry[],
+  keyOf: (e: ActivityEntry) => string,
+  otherOf: (e: ActivityEntry) => string,
+  labelOf: (e: ActivityEntry) => [string, string],
+) {
   const groups = new Map<string, Group>()
   for (const e of entries) {
     const key = keyOf(e)
     let g = groups.get(key)
     if (!g) {
       const [label, sub] = labelOf(e)
-      g = { key, label, sub, changes: 0, undos: 0, others: new Set(), last: null, sample: e }
+      g = { key, label, sub, changes: 0, undos: 0, created: 0, proposals: 0, others: new Set(), last: null, sample: e }
       groups.set(key, g)
     }
     if (e.action === "change") g.changes++
     if (e.action === "undo") g.undos++
+    if (e.action === "create") g.created++
+    if (e.action === "proposal") g.proposals++
     g.others.add(otherOf(e))
     if (e.at && (!g.last || e.at > g.last)) g.last = e.at
   }
@@ -112,17 +122,31 @@ export default function WallActivitySection() {
     [entries, project, person],
   )
   const byProject = useMemo(
-    () => groupBy(entries.filter((e) => !person || personKey(e) === person), projectKey, personKey, (e) => [e.projectName, e.projectKind]),
+    () =>
+      groupBy(
+        entries.filter((e) => !person || personKey(e) === person),
+        projectKey,
+        personKey,
+        (e) => [e.projectName, e.projectKind],
+      ),
     [entries, person],
   )
   const byPerson = useMemo(
-    () => groupBy(entries.filter((e) => !project || projectKey(e) === project), personKey, projectKey, (e) => [personLabel(e), ""]),
+    () =>
+      groupBy(
+        entries.filter((e) => !project || projectKey(e) === project),
+        personKey,
+        projectKey,
+        (e) => [personLabel(e), ""],
+      ),
     [entries, project],
   )
 
   const totals = {
     changes: filtered.filter((e) => e.action === "change").length,
     undos: filtered.filter((e) => e.action === "undo").length,
+    created: filtered.filter((e) => e.action === "create").length,
+    proposals: filtered.filter((e) => e.action === "proposal").length,
     projects: new Set(filtered.map(projectKey)).size,
     people: new Set(filtered.map(personKey)).size,
   }
@@ -146,18 +170,14 @@ export default function WallActivitySection() {
         <h2>Retaining wall activity</h2>
         <div className={styles.toggle}>
           {RANGES.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className={`${styles.toggleBtn} ${range === r.id ? styles.toggleActive : ""}`}
-              onClick={() => setRange(r.id)}
-            >
+            <button key={r.id} type="button" className={`${styles.toggleBtn} ${range === r.id ? styles.toggleActive : ""}`} onClick={() => setRange(r.id)}>
               {r.label}
             </button>
           ))}
         </div>
       </div>
 
+      <p className={styles.muted}>Projects created and proposals printed are counted from 19 Nov 2026; edits go further back.</p>
       {error && <p className={styles.error}>{error}</p>}
 
       {loading ? (
@@ -166,9 +186,7 @@ export default function WallActivitySection() {
         <p className={styles.muted}>No activity in this period.</p>
       ) : (
         <>
-          {entries.length >= MAX_ENTRIES && (
-            <p className={styles.muted}>Showing the latest {MAX_ENTRIES} entries — pick a shorter period to see all of it.</p>
-          )}
+          {entries.length >= MAX_ENTRIES && <p className={styles.muted}>Showing the latest {MAX_ENTRIES} entries — pick a shorter period to see all of it.</p>}
 
           {(project || person) && (
             <div className={styles.filters}>
@@ -189,6 +207,12 @@ export default function WallActivitySection() {
           <div className={styles.stats}>
             <div>
               <strong>{totals.changes}</strong> changes
+            </div>
+            <div>
+              <strong>{totals.created}</strong> projects created
+            </div>
+            <div>
+              <strong>{totals.proposals}</strong> proposals printed
             </div>
             <div>
               <strong>{totals.undos}</strong> undos
@@ -219,7 +243,7 @@ export default function WallActivitySection() {
                         {g.label} <span className={styles.kind}>{g.sub}</span>
                       </span>
                       <span className={styles.groupMeta}>
-                        {g.changes} changes · {g.undos} undos · {g.others.size} {g.others.size === 1 ? "person" : "people"} · {formatWhen(g.last)}
+                        {g.changes} changes · {g.proposals} proposals · {g.others.size} {g.others.size === 1 ? "person" : "people"} · {formatWhen(g.last)}
                       </span>
                     </button>
                   </li>
@@ -241,7 +265,8 @@ export default function WallActivitySection() {
                     >
                       <span className={styles.groupName}>{g.label}</span>
                       <span className={styles.groupMeta}>
-                        {g.changes} changes · {g.undos} undos · {g.others.size} {g.others.size === 1 ? "wall" : "walls"} · {formatWhen(g.last)}
+                        {g.created} created · {g.proposals} proposals · {g.changes} changes · {g.others.size} {g.others.size === 1 ? "wall" : "walls"} ·{" "}
+                        {formatWhen(g.last)}
                       </span>
                     </button>
                   </li>

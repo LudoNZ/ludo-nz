@@ -1,5 +1,6 @@
 "use client"
 
+import { activityProject, logWallMilestone } from "@/components/retainingWall/wallActivity"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -88,6 +89,7 @@ const RetainingWallProjectsPage = () => {
       // offline (or on a hopeless connection) the project is created on
       // this device and synced later — don't sit waiting for the server
       await saveProjectSoon(location, id, name, wall)
+      logWallMilestone(activityProject(location, id, name), "create", "Created the project", auth?.currentUser ?? null)
       if (navigator.onLine) router.push(projectHref(id))
       else window.location.assign(projectHref(id))
     } catch (err) {

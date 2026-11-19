@@ -69,9 +69,11 @@ const RetainingWallEditor: React.FC<{
   header: ReactNode
   /** each finished change, undo, redo and lock — for an activity log */
   onActivity?: (activity: WallActivity) => void
+  /** a proposal was printed (or saved as a PDF); `label` describes it */
+  onProposalPrinted?: (label: string) => void
   /** shown in the proposal's title */
   projectName?: string
-}> = ({ initial, onChange, header, onActivity, projectName }) => {
+}> = ({ initial, onChange, header, onActivity, onProposalPrinted, projectName }) => {
   // the wall's shape seen from above: an open run of straight walls (A,
   // B, C…) joined at corners. Total wall length is just this unfolded.
   const [planPoints, setPlanPoints] = useState<PlanPoint[]>(initial.planPoints)
@@ -1283,6 +1285,7 @@ const RetainingWallEditor: React.FC<{
                   calcSettings={calcSettings}
                   topCapEnabled={topCapEnabled}
                   projectName={projectName}
+                  onPrinted={onProposalPrinted}
                   onClose={closeProposal}
                 />
               )}

@@ -83,8 +83,10 @@ const ProposalView: React.FC<{
   calcSettings: CalcSettings
   topCapEnabled: boolean
   projectName?: string
+  /** called when the proposal is sent to print, for the activity log */
+  onPrinted?: (label: string) => void
   onClose: () => void
-}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onClose }) => {
+}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose }) => {
   const c = { ...BLANK_COMPANY, ...company }
   const p = settings.proposal
   const setP = (patch: Partial<ProposalDetails>) => onChange({ ...settings, proposal: { ...p, ...patch } })
@@ -101,6 +103,10 @@ const ProposalView: React.FC<{
   }, [onClose])
 
   const handlePrint = () => {
+    onPrinted?.(
+      // the client's name is left out: it's the user's customer, not theirs to share
+      `Printed a proposal${p.reference.trim() ? ` (${p.reference.trim()})` : ""}, ${formatNzd(estimate.totalIncGst)} incl GST`,
+    )
     const root = document.documentElement
     const pageStyle = document.createElement("style")
     // a CSS module can't hold @page or bare body rules, so they go in here.
