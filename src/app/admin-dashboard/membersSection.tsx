@@ -91,8 +91,9 @@ export default function MembersSection() {
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
   const [newFeatures, setNewFeatures] = useState<FeatureId[]>([])
+  const [expiresInDays, setExpiresInDays] = useState(7)
   const [inviteError, setInviteError] = useState("")
-  const [justInvited, setJustInvited] = useState<{ email: string; id: string } | null>(null)
+  const [justInvited, setJustInvited] = useState<{ email: string; id: string; expiresAt: string } | null>(null)
   const [grantFeatures, setGrantFeatures] = useState<Record<string, FeatureId[]>>({})
 
   const token = useCallback(() => {
@@ -135,12 +136,12 @@ export default function MembersSection() {
     setInviteError("")
     setBusy("invite")
     try {
-      const result = await createInvite(await token(), { email, name, features: newFeatures })
+      const result = await createInvite(await token(), { email, name, features: newFeatures, expiresInDays })
       if (!result.ok) {
         setInviteError(result.error)
         return
       }
-      setJustInvited({ email: email.trim().toLowerCase(), id: result.id })
+      setJustInvited({ email: email.trim().toLowerCase(), id: result.id, expiresAt: result.expiresAt })
       setEmail("")
       setName("")
       setNewFeatures([])
@@ -163,14 +164,32 @@ export default function MembersSection() {
         <div className={styles.inviteFields}>
           <input
             type="email"
-            placeholder="email@example.com"
+            placeholder="Email (optional)"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
             aria-label="Email to invite"
           />
-          <input placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
+          <input
+            placeholder="Name (optional)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Name"
+          />
+          <label className={styles.expiry}>
+            Link works for
+            <select value={expiresInDays} onChange={(e) => setExpiresInDays(Number(e.target.value))}>
+              {[1, 3, 7, 14, 30].map((d) => (
+                <option key={d} value={d}>
+                  {d} day{d === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+        <p className={styles.muted}>
+          Leave the email blank for a link anyone can use once: they enter their own name and email. The link is a long
+          random code, and stops working once used or when it expires.
+        </p>
         <FeatureChecks value={newFeatures} onChange={setNewFeatures} idPrefix="new" />
         {inviteError && <p className={styles.error}>{inviteError}</p>}
         <button type="submit" className={styles.primaryBtn} disabled={busy === "invite"}>
@@ -179,7 +198,14 @@ export default function MembersSection() {
         {justInvited && (
           <div className={styles.inviteReady}>
             <p>
-              Invite for <strong>{justInvited.email}</strong> is ready. Send them this link:
+              {justInvited.email ? (
+                <>
+                  Invite for <strong>{justInvited.email}</strong> is ready.
+                </>
+              ) : (
+                "Invite link is ready: one sign-up, they enter their own name and email."
+              )}{" "}
+              It works until {formatDate(justInvited.expiresAt)}. Send them this link:
             </p>
             <code className={styles.link}>{inviteLink(justInvited.id)}</code>
             <CopyButton text={inviteLink(justInvited.id)} label="Copy link" />
@@ -200,13 +226,19 @@ export default function MembersSection() {
               {members.map((m) => (
                 <li key={m.id} className={`${styles.row} ${m.status === "revoked" ? styles.revoked : ""}`}>
                   <div className={styles.who}>
-                    <span className={styles.email}>{m.email}</span>
+                    <span className={styles.email}>{m.email || "Open invite (they enter their email)"}</span>
                     {m.name && <span className={styles.name}>{m.name}</span>}
                     <span className={`${styles.badge} ${styles[m.status]}`}>{m.status}</span>
                   </div>
                   <div className={styles.meta}>
                     {m.status === "invited"
-                      ? `Invited ${formatDate(m.invitedAt)}`
+                      ? `Invited ${formatDate(m.invitedAt)}${
+                          m.expiresAt
+                            ? new Date(m.expiresAt).getTime() < Date.now()
+                              ? ` · link expired ${formatDate(m.expiresAt)}`
+                              : ` · link works until ${formatDate(m.expiresAt)}`
+                            : ""
+                        }`
                       : `Joined ${formatDate(m.acceptedAt)} · last sign-in ${formatDate(m.lastSignInAt)}${
                           m.providers.length ? ` · ${m.providers.map(providerLabel).join(", ")}` : ""
                         }`}
@@ -221,7 +253,9 @@ export default function MembersSection() {
                     }}
                   />
                   <div className={styles.actions}>
-                    {m.status === "invited" && <CopyButton text={inviteLink(m.id)} />}
+                    {m.status === "invited" && !(m.expiresAt && new Date(m.expiresAt).getTime() < Date.now()) && (
+                      <CopyButton text={inviteLink(m.id)} />
+                    )}
                     {m.status !== "revoked" ? (
                       <button
                         type="button"
@@ -246,7 +280,9 @@ export default function MembersSection() {
                       className={`${styles.smallBtn} ${styles.danger}`}
                       disabled={busy === m.id}
                       onClick={() => {
-                        if (confirm(`Remove ${m.email} from members? Their account and data are kept.`)) {
+                        if (
+                          confirm(`Remove ${m.email || "this invite"} from members? Their account and data are kept.`)
+                        ) {
                           run(m.id, async () => deleteMember(await token(), m.id))
                         }
                       }}
@@ -287,7 +323,9 @@ export default function MembersSection() {
                         type="button"
                         className={styles.smallBtn}
                         disabled={busy === a.uid}
-                        onClick={() => run(a.uid, async () => grantAccount(await token(), a.uid, grantFeatures[a.uid] ?? []))}
+                        onClick={() =>
+                          run(a.uid, async () => grantAccount(await token(), a.uid, grantFeatures[a.uid] ?? []))
+                        }
                       >
                         Grant access
                       </button>

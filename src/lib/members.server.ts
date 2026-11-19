@@ -11,14 +11,17 @@ import { getSiteAccess } from "./siteAccess.server"
  * touches this collection; Firestore rules deny all client access to it
  * (the catch-all deny at the bottom of firestore.rules).
  *
- * - invited: link sent, not used yet (`uid` is null)
+ * - invited: link sent, not used yet (`uid` is null). An open invite has
+ *   no email: whoever has the link enters their own name and email, once,
+ *   before it expires.
  * - active: bound to a Firebase Auth account (`uid`)
  * - revoked: access withdrawn; signing in is refused */
 export type MemberStatus = "invited" | "active" | "revoked"
 
 export interface MemberDoc {
   /** lowercased. The invited address until accepted, then the address of
-   * the account that accepted it (a Google account may differ). */
+   * the account that accepted it (a Google account may differ). Blank on
+   * an open invite until it's used. */
   email: string
   name: string | null
   features: FeatureId[]
@@ -26,6 +29,17 @@ export interface MemberDoc {
   uid: string | null
   invitedAt: Timestamp
   acceptedAt: Timestamp | null
+  /** after this the link no longer works; missing/null = never (invites
+   * made before links expired) */
+  expiresAt?: Timestamp | null
+}
+
+/** how long a new invite link stays open, by default */
+export const DEFAULT_INVITE_DAYS = 7
+
+/** an invite that can still be accepted: not used, not cancelled, not expired */
+export function isOpenInvite(data: MemberDoc | undefined, now = Date.now()): data is MemberDoc {
+  return !!data && data.status === "invited" && !data.uid && !(data.expiresAt && data.expiresAt.toMillis() < now)
 }
 
 export const MEMBERS = "members"
@@ -69,12 +83,13 @@ export async function findMemberForToken(
   let pending: { id: string; data: MemberDoc } | null = null
   if (token.email && token.email_verified) {
     const byEmail = await col.where("email", "==", normaliseEmail(token.email)).where("status", "==", "invited").limit(1).get()
-    if (!byEmail.empty) pending = { id: byEmail.docs[0].id, data: byEmail.docs[0].data() as MemberDoc }
+    const hit = byEmail.docs.find((d) => isOpenInvite(d.data() as MemberDoc))
+    if (hit) pending = { id: hit.id, data: hit.data() as MemberDoc }
   }
   if (!pending && inviteId) {
     const doc = await col.doc(inviteId).get()
     const data = doc.data() as MemberDoc | undefined
-    if (data && data.status === "invited" && !data.uid) pending = { id: doc.id, data }
+    if (isOpenInvite(data)) pending = { id: doc.id, data }
   }
   if (!pending) return null
 
@@ -85,7 +100,14 @@ export async function findMemberForToken(
     name: pending.data.name ?? (token.name as string | undefined) ?? null,
     acceptedAt: FieldValue.serverTimestamp(),
   }
-  await col.doc(pending.id).update(update)
+  // claimed in a transaction, so a link used twice at once only lets one in
+  const claimed = await getFirestoreAdmin().runTransaction(async (tx) => {
+    const fresh = await tx.get(col.doc(pending!.id))
+    if (!isOpenInvite(fresh.data() as MemberDoc | undefined)) return false
+    tx.update(col.doc(pending!.id), update)
+    return true
+  })
+  if (!claimed) return null
   return { id: pending.id, data: { ...pending.data, ...update, acceptedAt: Timestamp.now() } }
 }
 

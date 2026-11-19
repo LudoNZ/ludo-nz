@@ -5,6 +5,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore"
 import { getAuthAdmin } from "../../../firebase/server"
 import { FeatureId, normaliseFeatures } from "@/lib/features"
 import {
+  DEFAULT_INVITE_DAYS,
   isAdminToken,
   MemberDoc,
   MemberStatus,
@@ -27,6 +28,8 @@ export interface MemberRow {
   uid: string | null
   invitedAt: string | null
   acceptedAt: string | null
+  /** when an unused invite's link stops working; null = never */
+  expiresAt: string | null
   lastSignInAt: string | null
   providers: string[]
 }
@@ -75,6 +78,7 @@ export async function listMembers(idToken: string): Promise<{ members: MemberRow
       uid: d.uid,
       invitedAt: iso(d.invitedAt),
       acceptedAt: iso(d.acceptedAt),
+      expiresAt: iso(d.expiresAt),
       lastSignInAt: isoStr(user?.metadata.lastSignInTime),
       providers: providersOf(user),
     }
@@ -101,17 +105,21 @@ export async function listMembers(idToken: string): Promise<{ members: MemberRow
 
 export async function createInvite(
   idToken: string,
-  input: { email: string; name: string; features: string[] },
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  /** email blank: an open invite, where they enter their own name and email */
+  input: { email: string; name: string; features: string[]; expiresInDays?: number },
+): Promise<{ ok: true; id: string; expiresAt: string } | { ok: false; error: string }> {
   await requireAdmin(idToken)
   const email = normaliseEmail(input.email)
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "That doesn't look like an email address." }
-
-  const existing = await membersCol().where("email", "==", email).get()
-  const live = existing.docs.find((d) => (d.data() as MemberDoc).status !== "revoked")
-  if (live) {
-    return { ok: false, error: `${email} already has ${live.data().status === "invited" ? "an invite" : "access"}.` }
+  if (email) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "That doesn't look like an email address." }
+    const existing = await membersCol().where("email", "==", email).get()
+    const live = existing.docs.find((d) => (d.data() as MemberDoc).status !== "revoked")
+    if (live) {
+      return { ok: false, error: `${email} already has ${live.data().status === "invited" ? "an invite" : "access"}.` }
+    }
   }
+  const days = Math.min(30, Math.max(1, Math.round(input.expiresInDays ?? DEFAULT_INVITE_DAYS)))
+  const expiresAt = Timestamp.fromMillis(Date.now() + days * 86_400_000)
 
   const id = newInviteId()
   await membersCol()
@@ -124,8 +132,9 @@ export async function createInvite(
       uid: null,
       invitedAt: FieldValue.serverTimestamp(),
       acceptedAt: null,
+      expiresAt,
     })
-  return { ok: true, id }
+  return { ok: true, id, expiresAt: expiresAt.toDate().toISOString() }
 }
 
 /** Change what a member can use. Takes effect on their next page load. */

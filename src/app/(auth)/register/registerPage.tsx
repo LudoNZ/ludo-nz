@@ -8,7 +8,7 @@ import { useAuth } from "@/context/auth"
 import { acceptInviteWithPassword, getInvite } from "@/context/actions"
 import styles from "../login/loginPage.module.scss"
 
-type Invite = { email: string; name: string | null }
+type Invite = { email: string; name: string | null; expiresAt: string | null }
 
 /** Accepting an invite: /register?invite=<id>, the link the admin
  * dashboard hands out. Either choose a password (the account is created
@@ -21,6 +21,7 @@ const RegisterPage = () => {
   const [inviteId, setInviteId] = useState<string | null>(null)
   const [invite, setInvite] = useState<Invite | null | "loading">("loading")
   const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +62,7 @@ const RegisterPage = () => {
         <h2>Invite only</h2>
         <p>
           {inviteId
-            ? "This invite link has already been used or is no longer valid."
+            ? "This invite link has already been used, has expired, or is no longer valid. Ask for a new one."
             : "Accounts on this site are by invite only for now."}
         </p>
         <div className={styles.altAction}>
@@ -70,6 +71,9 @@ const RegisterPage = () => {
       </div>
     )
   }
+
+  // an open invite: no email set, they enter their own
+  const open = !invite.email
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -84,7 +88,7 @@ const RegisterPage = () => {
     }
     setIsSubmitting(true)
     try {
-      const result = await acceptInviteWithPassword({ inviteId, name, password })
+      const result = await acceptInviteWithPassword({ inviteId, name, email: open ? email : undefined, password })
       if (!result.ok) {
         setError(result.error)
         return
@@ -116,8 +120,20 @@ const RegisterPage = () => {
   return (
     <div className={styles.authForm}>
       <h2>Accept invite</h2>
-      <p>You&apos;ve been invited as</p>
-      <p className={styles.readonlyEmail}>{invite.email}</p>
+      {open ? (
+        <p>
+          You&apos;ve been invited to set up an account. This link works once
+          {invite.expiresAt
+            ? `, until ${new Date(invite.expiresAt).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`
+            : ""}
+          .
+        </p>
+      ) : (
+        <>
+          <p>You&apos;ve been invited as</p>
+          <p className={styles.readonlyEmail}>{invite.email}</p>
+        </>
+      )}
 
       <div className={styles.divider}>continue with Google</div>
       <Button size="large" variant="secondary" disabled={busy} onClick={handleGoogle}>
@@ -135,8 +151,24 @@ const RegisterPage = () => {
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={busy}
+            required={open}
           />
         </div>
+        {open && (
+          <div className={styles.formGroup}>
+            <label htmlFor="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={busy}
+              required
+            />
+          </div>
+        )}
         <div className={styles.formGroup}>
           <label htmlFor="password">Password</label>
           <input

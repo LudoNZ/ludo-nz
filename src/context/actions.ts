@@ -1,13 +1,14 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { getAuthAdmin } from "../../firebase/server"
+import { getAuthAdmin, getFirestoreAdmin } from "../../firebase/server"
 import { FeatureId, normaliseFeatures } from "@/lib/features"
 import {
   claimsFor,
   claimsMatch,
   findMemberForToken,
   isAdminToken,
+  isOpenInvite,
   MemberDoc,
   membersCol,
   normaliseEmail,
@@ -94,14 +95,17 @@ export const setToken = async ({
   return { claimsUpdated, access, features }
 }
 
-/** The public face of an invite, for the /register page. */
-export const getInvite = async (inviteId: string): Promise<{ email: string; name: string | null } | null> => {
+/** The public face of an invite, for the /register page. `email` is blank
+ * on an open invite: they enter their own. */
+export const getInvite = async (
+  inviteId: string,
+): Promise<{ email: string; name: string | null; expiresAt: string | null } | null> => {
   if (!inviteId || inviteId.length > 64) return null
   try {
     const doc = await membersCol().doc(inviteId).get()
     const data = doc.data() as MemberDoc | undefined
-    if (!data || data.status !== "invited" || data.uid) return null
-    return { email: data.email, name: data.name }
+    if (!isOpenInvite(data)) return null
+    return { email: data.email, name: data.name, expiresAt: data.expiresAt ? data.expiresAt.toDate().toISOString() : null }
   } catch (e) {
     console.log("Invite lookup failed:", e)
     return null
@@ -109,28 +113,40 @@ export const getInvite = async (inviteId: string): Promise<{ email: string; name
 }
 
 /** Accept an invite by choosing a password. The account is created here
- * with the Admin SDK, so it's only ever made for an invited address; the
+ * with the Admin SDK, so it's only ever made through a valid invite: for
+ * the invited address, or on an open invite the address they enter. The
  * client then signs in with the same email and password, and setToken
  * finds the member record by uid. */
 export const acceptInviteWithPassword = async ({
   inviteId,
   name,
+  email: enteredEmail,
   password,
 }: {
   inviteId: string
   name: string
+  /** used on an open invite only */
+  email?: string
   password: string
 }): Promise<{ ok: true; email: string } | { ok: false; error: string }> => {
+  const used = { ok: false as const, error: "This invite link has already been used, has expired, or is no longer valid." }
   const ref = membersCol().doc(inviteId)
   const doc = await ref.get()
   const data = doc.data() as MemberDoc | undefined
-  if (!data || data.status !== "invited" || data.uid) {
-    return { ok: false, error: "This invite link has already been used or is no longer valid." }
-  }
+  if (!isOpenInvite(data)) return used
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." }
 
-  const email = normaliseEmail(data.email)
+  const open = !data.email
+  const email = normaliseEmail(open ? (enteredEmail ?? "") : data.email)
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "Enter a valid email address." }
   const displayName = name.trim() || data.name || undefined
+  if (open && !displayName) return { ok: false, error: "Enter your name." }
+  if (open) {
+    const taken = await membersCol().where("email", "==", email).get()
+    if (taken.docs.some((d) => (d.data() as MemberDoc).status !== "revoked")) {
+      return { ok: false, error: "That email is already a member. Log in instead." }
+    }
+  }
   let uid: string
   try {
     const user = await getAuthAdmin().createUser({ email, password, displayName })
@@ -149,7 +165,17 @@ export const acceptInviteWithPassword = async ({
   }
 
   const member: MemberDoc = { ...data, uid, status: "active", name: displayName ?? null, email }
-  await ref.update({ uid, status: "active", name: member.name, email, acceptedAt: new Date() })
+  // claimed in a transaction, so a link used twice at once only lets one in
+  const claimed = await getFirestoreAdmin().runTransaction(async (tx) => {
+    const fresh = await tx.get(ref)
+    if (!isOpenInvite(fresh.data() as MemberDoc | undefined)) return false
+    tx.update(ref, { uid, status: "active", name: member.name, email, acceptedAt: new Date() })
+    return true
+  })
+  if (!claimed) {
+    await getAuthAdmin().deleteUser(uid)
+    return used
+  }
   await getAuthAdmin().setCustomUserClaims(uid, claimsFor(false, member))
   return { ok: true, email }
 }
