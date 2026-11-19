@@ -13,6 +13,9 @@ import { newBlankWall, wallFromData, WallProject } from "../retainingWall/wallPr
 import { WallProfile } from "../retainingWall/postProfile"
 import { PlanPoint, pointAtDistance, RetainedSide, sideNormal } from "../retainingWall/wallPlan"
 import type { Pt } from "../stairs/stairs"
+import { StairMember, stairSolids } from "../stairs/stairRender3d"
+import type { RenderExtra } from "../retainingWall/wallRender3d"
+import type { ElevationExtra } from "../retainingWall/wallProfileDiagram"
 
 export const MIN_STAIR_ANGLE_DEG = 30
 export const MAX_STAIR_ANGLE_DEG = 150
@@ -294,5 +297,93 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
     topEdge: [toPlan(eL), toPlan(eR)],
     fixedPoint,
     problems,
+  }
+}
+
+// ── the stair in the wall's 3D view ────────────────────────────────────
+
+const FILL_COLOR = "#a0805a"
+/** the fill under a raised bottom runs this far past the stair */
+const FILL_MARGIN_M = 0.3
+
+/** convex hull of plan points */
+const hullOf = (pts: PlanPoint[]): PlanPoint[] => {
+  const p = [...pts].sort((a, b) => a.xM - b.xM || a.yM - b.yM)
+  if (p.length < 3) return p
+  const turn = (o: PlanPoint, a: PlanPoint, b: PlanPoint) => (a.xM - o.xM) * (b.yM - o.yM) - (a.yM - o.yM) * (b.xM - o.xM)
+  const half = (list: PlanPoint[]) => {
+    const h: PlanPoint[] = []
+    for (const q of list) {
+      while (h.length >= 2 && turn(h[h.length - 2], h[h.length - 1], q) <= 0) h.pop()
+      h.push(q)
+    }
+    h.pop()
+    return h
+  }
+  return [...half(p), ...half([...p].reverse())]
+}
+
+/** A placed stair as solids in the wall's 3D world (metres, y = −plan y,
+ * z = level): every part from the stairs calculator's model (less its
+ * deck — the wall is the top), standing on its bottom level, and a pad of
+ * fill under it where the ground's built up. */
+export function stairRenderExtra(p: StairPlacement): RenderExtra {
+  type V3 = [number, number, number]
+  const toWall = ([x, y, z]: V3): V3 => {
+    const q = p.toPlan({ x, y: -y })
+    return [q.xM, -q.yM, p.bottomLevelM + z / 1000]
+  }
+  const solids: RenderExtra["solids"] = []
+  const fillUp = p.bottomLevelM - p.groundLevelM
+  if (fillUp > 0.005) {
+    const hull = hullOf(p.treads.flat())
+    const mid = hull.reduce((acc, q) => ({ xM: acc.xM + q.xM / hull.length, yM: acc.yM + q.yM / hull.length }), { xM: 0, yM: 0 })
+    const out = hull.map((q) => {
+      const d = Math.hypot(q.xM - mid.xM, q.yM - mid.yM) || 1
+      return { xM: q.xM + ((q.xM - mid.xM) / d) * FILL_MARGIN_M, yM: q.yM + ((q.yM - mid.yM) / d) * FILL_MARGIN_M }
+    })
+    const bottom = out.map((q): V3 => [q.xM, -q.yM, p.groundLevelM + 0.004])
+    const top = out.map((q): V3 => [q.xM, -q.yM, p.bottomLevelM])
+    const faces = [
+      { pts: bottom, color: FILL_COLOR },
+      { pts: top, color: FILL_COLOR },
+      ...out.map((_, i) => {
+        const j = (i + 1) % out.length
+        return { pts: [bottom[i], bottom[j], top[j], top[i]], color: FILL_COLOR }
+      }),
+    ]
+    solids.push(faces)
+  }
+  for (const s of stairSolids(p.input, p.layout, NO_DECK)) solids.push(s.faces.map((f) => ({ pts: f.pts.map(toWall), color: f.color })))
+  return { solids }
+}
+
+const NO_DECK: ReadonlySet<StairMember> = new Set<StairMember>(["deck"])
+
+// ── the stair on the wall's elevation ──────────────────────────────────
+
+/** A placed stair as seen on the wall's elevation, looking at the face of
+ * the wall from the low side. */
+export function stairElevationExtra(p: StairPlacement, points: PlanPoint[], profile: WallProfile): ElevationExtra | null {
+  const seg = profile.segments[p.stair.segmentIndex]
+  const a = points[p.stair.segmentIndex]
+  const b = points[p.stair.segmentIndex + 1]
+  if (!seg || !a || !b) return null
+  const len = Math.hypot(b.xM - a.xM, b.yM - a.yM) || 1
+  const along = (q: PlanPoint) => seg.startXM + ((q.xM - a.xM) * (b.xM - a.xM) + (q.yM - a.yM) * (b.yM - a.yM)) / len
+  const xs = p.treads.flat().map(along)
+  const rise = p.result.rise / 1000
+  const levels = Array.from({ length: Math.max(0, p.result.risers - 1) }, (_, k) => p.bottomLevelM + (k + 1) * rise)
+  return {
+    id: p.stair.id,
+    segmentIndex: p.stair.segmentIndex,
+    fromXM: Math.min(...xs),
+    toXM: Math.max(...xs),
+    groundM: p.groundLevelM,
+    bottomM: p.bottomLevelM,
+    topM: p.stairTopLevelM,
+    treadLevelsM: levels,
+    fixedXM: p.fixedXM,
+    label: `${p.stair.label || "Stairs"} · ${p.result.risers} × ${Math.round(p.result.rise)}`,
   }
 }

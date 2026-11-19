@@ -14,8 +14,8 @@
 import { POST_SIZE, Pt, StairInput } from "./stairs"
 import { StairLayout, overlapDepth, rightOf } from "./layout"
 
-type V3 = [number, number, number]
-type V2 = [number, number]
+export type V3 = [number, number, number]
+export type V2 = [number, number]
 
 /** the kinds of part the model is made of, each shown or hidden as a set */
 export type StairMember =
@@ -173,14 +173,14 @@ const hullsOverlap = (a: V2[], b: V2[], tol: number) => {
 }
 
 // ── solids ─────────────────────────────────────────────────────────────
-interface Face {
+export interface Face {
   pts: V3[]
   color: string
   normal: V3
 }
 
 /** a convex closed solid, faces wound outward */
-interface Solid {
+export interface Solid {
   faces: Face[]
 }
 
@@ -263,7 +263,9 @@ const box = (f: Frame, u0: number, u1: number, v0: number, v1: number, y0: numbe
 
 // ── the scene ──────────────────────────────────────────────────────────
 
-export function buildStairScene(input: StairInput, layout: StairLayout, options: StairRenderOptions): StairRenderScene | null {
+/** Every part of the stair as its own convex solid, in world mm (z = 0
+ * at the ground the stair starts from), less any hidden members. */
+export function stairSolids(input: StairInput, layout: StairLayout, hidden: ReadonlySet<StairMember>): Solid[] {
   const W = input.width
   const t = input.boardThickness
   const b = input.stringerThickness
@@ -272,7 +274,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   const outer = input.framing === "outer-stringers"
 
   const solids: Solid[] = []
-  const put = (kind: StairMember, s: Solid | null) => s && !options.hidden.has(kind) && solids.push(s)
+  const put = (kind: StairMember, s: Solid | null) => s && !hidden.has(kind) && solids.push(s)
 
   // ── flights ──────────────────────────────────────────────────────────
   layout.flights.forEach((fl) => {
@@ -416,33 +418,23 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
           put("deck", box(f, u - p / 2, u + p / 2, v - p / 2, v + p / 2, 0, postTop, COLORS.post))
   }
 
-  if (!solids.length) return null
+  return solids
+}
 
-  // ── camera ───────────────────────────────────────────────────────────
-  // square-on is standing in front of the bottom step, looking up it
-  const d0 = layout.flights[0]?.dir ?? { x: 1, y: 0 }
-  const baseAz = Math.atan2(d0.y, -d0.x) // world direction of −dir: (−d.x, +d.y)
-  const az = baseAz + (options.azimuthDeg * Math.PI) / 180
-  const el = (options.elevationDeg * Math.PI) / 180
-  /** from the scene toward the camera */
-  const toCam: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]
-  const right: V3 = norm([-toCam[1], toCam[0], 0])
-  const up = cross(toCam, right)
-  const lightAz = az + (35 * Math.PI) / 180
-  const lightEl = (50 * Math.PI) / 180
-  const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
+/** The order to draw convex solids in, back to front, seen from `toCam`
+ * (unit, from the scene toward the camera) through `project`. Every solid
+ * is convex and none cut into another, so for any two that overlap on
+ * screen, a face plane of one of them has the other wholly on its
+ * outside: whichever is on the camera's side of it goes second. `eps` is
+ * how close counts as touching, in the solids' units. */
+export function orderSolids(solids: Solid[], toCam: V3, project: (p: V3) => V2, eps = EPS): number[] {
   const depthOf = (p: V3) => dot(p, toCam)
-  const project = (p: V3): V2 => [dot(p, right), -dot(p, up)]
-
-  // ── sort: back to front ──────────────────────────────────────────────
-  // Every solid is convex and none cut into another, so for any two that
-  // overlap on screen, a face plane of one of them has the other wholly on
-  // its outside: whichever is on the camera's side of it goes second.
   const info = solids
-    .map((s) => {
+    .map((s, index) => {
       const pts = s.faces.flatMap((f) => f.pts)
       const p2 = pts.map(project)
       return {
+        index,
         s,
         pts,
         hull: hull2(p2),
@@ -460,7 +452,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
       const facing = dot(f.normal, toCam)
       if (Math.abs(facing) < 1e-6) continue
       const d = dot(f.normal, f.pts[0])
-      if (B.pts.every((p) => dot(f.normal, p) - d >= -EPS)) return facing > 0 ? -1 : 1
+      if (B.pts.every((p) => dot(f.normal, p) - d >= -eps)) return facing > 0 ? -1 : 1
     }
     return 0
   }
@@ -472,7 +464,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
       const A = info[i]
       const B = info[j]
       if (A.x1 < B.x0 || B.x1 < A.x0 || A.y1 < B.y0 || B.y1 < A.y0) continue
-      if (!hullsOverlap(A.hull, B.hull, EPS)) continue
+      if (!hullsOverlap(A.hull, B.hull, eps)) continue
       // otherwise the nearer centre goes second (they're sorted on it)
       const o = parted(A, B) || -parted(B, A) || -1
       const [first, second] = o < 0 ? [i, j] : [j, i]
@@ -491,9 +483,33 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
     // a loop (shouldn't happen): take what's least held up
     if (pick < 0) for (let i = 0; i < n; i++) if (!done[i] && (pick < 0 || indeg[i] < indeg[pick])) pick = i
     done[pick] = true
-    order.push(pick)
+    order.push(info[pick].index)
     after[pick].forEach((j) => indeg[j]--)
   }
+  return order
+}
+
+export function buildStairScene(input: StairInput, layout: StairLayout, options: StairRenderOptions): StairRenderScene | null {
+  const solids = stairSolids(input, layout, options.hidden)
+  if (!solids.length) return null
+
+  // ── camera ───────────────────────────────────────────────────────────
+  // square-on is standing in front of the bottom step, looking up it
+  const d0 = layout.flights[0]?.dir ?? { x: 1, y: 0 }
+  const baseAz = Math.atan2(d0.y, -d0.x) // world direction of −dir: (−d.x, +d.y)
+  const az = baseAz + (options.azimuthDeg * Math.PI) / 180
+  const el = (options.elevationDeg * Math.PI) / 180
+  /** from the scene toward the camera */
+  const toCam: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]
+  const right: V3 = norm([-toCam[1], toCam[0], 0])
+  const up = cross(toCam, right)
+  const lightAz = az + (35 * Math.PI) / 180
+  const lightEl = (50 * Math.PI) / 180
+  const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
+  const project = (p: V3): V2 => [dot(p, right), -dot(p, up)]
+
+  const order = orderSolids(solids, toCam, project)
+  const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
 
   // ── draw ─────────────────────────────────────────────────────────────
   const polygons: StairRenderPolygon[] = []
@@ -516,7 +532,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   }
 
   // the ground: a lawn round the whole footprint, drawn first
-  const all = info.flatMap((i) => i.pts)
+  const all = allPts
   const gx0 = Math.min(...all.map((p) => p[0])) - 700
   const gx1 = Math.max(...all.map((p) => p[0])) + 700
   const gy0 = Math.min(...all.map((p) => p[1])) - 700
@@ -529,7 +545,7 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   ]
   emit(ground, COLORS.grass, [0, 0, 1], true)
 
-  order.forEach((k) => info[k].s.faces.forEach((f) => dot(f.normal, toCam) > 1e-6 && emit(f.pts, f.color, f.normal)))
+  order.forEach((k) => solids[k].faces.forEach((f) => dot(f.normal, toCam) > 1e-6 && emit(f.pts, f.color, f.normal)))
 
   const span = Math.max(maxX - minX, maxY - minY)
   const pad = span * 0.03

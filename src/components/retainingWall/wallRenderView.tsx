@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { BoardHighlight, WallProfile } from "./postProfile"
 import { CalcSettings } from "./calcSettings"
 import { PlanPoint, RetainedSide } from "./wallPlan"
-import { buildRenderScene } from "./wallRender3d"
+import { buildRenderScene, RenderExtra } from "./wallRender3d"
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import styles from "./wallRenderView.module.scss"
 
@@ -13,6 +13,7 @@ import styles from "./wallRenderView.module.scss"
 const PRINT_ATTR = "data-print-render"
 // a stable default, so the scene isn't rebuilt every render
 const EMPTY_HIGHLIGHT: BoardHighlight[] = []
+const EMPTY_EXTRAS: RenderExtra[] = []
 
 /** A shaded 3D view of the wall, for showing a client: the ground in
  * front, the earth it holds back, every post and board course, from a
@@ -39,6 +40,8 @@ const WallRenderView: React.FC<{
    * (no print or download) — for the concrete speed run's top half */
   compact?: boolean
   showFootingsInitially?: boolean
+  /** things from other calculators drawn with the wall (stairs) */
+  extras?: RenderExtra[]
 }> = ({
   profile,
   planPoints,
@@ -51,6 +54,7 @@ const WallRenderView: React.FC<{
   onSelectPost,
   compact = false,
   showFootingsInitially = false,
+  extras = EMPTY_EXTRAS,
 }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-32)
   const [elevationDeg, setElevationDeg] = useState(26)
@@ -64,8 +68,8 @@ const WallRenderView: React.FC<{
   }, [])
 
   const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex }, highlight),
-    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, focusPostIndex, highlight]
+    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex }, highlight, extras),
+    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, focusPostIndex, highlight, extras]
   )
 
   const handlePrint = () => {

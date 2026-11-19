@@ -7,7 +7,9 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
-import { placeStair, SiteProject, SiteStair, StairPlacement } from "@/components/site/siteProject"
+import { placeStair, SiteProject, SiteStair, StairPlacement, stairElevationExtra, stairRenderExtra } from "@/components/site/siteProject"
+import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
+import type { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
 import { deleteSiteProject, loadSiteProject, ProjectLocation, saveSiteProject } from "@/components/site/siteProjectStore"
 import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../retaining-walls/retainingWallEditor"
 import StairsCard, { StairsPlanOverlay } from "../stairsCard"
@@ -159,7 +161,38 @@ const SiteProjectEditor = () => {
     return value
   }
 
+  // the stairs as 3D solids, rebuilt only when the placements change (the
+  // 3D view memoises on this array)
+  const extrasCache = useRef<{ from: Map<string, StairPlacement>; value: RenderExtra[] } | null>(null)
+  const extrasFor = (ctx: EditorAddOnContext) => {
+    const placements = placementsFor(ctx)
+    if (extrasCache.current?.from === placements) return extrasCache.current.value
+    const value = [...placements.values()].map(stairRenderExtra)
+    extrasCache.current = { from: placements, value }
+    return value
+  }
+
+  const elevationCache = useRef<{ from: Map<string, StairPlacement>; value: ElevationExtra[] } | null>(null)
+  const elevationFor = (ctx: EditorAddOnContext) => {
+    const placements = placementsFor(ctx)
+    if (elevationCache.current?.from === placements) return elevationCache.current.value
+    const profile = ctx.profile
+    const value = profile
+      ? [...placements.values()].map((p) => stairElevationExtra(p, ctx.planPoints, profile)).filter((e): e is ElevationExtra => e !== null)
+      : []
+    elevationCache.current = { from: placements, value }
+    return value
+  }
+  const pickStair = (id: string) => {
+    setSelectedStair(id)
+    document.getElementById("site-stairs")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
   const addOns: EditorAddOns = {
+    render3d: extrasFor,
+    elevation: elevationFor,
+    onSelectElevationExtra: pickStair,
+    selectedElevationExtraId: selectedStair,
     rail: [{ id: "site-stairs", label: "Stairs", icon: <StairIcon /> }],
     planOverlay: (ctx, sizes) => (
       <StairsPlanOverlay

@@ -7,7 +7,7 @@ import type { ProfileTotals, WallProfile } from "./postProfile"
 import { BLANK_COMPANY, CompanyDetails, Estimate, EstimateSettings, formatNzd, ProposalDetails } from "./pricing"
 import { PlanPoint, RetainedSide, segmentLabel, totalLength } from "./wallPlan"
 import { OBSTRUCTION_TYPES } from "./obstructions"
-import { buildRenderScene } from "./wallRender3d"
+import { buildRenderScene, RenderExtra } from "./wallRender3d"
 import styles from "./proposalView.module.scss"
 
 /** the attribute on <html> while a proposal is printing */
@@ -87,14 +87,16 @@ const ProposalView: React.FC<{
   /** called when the proposal is sent to print, for the activity log */
   onPrinted?: (label: string) => void
   onClose: () => void
-}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose }) => {
+  /** things from other calculators drawn with the wall in the render */
+  extras?: RenderExtra[]
+}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose, extras }) => {
   const c = { ...BLANK_COMPANY, ...company }
   const p = settings.proposal
   const setP = (patch: Partial<ProposalDetails>) => onChange({ ...settings, proposal: { ...p, ...patch } })
 
   const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, calcSettings, topCapEnabled, { azimuthDeg: -32, elevationDeg: 24, showFootings: false }),
-    [profile, planPoints, retainedSide, calcSettings, topCapEnabled],
+    () => buildRenderScene(profile, planPoints, retainedSide, calcSettings, topCapEnabled, { azimuthDeg: -32, elevationDeg: 24, showFootings: false }, [], extras),
+    [profile, planPoints, retainedSide, calcSettings, topCapEnabled, extras],
   )
 
   useEffect(() => {

@@ -13,8 +13,16 @@ import { bayCourseLayout, BoardHighlight, ProfilePost, WallProfile } from "./pos
 import { CalcSettings } from "./calcSettings"
 import { OBSTRUCTION_TYPES } from "./obstructions"
 import { PlanPoint, RetainedSide, sideNormal } from "./wallPlan"
+import { orderSolids } from "../stairs/stairRender3d"
 
 type V3 = [number, number, number]
+
+/** Something from another calculator to draw with the wall (a stair, say):
+ * convex solids in the wall's world (metres; x east, y = −plan y, z =
+ * level), drawn in front of the wall, in the order they're seen in. */
+export interface RenderExtra {
+  solids: { pts: V3[]; color: string }[][]
+}
 
 export interface RenderOptions {
   /** degrees, how far the camera swings round from square-on to the
@@ -247,7 +255,8 @@ export function buildRenderScene(
   options: RenderOptions,
   /** boards to pick out (those cut from a length chosen in the board
    * order), matched to courses and bays the same way the elevation does */
-  highlight: BoardHighlight[] = []
+  highlight: BoardHighlight[] = [],
+  extras: RenderExtra[] = []
 ): RenderScene | null {
   const { posts, bays, segments } = profile
   if (posts.length < 2 || planPoints.length < 2) return null
@@ -290,7 +299,7 @@ export function buildRenderScene(
   /** drawn in this order: the low ground; any wall seen from behind
    * (the high ground in front of it hides most of it); the high ground;
    * the cut sides of the block; footings, see-through; the walls */
-  const LAYER = { low: 0, backWall: 1, high: 2, skirt: 3, footing: 4, wall: 5 }
+  const LAYER = { low: 0, backWall: 1, high: 2, skirt: 3, footing: 4, wall: 5, extra: 7 }
 
   /** where each bay's top is, at each of its two ends */
   const bayTops = bays.map((bay) => {
@@ -385,11 +394,14 @@ export function buildRenderScene(
       [o[0] - r, o[1] + r],
     ]
   })
-  const acs = wallPts.map(([x, y]) => [x * alongV[0] + y * alongV[1], x * acrossV[0] + y * acrossV[1]])
-  const a0 = Math.min(...acs.map((p) => p[0]))
-  const a1 = Math.max(...acs.map((p) => p[0]))
+  const toAC = ([x, y]: number[]) => [x * alongV[0] + y * alongV[1], x * acrossV[0] + y * acrossV[1]]
+  const acs = wallPts.map(toAC)
+  // the ground reaches out under anything drawn with the wall too
+  const extraAcs = extras.flatMap((e) => e.solids.flatMap((sd) => sd.flatMap((f) => f.pts.map(toAC))))
+  const a0 = Math.min(...acs.map((p) => p[0]), ...extraAcs.map((p) => p[0] - 0.4))
+  const a1 = Math.max(...acs.map((p) => p[0]), ...extraAcs.map((p) => p[0] + 0.4))
   const c0 = Math.min(...acs.map((p) => p[1])) - EARTH_BACK_M
-  const c1 = Math.max(...acs.map((p) => p[1])) + GROUND_FRONT_M
+  const c1 = Math.max(...acs.map((p) => p[1]), ...extraAcs.map((p) => p[1] + 0.4)) + GROUND_FRONT_M
   // ~3000 squares at most, none smaller than 15cm
   const cell = Math.max(0.15, Math.sqrt(((a1 - a0) * (c1 - c0)) / 3000))
   const na = Math.max(1, Math.ceil((a1 - a0) / cell))
@@ -739,6 +751,13 @@ export function buildRenderScene(
     if (behind) w.item.layer = LAYER.backWall
   })
   items.forEach((it) => (it.key = depth(centroid(it.faces.flatMap((f) => f.pts))) + it.key * 1e-6))
+  // the extras, after the walls, each in its own order
+  extras.forEach((extra, e) => {
+    const solids = extra.solids.map((faces) => ({ faces: orientOutward(faces).map((f) => ({ ...f, normal: norm(faceNormal(f.pts)) })) }))
+    orderSolids(solids, toCam, project, 1e-4).forEach((k, n) => {
+      items.push({ faces: solids[k].faces.map(({ pts, color }) => ({ pts, color })), solid: true, key: e * 1e6 + n, layer: LAYER.extra })
+    })
+  })
   const byLayer = (a: Item, b: Item) => a.layer - b.layer || a.key - b.key
 
   // The layers put the retained ground under every wall seen from the

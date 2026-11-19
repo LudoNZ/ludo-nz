@@ -17,12 +17,13 @@ import {
   SlidersIcon,
   TopIcon,
 } from "@/components/icons/icons"
-import WallProfileDiagram from "@/components/retainingWall/wallProfileDiagram"
+import WallProfileDiagram, { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
 import BoardOrderCard from "@/components/retainingWall/boardOrderCard"
 import ConcreteQaCard from "@/components/retainingWall/concreteQaCard"
 import ConcreteSpeedRun from "@/components/retainingWall/concreteSpeedRun"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import WallRenderView from "@/components/retainingWall/wallRenderView"
+import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
 import NumField from "@/components/weatherboards/numField"
 import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, FixedPost, MIN_FIXED_GAP_M, postFractions, RunSpacing, WallOrderRows, WallProfile } from "@/components/retainingWall/postProfile"
 import { followBayRecord, followPosts, followRecord } from "@/components/retainingWall/postFollow"
@@ -81,6 +82,14 @@ export interface EditorAddOns {
   /** the shapes the overlay draws, so the plan fits them in and keeps
    * its labels clear of them */
   planShapes?: (ctx: EditorAddOnContext) => PlanPoint[][]
+  /** drawn with the wall in the 3D view and the proposal's render —
+   * keep the same array while nothing's changed, it's a memo key */
+  render3d?: (ctx: EditorAddOnContext) => RenderExtra[]
+  /** drawn in front of the wall on the elevation — the same array while
+   * nothing's changed */
+  elevation?: (ctx: EditorAddOnContext) => ElevationExtra[]
+  onSelectElevationExtra?: (id: string) => void
+  selectedElevationExtraId?: string | null
   /** cards after the obstructions */
   cards?: (ctx: EditorAddOnContext) => ReactNode
   /** their entries in the side rail, after Obstructions */
@@ -1370,6 +1379,9 @@ const RetainingWallEditor: React.FC<{
               segmentIndex={shownSegment}
               mirrored={mirrored}
               highlight={boardHighlight}
+              extras={addOns?.elevation?.(addOnContext)}
+              onSelectExtra={addOns?.onSelectElevationExtra}
+              selectedExtraId={addOns?.selectedElevationExtraId}
               belowDrawing={
                 selectMultiple ? (
                   multiPanel
@@ -1621,6 +1633,7 @@ const RetainingWallEditor: React.FC<{
               settings={calcSettings}
               topCapEnabled={topCapEnabled}
               highlight={boardHighlight}
+              extras={addOns?.render3d?.(addOnContext)}
               caption={`${profile.segments.length > 1 ? `${profile.segments.length} walls, ` : ""}${totalLength(planPoints).toFixed(1)} m long, retaining up to ${Math.max(...profile.posts.map((p) => p.retainedHeightM)).toFixed(2)} m`}
             />
           </div>
@@ -1726,6 +1739,7 @@ const RetainingWallEditor: React.FC<{
                   projectName={projectName}
                   onPrinted={onProposalPrinted}
                   onClose={closeProposal}
+                  extras={addOns?.render3d?.(addOnContext)}
                 />
               )}
               {/* not locked either: holes are measured on site, after the

@@ -30,6 +30,31 @@ const shortSize = (label: string) => {
  * (reads a WallProfile, not the generic PostSpec/RailSpec), unlike the
  * structures/ components, since a raked profile has no single uniform
  * spec to describe it. */
+/** Something from another calculator drawn on the elevation (a stair
+ * coming down off the wall), seen from the low side: where it spans
+ * along the wall and the levels it works to. */
+export interface ElevationExtra {
+  id: string
+  segmentIndex: number
+  /** m along the unfolded wall */
+  fromXM: number
+  toXM: number
+  /** the wall's ground there, and where the stair finishes at the bottom
+   * (higher where there's fill) and the top */
+  groundM: number
+  bottomM: number
+  topM: number
+  /** the top of each tread */
+  treadLevelsM: number[]
+  /** the point it's pinned to, m along the wall */
+  fixedXM: number
+  label: string
+}
+
+const EXTRA_COLOR = "#4f6378"
+const FILL_COLOR = "#a0805a"
+const EMPTY_EXTRAS: ElevationExtra[] = []
+
 /** about the font size the drawing will use, before its extent is known */
 const fontGuess = (posts: { xM: number }[]) => Math.max(posts[posts.length - 1].xM - posts[0].xM, 1) * 0.045
 
@@ -52,7 +77,12 @@ const WallProfileDiagram: React.FC<{
   /** shown between the drawing and the legend — the selected post's
    * controls, right where it was picked */
   belowDrawing?: React.ReactNode
-}> = ({ profile, settings, topCapEnabled, selectedIndex, selectedIndices = [], onSelectPost, selectedObstructionId = null, onSelectObstruction, segmentIndex = null, mirrored = false, highlight = [], belowDrawing }) => {
+  /** things from other calculators in front of the wall (stairs) */
+  extras?: ElevationExtra[]
+  /** tapping one of them */
+  onSelectExtra?: (id: string) => void
+  selectedExtraId?: string | null
+}> = ({ profile, settings, topCapEnabled, selectedIndex, selectedIndices = [], onSelectPost, selectedObstructionId = null, onSelectObstruction, segmentIndex = null, mirrored = false, highlight = [], belowDrawing, extras = EMPTY_EXTRAS, onSelectExtra, selectedExtraId = null }) => {
   const clipId = useId()
   const segment = segmentIndex !== null ? profile.segments[segmentIndex] : undefined
   const fromIndex = segment ? segment.startPostIndex : 0
@@ -75,7 +105,8 @@ const WallProfileDiagram: React.FC<{
     const zonesHere = profile.obstructions.filter((z) => z.onWall && z.centreXM >= fromX - 1e-6 && z.centreXM <= toX + 1e-6)
     // room under the deepest hole, or the deepest obstruction's clearance
     const bottoms = [...posts.map((p) => p.groundLevelM - p.embedmentM), ...zonesHere.map((z) => z.groundLevelM - z.zoneBottomDepthM - fontGuess(posts) * 1.6)]
-    const maxTop = Math.max(...tops)
+    const extrasHere = extras.filter((e) => segmentIndex === null || e.segmentIndex === segmentIndex)
+    const maxTop = Math.max(...tops, ...extrasHere.map((e) => e.topM + fontGuess(posts) * 0.9))
     const minBottom = Math.min(...bottoms)
     const vExtent = Math.max(maxTop - minBottom, 0.5)
     const scale = Math.max(spanM, vExtent, 1)
@@ -93,7 +124,8 @@ const WallProfileDiagram: React.FC<{
     const vbH = maxTop - minBottom + padTop + padBottom
 
     return { spanM, maxTop, minBottom, fontSize, strokeW, padX, viewBox: `${vbMinX} ${vbMinY} ${vbW} ${vbH}` }
-  }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored])
+  }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored, extras, segmentIndex])
+  const extrasHere = extras.filter((e) => segmentIndex === null || e.segmentIndex === segmentIndex)
 
   const { fontSize, strokeW, viewBox, maxTop } = geometry
   const obstructionsHere = profile.obstructions.filter(
@@ -487,6 +519,45 @@ const WallProfileDiagram: React.FC<{
             )
           })()}
 
+          {/* stairs and the like, in front of the wall: the fill under a
+              raised bottom, the stair's outline and a line at every tread,
+              the point it's pinned to marked at the top */}
+          {extrasHere.map((e) => {
+            const x0 = Math.min(X(e.fromXM), X(e.toXM))
+            const x1 = Math.max(X(e.fromXM), X(e.toXM))
+            const picked = e.id === selectedExtraId
+            return (
+              <g
+                key={`extra-${e.id}`}
+                onClick={() => onSelectExtra?.(e.id)}
+                style={onSelectExtra ? { cursor: "pointer" } : undefined}
+                role={onSelectExtra ? "button" : undefined}
+                aria-label={`${e.label} — tap to pick it out`}
+              >
+                {e.bottomM - e.groundM > 0.003 && (
+                  <rect x={x0 - 0.3} y={y(e.bottomM)} width={x1 - x0 + 0.6} height={e.bottomM - e.groundM} fill={FILL_COLOR} fillOpacity={0.8} />
+                )}
+                <rect
+                  x={x0}
+                  y={y(e.topM)}
+                  width={x1 - x0}
+                  height={e.topM - e.bottomM}
+                  fill={EXTRA_COLOR}
+                  fillOpacity={picked ? 0.95 : 0.85}
+                  stroke={EXTRA_COLOR}
+                  strokeWidth={strokeW * (picked ? 1 : 0.7)}
+                />
+                {e.treadLevelsM.map((lv, k) => (
+                  <line key={k} x1={x0} x2={x1} y1={y(lv)} y2={y(lv)} stroke="#f3e3c8" strokeWidth={strokeW * 0.6} />
+                ))}
+                <circle cx={X(e.fixedXM)} cy={y(e.topM)} r={strokeW * 1.6} fill="#fff" stroke={EXTRA_COLOR} strokeWidth={strokeW * 0.5} />
+                <text x={(x0 + x1) / 2} y={y(e.topM) - fontSize * 0.55} fontSize={fontSize * 0.55} textAnchor="middle" fill={EXTRA_COLOR} fontWeight={600}>
+                  {e.label}
+                </text>
+              </g>
+            )
+          })}
+
           {/* whole-wall view of a wall with corners: name each run above it,
               matching the plan's labels */}
           {!segment &&
@@ -556,6 +627,12 @@ const WallProfileDiagram: React.FC<{
           <span>
             <span className={`${styles.swatch} ${styles.stepSwatch}`} /> Step in the top of the wall — courses up (+) or
             down (−) at the post
+          </span>
+        )}
+        {extrasHere.length > 0 && (
+          <span>
+            <span className={styles.stairSwatch} /> Stairs in front of the wall, a line at each tread; fill under a raised
+            bottom shown below them
           </span>
         )}
         {obstructionsHere.length > 0 && (

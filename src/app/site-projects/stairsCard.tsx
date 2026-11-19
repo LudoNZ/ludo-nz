@@ -19,7 +19,7 @@ import { UnitField } from "../retaining-walls/obstructionsCard"
 import StairsPage from "../stairs/stairsPage"
 import styles from "../retaining-walls/obstructionsCard.module.scss"
 
-export const STAIR_COLOR = "#8a5a2b"
+export const STAIR_COLOR = "#4f6378"
 
 const complianceText = (p: StairPlacement) =>
   p.result.compliance === "main" ? MAIN_PRIVATE.label : p.result.compliance === "service" ? `${SERVICE.label} only` : "⚠ Doesn't meet D1"
