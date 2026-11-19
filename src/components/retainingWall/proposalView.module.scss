@@ -491,3 +491,12 @@ $soft: #f4f6f8;
     }
   }
 }
+
+.logoImg {
+  display: block;
+  max-width: 45mm;
+  max-height: 20mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}

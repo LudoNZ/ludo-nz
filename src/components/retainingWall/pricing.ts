@@ -61,8 +61,9 @@ export interface PriceItem {
   confirmedAt: string | null
 }
 
-/** Your business, for the proposal's letterhead. Blank fields print as
- * placeholders, so a proposal can go out before they're all filled in. */
+/** Your business, for the proposal's letterhead: each signed-in person's
+ * own. Blank fields print as placeholders, so a proposal can go out
+ * before they're all filled in. */
 export interface CompanyDetails {
   name: string
   tagline: string
@@ -73,7 +74,13 @@ export interface CompanyDetails {
   gstNumber: string
   /** e.g. "50% deposit on acceptance, balance on completion" */
   paymentTerms: string
+  /** the logo as a data: URL (PNG or JPEG, shrunk before saving); blank = none */
+  logo: string
 }
+
+/** largest logo data URL kept, in characters (~300 KB) */
+export const MAX_LOGO_CHARS = 400_000
+const validLogo = (v: string) => (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) && v.length <= MAX_LOGO_CHARS ? v : "")
 
 export const BLANK_COMPANY: CompanyDetails = {
   name: "",
@@ -84,6 +91,7 @@ export const BLANK_COMPANY: CompanyDetails = {
   website: "",
   gstNumber: "",
   paymentTerms: "",
+  logo: "",
 }
 
 export interface PriceLibrary {
@@ -216,6 +224,7 @@ export function libraryFromData(data: unknown): PriceLibrary {
   })
   const c = (typeof d.company === "object" && d.company !== null ? d.company : {}) as Record<string, unknown>
   const company = Object.fromEntries(Object.keys(BLANK_COMPANY).map((k) => [k, str(c[k])])) as unknown as CompanyDetails
+  company.logo = validLogo(company.logo)
   return { items, company }
 }
 

@@ -202,9 +202,14 @@ const ProposalView: React.FC<{
         <article className={styles.doc}>
           <header className={styles.letterhead}>
             <div className={styles.brand}>
-              <div className={styles.logo} aria-hidden="true">
-                {c.name.trim() ? c.name.trim().slice(0, 1).toUpperCase() : "LOGO"}
-              </div>
+              {c.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element -- a data: URL, nothing for next/image to optimise
+                <img className={styles.logoImg} src={c.logo} alt={c.name.trim() || "Company logo"} />
+              ) : (
+                <div className={styles.logo} aria-hidden="true">
+                  {c.name.trim() ? c.name.trim().slice(0, 1).toUpperCase() : "LOGO"}
+                </div>
+              )}
               <div>
                 <div className={styles.companyName}>
                   <Field value={c.name} placeholder="Company name" />

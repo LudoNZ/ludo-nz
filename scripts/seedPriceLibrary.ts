@@ -19,7 +19,7 @@ async function main() {
     return
   }
   const library = libraryFromData(undefined)
-  await ref.set({ ...library, updatedAt: FieldValue.serverTimestamp(), updatedBy: "seed script" })
+  await ref.set({ items: library.items, updatedAt: FieldValue.serverTimestamp(), updatedBy: "seed script" })
   console.log(`Seeded the price library: ${library.items.length} items.`)
 }
 

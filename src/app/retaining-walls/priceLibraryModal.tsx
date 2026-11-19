@@ -15,6 +15,7 @@ import {
   PriceItem,
   PriceLibrary,
   PriceUnit,
+  MAX_LOGO_CHARS,
   STALE_AFTER_DAYS,
   withPolePriceList,
 } from "@/components/retainingWall/pricing"
@@ -46,6 +47,78 @@ const COMPANY_FIELDS: { key: keyof CompanyDetails; label: string; placeholder: s
   { key: "paymentTerms", label: "Payment terms", placeholder: "50% deposit on acceptance, balance on completion", multiline: true },
 ]
 
+/** Reads an image file and shrinks it to fit LOGO_BOX, as a PNG (or a
+ * JPEG if the PNG is too big), small enough to keep with the profile. */
+const LOGO_BOX = { w: 600, h: 300 }
+async function shrinkLogo(file: File): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = () => reject(new Error("That file isn't an image this browser can read."))
+      i.src = url
+    })
+    const scale = Math.min(1, LOGO_BOX.w / img.naturalWidth, LOGO_BOX.h / img.naturalHeight)
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale))
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height)
+    let data = canvas.toDataURL("image/png")
+    if (data.length > MAX_LOGO_CHARS) {
+      // JPEG has no transparency: put it on white
+      const ctx = canvas.getContext("2d")!
+      ctx.globalCompositeOperation = "destination-over"
+      ctx.fillStyle = "#fff"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      data = canvas.toDataURL("image/jpeg", 0.85)
+    }
+    if (data.length > MAX_LOGO_CHARS) throw new Error("That logo is too detailed to keep. Try a simpler or smaller image.")
+    return data
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+const LogoField: React.FC<{ value: string; onChange: (logo: string) => void }> = ({ value, onChange }) => {
+  const [err, setErr] = useState<string | null>(null)
+  return (
+    <div className={styles.logoField}>
+      <span>Logo</span>
+      <div className={styles.logoRow}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL, nothing for next/image to optimise */}
+        <div className={styles.logoPreview}>{value ? <img src={value} alt="Your logo" /> : <span>No logo</span>}</div>
+        <label className={styles.secondary}>
+          {value ? "Change logo" : "Upload logo"}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ""
+              if (!file) return
+              setErr(null)
+              try {
+                onChange(await shrinkLogo(file))
+              } catch (x) {
+                setErr(x instanceof Error ? x.message : "Couldn't read that image.")
+              }
+            }}
+          />
+        </label>
+        {value && (
+          <button type="button" className={styles.remove} onClick={() => onChange("")}>
+            Remove
+          </button>
+        )}
+      </div>
+      <span className={styles.hint}>PNG or JPEG, ideally on a transparent or white background. It&apos;s shrunk to fit before saving.</span>
+      {err && <span className={styles.error}>{err}</span>}
+    </div>
+  )
+}
+
 /** The price library: every material and labour price an estimate uses,
  * each with when it was last confirmed. A price over three months old,
  * or never confirmed, is flagged here and on every estimate that uses it.
@@ -60,24 +133,32 @@ const PriceLibraryModal: React.FC<{
   error: string | null
   /** signed in: can change the library */
   canEdit: boolean
+  /** signed in: can keep company details */
+  signedIn: boolean
   onSave: (next: PriceLibrary) => void
   /** item ids in use on the wall being priced, to mark them */
   inUse?: Set<string>
   initialTab?: "prices" | "company"
-}> = ({ isOpen, onClose, library, status, error, canEdit, onSave, inUse, initialTab = "prices" }) => {
+}> = ({ isOpen, onClose, library, status, error, canEdit, signedIn, onSave, inUse, initialTab = "prices" }) => {
   const [draft, setDraft] = useState<PriceLibrary>(library)
   const [tab, setTab] = useState<"prices" | "company">(initialTab)
   const [onlyStale, setOnlyStale] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dirty = useRef(false)
+  // the prices and the company details save separately, so editing one
+  // never writes a stale copy of the other
+  const dirty = useRef({ items: false, company: false })
   const draftRef = useRef(draft)
   draftRef.current = draft
+  const libraryRef = useRef(library)
+  libraryRef.current = library
   const onSaveRef = useRef(onSave)
   onSaveRef.current = onSave
 
-  // fresh from the library each time it's opened (and when it loads)
+  // fresh from the library each time it's opened (and when it loads),
+  // keeping whichever part has unsaved edits
   useEffect(() => {
-    if (isOpen && !dirty.current) setDraft(library)
+    if (!isOpen) return
+    setDraft((d) => ({ items: dirty.current.items ? d.items : library.items, company: dirty.current.company ? d.company : library.company }))
   }, [isOpen, library])
   useEffect(() => {
     if (isOpen) setTab(initialTab)
@@ -86,16 +167,21 @@ const PriceLibraryModal: React.FC<{
   const flush = () => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
-    if (dirty.current) {
-      dirty.current = false
-      onSaveRef.current(draftRef.current)
+    const { items, company } = dirty.current
+    if (items || company) {
+      dirty.current = { items: false, company: false }
+      onSaveRef.current({
+        items: items ? draftRef.current.items : libraryRef.current.items,
+        company: company ? draftRef.current.company : libraryRef.current.company,
+      })
     }
   }
   useEffect(() => () => flush(), [])
 
   const update = (next: PriceLibrary) => {
+    if (next.items !== draft.items) dirty.current.items = true
+    if (next.company !== draft.company) dirty.current.company = true
     setDraft(next)
-    dirty.current = true
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(flush, SAVE_DELAY_MS)
   }
@@ -140,20 +226,24 @@ const PriceLibraryModal: React.FC<{
             className={tab === "company" ? styles.tabOn : ""}
             onClick={() => setTab("company")}
           >
-            Company details
+            Your company
           </button>
         </div>
 
         <p className={styles.sync}>
-          {status === "loading"
-            ? "Loading the price library…"
-            : status === "offline"
-              ? "Offline: showing the library as last loaded on this device."
-              : status === "error"
-                ? "Couldn't load the price library; showing the last one loaded on this device."
-                : canEdit
-                  ? "The one price library: every estimate and proposal uses it. Saved as you go."
-                  : "The one price library: every estimate and proposal uses it. Sign in to change it."}
+          {tab === "company"
+            ? signedIn
+              ? "Your own company details and logo, on your proposals only. Saved to your account as you go."
+              : "Sign in to set up your company details and logo for your proposals."
+            : status === "loading"
+              ? "Loading the price library…"
+              : status === "offline"
+                ? "Offline: showing the library as last loaded on this device."
+                : status === "error"
+                  ? "Couldn't load the price library; showing the last one loaded on this device."
+                  : canEdit
+                    ? "Shared prices: everyone's estimates use these. Saved as you go."
+                    : "Shared prices: everyone's estimates use these. Sign in to change them."}
           {error && <span className={styles.error}> {error}</span>}
         </p>
 
@@ -392,8 +482,9 @@ const PriceLibraryModal: React.FC<{
         )}
 
         {tab === "company" && (
-          <fieldset className={`${styles.readOnlyWrap} ${styles.company}`} disabled={!canEdit}>
+          <fieldset className={`${styles.readOnlyWrap} ${styles.company}`} disabled={!signedIn}>
             <p className={styles.hint}>Printed on your proposals. Anything left blank shows as a placeholder to fill in.</p>
+            <LogoField value={company.logo} onChange={(logo) => update({ ...draft, company: { ...company, logo } })} />
             {COMPANY_FIELDS.map((f) => (
               <label key={f.key} className={styles.companyField}>
                 <span>{f.label}</span>
