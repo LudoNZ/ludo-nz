@@ -22,6 +22,7 @@ import {
 } from "@/components/stairs/stairs"
 import { calculateLayout, resolveFlightTreads } from "@/components/stairs/layout"
 import TurnedPlan from "@/components/stairs/turnedPlan"
+import StairRenderView from "@/components/stairs/stairRenderView"
 import { planMixedStock } from "@/components/stairs/stairs"
 import LayoutEditor from "./layoutEditor"
 import styles from "./stairsPage.module.scss"
@@ -80,6 +81,8 @@ const StairsPage = () => {
   const r = useMemo(() => calculateStairs(input), [input])
   const turned = input.turns.length > 0
   const layout = useMemo(() => (turned ? calculateLayout(input, r) : null), [turned, input, r])
+  // the 3D view works off the plan layout for straight stairs too
+  const renderLayout = useMemo(() => layout ?? calculateLayout(input, r), [layout, input, r])
   const flightTreads = resolveFlightTreads(input, r.risers).treads
 
   const stacked = input.framing === "stacked-frames"
@@ -473,6 +476,17 @@ const StairsPage = () => {
                 <StairPlan input={input} result={r} />
               </div>
             </>
+          )}
+
+          {r.treads > 0 && (
+            <div className={styles.diagramCard}>
+              <h2>3D view</h2>
+              <StairRenderView
+                input={input}
+                layout={renderLayout}
+                caption={`${r.risers} risers of ${mm(r.rise)} · ${r.treads} treads of ${mm(r.going)} · ${mm(input.width)} wide · ${FRAMING_LABELS[input.framing].toLowerCase()}`}
+              />
+            </div>
           )}
 
           {r.suggestedNosing !== null && (

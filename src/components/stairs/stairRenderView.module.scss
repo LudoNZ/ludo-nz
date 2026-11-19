@@ -1,0 +1,109 @@
+.renderRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.printArea {
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.caption {
+  display: none;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  font-size: 0.85rem;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 10rem;
+
+  span {
+    opacity: 0.75;
+    min-width: 2.2rem;
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--color-primary);
+  }
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.actionButton {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+// "Print / save PDF" sets data-print-stair-render on <html> for the length of
+// the print, and hides everything else on the page: the drawing fills
+// the sheet
+@media print {
+  // (hiding everything else, `body *`, isn't a pure selector, so that
+  // rule is added by stairRenderView.tsx for the length of the print)
+  :global(html[data-print-stair-render]) {
+    .printArea,
+    .printArea * {
+      visibility: visible;
+    }
+
+    .printArea {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-radius: 0;
+      background: #fff;
+    }
+
+    .svg {
+      max-height: 92vh;
+      width: 100%;
+      object-fit: contain;
+    }
+
+    .caption {
+      display: block;
+      text-align: center;
+      font-size: 10pt;
+      color: #333;
+      margin-top: 4mm;
+    }
+  }
+}
