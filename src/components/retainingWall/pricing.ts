@@ -14,7 +14,7 @@ import type { ProfileTotals, WallProfile } from "./postProfile"
 export type PriceCategory = "posts" | "boards" | "topCap" | "concrete" | "gravel" | "labour" | "fixings" | "drainage" | "other"
 
 export const PRICE_CATEGORIES: { id: PriceCategory; label: string; hint: string }[] = [
-  { id: "posts", label: "Posts", hint: "Priced per lineal metre; set the post size to match the wall's posts" },
+  { id: "posts", label: "Posts", hint: "Per lineal metre, or by length (round poles: a post is priced at the shortest length it fits in). Set the post size to match the wall's posts" },
   { id: "boards", label: "Facing boards", hint: "Facing courses and the top board, per lineal metre" },
   { id: "topCap", label: "Top cap", hint: "Per lineal metre" },
   { id: "concrete", label: "Concrete", hint: "Per m³ (ready-mix) or per bag" },
@@ -35,6 +35,12 @@ export const PRICE_UNITS: { id: PriceUnit; label: string }[] = [
   { id: "hour", label: "per hour" },
 ]
 
+export interface LengthPrice {
+  lengthM: number
+  /** NZD excl GST, one post this long */
+  price: number
+}
+
 export interface PriceItem {
   id: string
   category: PriceCategory
@@ -44,6 +50,10 @@ export interface PriceItem {
   price: number
   /** posts: the size it's for, e.g. "150 x 150mm" (blank = any size) */
   sizeLabel?: string
+  /** posts sold by the length (round poles): the price of one post at
+   * each stock length. When set, a post is priced at the shortest length
+   * it fits in rather than per metre, and `price` is ignored. */
+  lengthPrices?: LengthPrice[]
   /** concrete sold by the bag: m³ one bag makes (a 20 kg bag ≈ 0.01) */
   bagYieldM3?: number
   supplier?: string
@@ -115,7 +125,6 @@ export const STARTER_PRICE_ITEMS: PriceItem[] = [
   { id: "starter-post-125", category: "posts", name: "H5 posts 125 x 125mm", sizeLabel: "125 x 125mm", unit: "m", price: 18, confirmedAt: null },
   { id: "starter-post-150", category: "posts", name: "H5 posts 150 x 150mm", sizeLabel: "150 x 150mm", unit: "m", price: 26, confirmedAt: null },
   { id: "starter-post-200", category: "posts", name: "H5 posts 200 x 200mm", sizeLabel: "200 x 200mm", unit: "m", price: 48, confirmedAt: null },
-  { id: "starter-pole-200", category: "posts", name: "H5 poles 200mm SED", sizeLabel: "200mm round", unit: "m", price: 22, confirmedAt: null },
   { id: "starter-boards", category: "boards", name: "H4 facing boards 200 x 50mm", unit: "m", price: 9.5, confirmedAt: null },
   { id: "starter-cap", category: "topCap", name: "H3.2 top cap 150 x 50mm", unit: "m", price: 7, confirmedAt: null },
   { id: "starter-concrete", category: "concrete", name: "Ready-mix concrete 20 MPa", unit: "m³", price: 330, confirmedAt: null },
@@ -124,6 +133,46 @@ export const STARTER_PRICE_ITEMS: PriceItem[] = [
   { id: "starter-fixings", category: "fixings", name: "Fixings allowance (nails, bolts)", unit: "m", price: 6, confirmedAt: null },
   { id: "starter-drainage", category: "drainage", name: "Drainage coil and drainage metal", unit: "m", price: 28, confirmedAt: null },
 ]
+
+/** Round pole prices by length, excl GST, as sent in by a supplier on
+ * 19 Nov 2026 (non high-density poles, priced per post by SED band).
+ * Each band is matched to the wall's "NNNmm round" post size at the
+ * bottom of the band. */
+export const POLE_PRICES_CONFIRMED = "2026-11-19T00:00:00.000Z"
+const POLE_BANDS: [number, [number, number][]][] = [
+  [150, [[1.8, 28.14], [2.4, 38.31], [2.7, 43.53], [3.0, 49.27], [3.6, 61.01], [4.2, 75.88], [4.8, 91.03], [5.4, 98.68], [6.0, 109.15], [7.0, 126.23]]],
+  [175, [[1.8, 34.68], [2.1, 44.81], [2.4, 46.86], [2.7, 53.28], [3.0, 60.92], [3.6, 74.57], [4.2, 92.91], [4.8, 109.12], [5.4, 125.31], [6.0, 142.85]]],
+  [200, [[1.8, 43.28], [2.1, 55.4], [2.4, 60.39], [2.7, 68.02], [3.0, 76.3], [3.6, 90.43], [4.2, 113.95], [4.8, 136.82], [5.4, 157.04], [6.0, 167.46]]],
+  [225, [[1.8, 52.24], [2.4, 70.79], [2.7, 81.83], [3.0, 90.51], [3.6, 113.0], [4.2, 139.42], [4.8, 143.17], [5.4, 185.2], [6.0, 211.28], [7.0, 239.89], [8.0, 309.57]]],
+  [250, [[1.8, 64.35], [2.4, 87.83], [2.7, 99.13], [3.0, 111.3], [3.6, 139.13], [4.2, 166.96], [4.8, 195.65], [5.4, 226.09], [6.0, 252.17], [7.0, 291.3], [8.0, 366.96], [9.0, 426.09]]],
+]
+export const POLE_PRICE_LIST: PriceItem[] = POLE_BANDS.map(([sed, rows]) => ({
+  id: `pole-sed-${sed}`,
+  category: "posts",
+  name: `Round posts ${sed}–${sed + 24} SED`,
+  sizeLabel: `${sed}mm round`,
+  unit: "each",
+  price: 0,
+  lengthPrices: rows.map(([lengthM, price]) => ({ lengthM, price })),
+  confirmedAt: POLE_PRICES_CONFIRMED,
+}))
+
+/** Adds the pole price list to a library, replacing any earlier copy of
+ * it (same ids) and leaving everything else alone. */
+export function withPolePriceList(items: PriceItem[]): PriceItem[] {
+  const ids = new Set(POLE_PRICE_LIST.map((i) => i.id))
+  const kept = items.filter((i) => !ids.has(i.id))
+  const firstPost = kept.findIndex((i) => i.category === "posts")
+  const at = firstPost < 0 ? kept.length : firstPost
+  return [...kept.slice(0, at), ...POLE_PRICE_LIST, ...kept.slice(at)]
+}
+
+/** The price of one post `neededM` long off a by-length item: the
+ * shortest stock length that's long enough, or null if none is. */
+export function stockLengthFor(item: PriceItem, neededM: number): LengthPrice | null {
+  const rows = [...(item.lengthPrices ?? [])].sort((a, b) => a.lengthM - b.lengthM)
+  return rows.find((r) => r.lengthM >= neededM - 1e-6) ?? null
+}
 
 const CATEGORY_IDS = new Set<string>(PRICE_CATEGORIES.map((c) => c.id))
 const UNIT_IDS = new Set<string>(PRICE_UNITS.map((u) => u.id))
@@ -134,7 +183,7 @@ const str = (v: unknown) => (typeof v === "string" ? v : "")
 export function libraryFromData(data: unknown): PriceLibrary {
   const d = (typeof data === "object" && data !== null ? data : {}) as Record<string, unknown>
   const rawItems = Array.isArray(d.items) ? d.items : null
-  const items: PriceItem[] = (rawItems ?? STARTER_PRICE_ITEMS).flatMap((raw): PriceItem[] => {
+  const items: PriceItem[] = (rawItems ?? withPolePriceList(STARTER_PRICE_ITEMS)).flatMap((raw): PriceItem[] => {
     const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>
     if (typeof r.id !== "string" || !CATEGORY_IDS.has(str(r.category))) return []
     const price = Number(r.price)
@@ -146,6 +195,16 @@ export function libraryFromData(data: unknown): PriceLibrary {
         unit: UNIT_IDS.has(str(r.unit)) ? (r.unit as PriceUnit) : "each",
         price: Number.isFinite(price) && price >= 0 ? price : 0,
         ...(str(r.sizeLabel) ? { sizeLabel: str(r.sizeLabel) } : {}),
+        ...(Array.isArray(r.lengthPrices)
+          ? {
+              lengthPrices: (r.lengthPrices as unknown[]).flatMap((lp): LengthPrice[] => {
+                const o = (typeof lp === "object" && lp !== null ? lp : {}) as Record<string, unknown>
+                const lengthM = Number(o.lengthM)
+                const price = Number(o.price)
+                return lengthM > 0 && lengthM <= 20 && Number.isFinite(price) && price >= 0 ? [{ lengthM, price }] : []
+              }),
+            }
+          : {}),
         ...(Number(r.bagYieldM3) > 0 ? { bagYieldM3: Number(r.bagYieldM3) } : {}),
         ...(str(r.supplier) ? { supplier: str(r.supplier) } : {}),
         confirmedAt: typeof r.confirmedAt === "string" && Number.isFinite(Date.parse(r.confirmedAt)) ? r.confirmedAt : null,
@@ -277,6 +336,9 @@ export interface EstimateLine {
   detail?: string
   quantity: number
   unit: string
+  /** the key a hand-picked item is kept under (itemChoice); the same for
+   * every length of one post size */
+  choiceKey: string
   /** the library item priced from, if any */
   item: PriceItem | null
   /** the items that could price this line, for picking another */
@@ -311,6 +373,18 @@ export interface Estimate {
 const normSize = (v: string) => v.replace(/\s/g, "").toLowerCase()
 const roundUp = (v: number, step: number) => Math.ceil(v / step - 1e-9) * step
 const fmtM = (m: number) => `${m.toFixed(1)} m`
+
+/** Each post's length, height above ground plus how far it goes down, by
+ * size (not rounded). */
+export function postNeededLengthsM(profile: WallProfile, postIndices: number[]): Map<string, number[]> {
+  const bySize = new Map<string, number[]>()
+  for (const i of postIndices) {
+    const p = profile.posts[i]
+    const lengthM = Math.max(0, p.topLevelM - p.groundLevelM) + p.postDepthM
+    bySize.set(p.sizeLabel, [...(bySize.get(p.sizeLabel) ?? []), lengthM])
+  }
+  return bySize
+}
 
 /** Each post as bought: its height above ground plus how far it goes down,
  * rounded up to the next POST_LENGTH_STEP_M. */
@@ -359,6 +433,7 @@ export function buildEstimate(
     const unitCost = item ? item.price : null
     lines.push({
       key,
+      choiceKey: key,
       category,
       description,
       detail,
@@ -373,20 +448,74 @@ export function buildEstimate(
     })
   }
 
-  // posts, by size, per lineal metre as bought
+  // posts, by size: by the length when the price is by length (round
+  // poles), else per lineal metre as bought
+  const needed = postNeededLengthsM(profile, totals.postIndices)
   for (const [size, lengths] of postPurchaseLengthsM(profile, totals.postIndices)) {
+    const key = `posts:${size}`
+    const sizeMatches = [(i: PriceItem) => normSize(i.sizeLabel ?? "") === normSize(size), (i: PriceItem) => !i.sizeLabel]
+    const { candidates, item } = pick(key, "posts", sizeMatches)
+    if (item?.lengthPrices?.length) {
+      const stale = isStale(item, now)
+      const byStock = new Map<number, { price: number; count: number }>()
+      const tooLong: number[] = []
+      for (const l of needed.get(size) ?? []) {
+        const s = stockLengthFor(item, l)
+        if (!s) tooLong.push(l)
+        else byStock.set(s.lengthM, { price: s.price, count: (byStock.get(s.lengthM)?.count ?? 0) + 1 })
+      }
+      const sorted = [...byStock.entries()].sort((a, b) => a[0] - b[0])
+      sorted.forEach(([lengthM, { price, count }], n) => {
+        lines.push({
+          key: `${key}@${lengthM}`,
+          choiceKey: key,
+          category: "posts",
+          description: `Posts ${size}, ${fmtM(lengthM)}`,
+          detail: `${count} post${count === 1 ? "" : "s"}`,
+          quantity: count,
+          unit: "each",
+          item,
+          // the picker shows on the first length only; it sets them all
+          candidates: n === 0 ? candidates : [],
+          unitCost: price,
+          cost: price * count,
+          stale,
+          manual: false,
+        })
+      })
+      if (tooLong.length) {
+        const longest = Math.max(...(item.lengthPrices ?? []).map((r) => r.lengthM))
+        lines.push({
+          key: `${key}@long`,
+          choiceKey: key,
+          category: "posts",
+          description: `Posts ${size}, over ${fmtM(longest)}`,
+          detail: `${tooLong.length} post${tooLong.length === 1 ? "" : "s"} up to ${fmtM(Math.max(...tooLong))} long, longer than the longest length priced`,
+          quantity: tooLong.length,
+          unit: "each",
+          item: null,
+          candidates: sorted.length ? [] : candidates,
+          unitCost: null,
+          cost: 0,
+          stale: false,
+          manual: false,
+        })
+      }
+      continue
+    }
+
     const total = lengths.reduce((s, l) => s + l, 0)
     const lo = Math.min(...lengths)
     const hi = Math.max(...lengths)
     add(
-      `posts:${size}`,
+      key,
       "posts",
       `Posts ${size}`,
       Number(total.toFixed(2)),
       "m",
       `${lengths.length} post${lengths.length === 1 ? "" : "s"}, ${lo === hi ? fmtM(lo) : `${fmtM(lo)}–${fmtM(hi)}`} long`,
       // this size's price, or failing that one set for any size
-      [(i) => normSize(i.sizeLabel ?? "") === normSize(size), (i) => !i.sizeLabel],
+      sizeMatches,
     )
   }
 
@@ -417,6 +546,7 @@ export function buildEstimate(
   for (const x of settings.extraLines) {
     lines.push({
       key: `extra:${x.id}`,
+      choiceKey: `extra:${x.id}`,
       category: "other",
       description: x.description || "Extra item",
       quantity: x.quantity,

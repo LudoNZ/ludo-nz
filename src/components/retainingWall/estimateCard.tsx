@@ -112,12 +112,12 @@ const EstimateCard: React.FC<{
                         className={styles.itemPicker}
                         value={l.item?.id ?? ""}
                         aria-label={`Price for ${l.description}`}
-                        onChange={(e) => set({ itemChoice: { ...settings.itemChoice, [l.key]: e.target.value } })}
+                        onChange={(e) => set({ itemChoice: { ...settings.itemChoice, [l.choiceKey]: e.target.value } })}
                       >
                         {!l.item && <option value="">Pick a price…</option>}
                         {l.candidates.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.name} — {formatNzd(c.price)}/{c.unit}
+                            {c.name} — {c.lengthPrices?.length ? "priced by length" : `${formatNzd(c.price)}/${c.unit}`}
                           </option>
                         ))}
                       </select>
@@ -125,7 +125,7 @@ const EstimateCard: React.FC<{
                       l.item && <div className={styles.detail}>{l.item.name}</div>
                     )}
                     {l.item && l.stale && <div className={styles.staleNote}>⚠ {describeAge(l.item)}</div>}
-                    {!l.item && (
+                    {!l.item && !l.key.endsWith("@long") && (
                       <div className={styles.missingNote}>
                         {l.candidates.length ? "No price for this size in the library — pick one above or add it" : "No price in the library"}
                       </div>

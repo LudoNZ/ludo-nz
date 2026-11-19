@@ -16,6 +16,7 @@ import {
   PriceLibrary,
   PriceUnit,
   STALE_AFTER_DAYS,
+  withPolePriceList,
 } from "@/components/retainingWall/pricing"
 import type { LibraryStatus } from "@/components/retainingWall/usePriceLibrary"
 import styles from "./priceLibraryModal.module.scss"
@@ -131,7 +132,13 @@ const PriceLibraryModal: React.FC<{
           <button type="button" role="tab" aria-selected={tab === "prices"} className={tab === "prices" ? styles.tabOn : ""} onClick={() => setTab("prices")}>
             Prices {staleItems.length > 0 && <span className={styles.badge}>{staleItems.length}</span>}
           </button>
-          <button type="button" role="tab" aria-selected={tab === "company"} className={tab === "company" ? styles.tabOn : ""} onClick={() => setTab("company")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "company"}
+            className={tab === "company" ? styles.tabOn : ""}
+            onClick={() => setTab("company")}
+          >
             Company details
           </button>
         </div>
@@ -154,8 +161,8 @@ const PriceLibraryModal: React.FC<{
             {staleItems.length > 0 ? (
               <div className={styles.staleBanner}>
                 <span>
-                  ⚠ {staleItems.length} price{staleItems.length === 1 ? " hasn't" : "s haven't"} been confirmed in the last 3 months (
-                  {STALE_AFTER_DAYS} days). Check {staleItems.length === 1 ? "it" : "them"} with your supplier, then update or confirm.
+                  ⚠ {staleItems.length} price{staleItems.length === 1 ? " hasn't" : "s haven't"} been confirmed in the last 3 months ({STALE_AFTER_DAYS} days).
+                  Check {staleItems.length === 1 ? "it" : "them"} with your supplier, then update or confirm.
                 </span>
                 <span className={styles.bannerButtons}>
                   <label className={styles.check}>
@@ -199,33 +206,116 @@ const PriceLibraryModal: React.FC<{
                             />
                           </label>
                         )}
-                        <label className={styles.priceField}>
-                          <span>Price (excl GST)</span>
-                          <span className={styles.money}>
-                            $
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              min={0}
-                              step={0.01}
-                              value={Number.isFinite(item.price) ? item.price : 0}
-                              onChange={(e) => {
-                                const n = Number(e.target.value)
-                                if (e.target.value.trim() !== "" && n >= 0) setItem(item.id, { price: n }, true)
+                        {cat.id === "posts" && (
+                          <label className={styles.unitField}>
+                            <span>Priced</span>
+                            <select
+                              value={item.lengthPrices ? "length" : "metre"}
+                              onChange={(e) =>
+                                setItem(
+                                  item.id,
+                                  e.target.value === "length"
+                                    ? { lengthPrices: [{ lengthM: 2.4, price: 0 }], unit: "each" }
+                                    : { lengthPrices: undefined, unit: "m" },
+                                )
+                              }
+                            >
+                              <option value="metre">per metre</option>
+                              <option value="length">by length</option>
+                            </select>
+                          </label>
+                        )}
+                        {item.lengthPrices ? (
+                          <div className={styles.lengthPrices}>
+                            <span>Price per post by length (excl GST); a post is priced at the shortest length it fits in</span>
+                            <ul>
+                              {item.lengthPrices.map((lp, li) => {
+                                const setRow = (patch: Partial<typeof lp>) =>
+                                  setItem(item.id, { lengthPrices: item.lengthPrices!.map((r, j) => (j === li ? { ...r, ...patch } : r)) }, true)
+                                return (
+                                  <li key={li}>
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min={0.1}
+                                      step={0.1}
+                                      aria-label="Length in metres"
+                                      value={lp.lengthM}
+                                      onChange={(e) => {
+                                        const n = Number(e.target.value)
+                                        if (n > 0) setRow({ lengthM: n })
+                                      }}
+                                    />
+                                    <span>m</span>
+                                    <span className={styles.money}>
+                                      $
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min={0}
+                                        step={0.01}
+                                        aria-label={`Price for ${lp.lengthM} m`}
+                                        value={lp.price}
+                                        onChange={(e) => {
+                                          const n = Number(e.target.value)
+                                          if (e.target.value.trim() !== "" && n >= 0) setRow({ price: n })
+                                        }}
+                                      />
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className={styles.remove}
+                                      aria-label={`Remove ${lp.lengthM} m`}
+                                      onClick={() => setItem(item.id, { lengthPrices: item.lengthPrices!.filter((_, j) => j !== li) })}
+                                    >
+                                      ✕
+                                    </button>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                            <button
+                              type="button"
+                              className={styles.secondary}
+                              onClick={() => {
+                                const longest = Math.max(0, ...item.lengthPrices!.map((r) => r.lengthM))
+                                setItem(item.id, { lengthPrices: [...item.lengthPrices!, { lengthM: Number((longest + 0.6).toFixed(1)), price: 0 }] })
                               }}
-                            />
-                          </span>
-                        </label>
-                        <label className={styles.unitField}>
-                          <span>Unit</span>
-                          <select value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value as PriceUnit })}>
-                            {PRICE_UNITS.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                            >
+                              + Length
+                            </button>
+                          </div>
+                        ) : (
+                          <label className={styles.priceField}>
+                            <span>Price (excl GST)</span>
+                            <span className={styles.money}>
+                              $
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step={0.01}
+                                value={Number.isFinite(item.price) ? item.price : 0}
+                                onChange={(e) => {
+                                  const n = Number(e.target.value)
+                                  if (e.target.value.trim() !== "" && n >= 0) setItem(item.id, { price: n }, true)
+                                }}
+                              />
+                            </span>
+                          </label>
+                        )}
+                        {!item.lengthPrices && (
+                          <label className={styles.unitField}>
+                            <span>Unit</span>
+                            <select value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value as PriceUnit })}>
+                              {PRICE_UNITS.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
                         {item.unit === "bag" && (
                           <label className={styles.unitField}>
                             <span>m³ per bag</span>
@@ -244,7 +334,11 @@ const PriceLibraryModal: React.FC<{
                         )}
                         <label className={styles.supplierField}>
                           <span>Supplier</span>
-                          <input value={item.supplier ?? ""} placeholder="Optional" onChange={(e) => setItem(item.id, { supplier: e.target.value || undefined })} />
+                          <input
+                            value={item.supplier ?? ""}
+                            placeholder="Optional"
+                            onChange={(e) => setItem(item.id, { supplier: e.target.value || undefined })}
+                          />
                         </label>
                         <div className={styles.itemFoot}>
                           <span className={stale ? styles.ageStale : styles.age}>
@@ -269,6 +363,18 @@ const PriceLibraryModal: React.FC<{
                       + Add {cat.label.toLowerCase()} price
                     </button>
                   )}
+                  {!onlyStale && cat.id === "posts" && (
+                    <button
+                      type="button"
+                      className={styles.add}
+                      title="Round posts 150–274 SED, priced by length, from the supplier price list of 19 Nov 2026. Replaces an earlier copy of the list."
+                      onClick={() => update({ ...draft, items: withPolePriceList(draft.items) })}
+                    >
+                      {draft.items.some((i) => i.id.startsWith("pole-sed-"))
+                        ? "↻ Reset round pole prices to the supplier list"
+                        : "+ Add supplier round pole prices (150–274 SED)"}
+                    </button>
+                  )}
                 </section>
               )
             })}
@@ -287,9 +393,18 @@ const PriceLibraryModal: React.FC<{
               <label key={f.key} className={styles.companyField}>
                 <span>{f.label}</span>
                 {f.multiline ? (
-                  <textarea rows={2} value={company[f.key]} placeholder={f.placeholder} onChange={(e) => update({ ...draft, company: { ...company, [f.key]: e.target.value } })} />
+                  <textarea
+                    rows={2}
+                    value={company[f.key]}
+                    placeholder={f.placeholder}
+                    onChange={(e) => update({ ...draft, company: { ...company, [f.key]: e.target.value } })}
+                  />
                 ) : (
-                  <input value={company[f.key]} placeholder={f.placeholder} onChange={(e) => update({ ...draft, company: { ...company, [f.key]: e.target.value } })} />
+                  <input
+                    value={company[f.key]}
+                    placeholder={f.placeholder}
+                    onChange={(e) => update({ ...draft, company: { ...company, [f.key]: e.target.value } })}
+                  />
                 )}
               </label>
             ))}
