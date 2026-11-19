@@ -2,95 +2,88 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAuth } from "@/context/auth"
-import { loadPriceLibrary, savePriceLibrary } from "@/app/retaining-walls/priceLibraryActions"
-import { libraryFromData, PriceLibrary } from "./pricing"
+import { loadCompanyDetails, loadSharedPrices, saveCompanyDetails, saveSharedPrices } from "@/app/retaining-walls/priceLibraryActions"
+import { BLANK_COMPANY, CompanyDetails, libraryFromData, PriceItem, PriceLibrary } from "./pricing"
 
-const CACHE_KEY = "retainingWalls.priceLibrary.v1"
+// a read-only copy of the shared prices, so an estimate still prices up on
+// site with no signal; never edited here, and replaced on every load
+const OFFLINE_COPY_KEY = "retainingWalls.sharedPrices.v1"
 
-const readCache = (uid: string | null): PriceLibrary | null => {
+const readOfflineCopy = (): PriceItem[] | null => {
   try {
-    const raw = localStorage.getItem(`${CACHE_KEY}:${uid ?? "guest"}`)
-    return raw ? libraryFromData(JSON.parse(raw)) : null
+    const raw = localStorage.getItem(OFFLINE_COPY_KEY)
+    return raw ? libraryFromData({ items: JSON.parse(raw) }).items : null
   } catch {
     return null
   }
 }
-const writeCache = (uid: string | null, library: PriceLibrary) => {
+const writeOfflineCopy = (items: PriceItem[]) => {
   try {
-    localStorage.setItem(`${CACHE_KEY}:${uid ?? "guest"}`, JSON.stringify(library))
+    localStorage.setItem(OFFLINE_COPY_KEY, JSON.stringify(items))
   } catch {
-    // storage full or blocked: the library still works, just not offline
-  }
-}
-
-// set when a save to the server failed, so the device's copy is newer
-// and gets sent up next time, rather than overwritten by the server's
-const pendingKey = (uid: string) => `${CACHE_KEY}:pending:${uid}`
-const isPending = (uid: string) => {
-  try {
-    return localStorage.getItem(pendingKey(uid)) === "1"
-  } catch {
-    return false
-  }
-}
-const setPending = (uid: string, on: boolean) => {
-  try {
-    if (on) localStorage.setItem(pendingKey(uid), "1")
-    else localStorage.removeItem(pendingKey(uid))
-  } catch {
-    // ignore
+    // storage full or blocked: prices still work while online
   }
 }
 
 export type LibraryStatus = "loading" | "ready" | "offline" | "error"
 
-/** The signed-in person's price library. Shown straight away from this
- * device's copy (so it works offline), then refreshed from the server.
- * Signed out, it lives on this device only. Saving updates the device
- * copy at once and the server behind it. */
+/** The shared price library (one set of prices for everyone, kept in the
+ * database; only admins can change it) plus the signed-in person's own
+ * company details for their proposals. Signed out, company details
+ * aren't saved. */
 export function usePriceLibrary() {
   const auth = useAuth()
   const user = auth?.currentUser ?? null
   const uid = user?.uid ?? null
-  const [library, setLibrary] = useState<PriceLibrary>(() => libraryFromData(undefined))
+  const canEdit = !!auth?.isAdmin
+  const [items, setItems] = useState<PriceItem[]>(() => libraryFromData(undefined).items)
+  const [company, setCompany] = useState<CompanyDetails>(BLANK_COMPANY)
   const [status, setStatus] = useState<LibraryStatus>("loading")
   const [error, setError] = useState<string | null>(null)
-  const latest = useRef(library)
-  latest.current = library
+  const latestItems = useRef(items)
+  latestItems.current = items
 
+  // shared prices: for everyone, signed in or not
   useEffect(() => {
-    if (auth?.authLoading) return
     let cancelled = false
-    const cached = readCache(uid)
-    if (cached) setLibrary(cached)
-    if (!user) {
-      setStatus("ready")
-      return
+    // personal libraries used to be kept in the browser; clear them out
+    try {
+      for (const k of Object.keys(localStorage)) if (k.startsWith("retainingWalls.priceLibrary.v1")) localStorage.removeItem(k)
+    } catch {
+      // storage blocked: nothing to clear
     }
-    setStatus("loading")
-    user
-      .getIdToken()
-      .then(loadPriceLibrary)
-      .then(async ({ library: fromServer, saved }) => {
+    const copy = readOfflineCopy()
+    if (copy) setItems(copy)
+    loadSharedPrices()
+      .then(({ items: fromServer }) => {
         if (cancelled) return
-        // nothing on the server yet but something on this device (made
-        // while signed out), or edits that didn't reach the server: the
-        // device's copy wins and is sent up
-        const keepLocal = !!cached && (!saved || isPending(uid!))
-        const next = keepLocal ? cached! : fromServer
-        setLibrary(next)
-        writeCache(uid, next)
+        setItems(fromServer)
+        writeOfflineCopy(fromServer)
         setStatus("ready")
-        if (keepLocal) {
-          await savePriceLibrary(await user.getIdToken(), next)
-          setPending(uid!, false)
-        }
       })
       .catch((err) => {
         if (cancelled) return
-        console.error("Loading the price library failed:", err)
+        console.error("Loading the shared prices failed:", err)
         setStatus(navigator.onLine ? "error" : "offline")
       })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // company details: the signed-in person's own
+  useEffect(() => {
+    if (auth?.authLoading) return
+    if (!user) {
+      setCompany(BLANK_COMPANY)
+      return
+    }
+    let cancelled = false
+    user
+      .getIdToken()
+      .then(loadCompanyDetails)
+      .then((c) => !cancelled && setCompany(c))
+      .catch((err) => console.error("Loading company details failed:", err))
     return () => {
       cancelled = true
     }
@@ -98,26 +91,28 @@ export function usePriceLibrary() {
 
   const save = useCallback(
     async (next: PriceLibrary) => {
-      setLibrary(next)
-      writeCache(uid, next)
       setError(null)
+      const pricesChanged = canEdit && next.items !== latestItems.current
+      if (pricesChanged) setItems(next.items)
+      setCompany(next.company)
       if (!user) return
       try {
-        const saved = await savePriceLibrary(await user.getIdToken(), next)
-        if (uid) setPending(uid, false)
-        // a newer edit may have landed while this one was saving
-        if (latest.current === next) {
-          setLibrary(saved)
-          writeCache(uid, saved)
+        const token = await user.getIdToken()
+        if (pricesChanged) {
+          const saved = await saveSharedPrices(token, next.items)
+          if (latestItems.current === next.items) {
+            setItems(saved)
+            writeOfflineCopy(saved)
+          }
         }
+        await saveCompanyDetails(token, next.company)
       } catch (err) {
         console.error("Saving the price library failed:", err)
-        if (uid) setPending(uid, true)
-        setError(navigator.onLine ? "Couldn't save the price library. Try again." : "You're offline: changes are kept on this device, but not saved to your account yet.")
+        setError(navigator.onLine ? "Couldn't save. Try again." : "You're offline: changes can't be saved until you're back online.")
       }
     },
-    [uid, user],
+    [user, canEdit],
   )
 
-  return { library, status, error, save, signedIn: !!user }
+  return { library: { items, company } as PriceLibrary, status, error, save, signedIn: !!user, canEdit }
 }

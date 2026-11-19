@@ -829,6 +829,7 @@ const RetainingWallEditor: React.FC<{
         status={priceLibrary.status}
         error={priceLibrary.error}
         signedIn={priceLibrary.signedIn}
+        canEdit={priceLibrary.canEdit}
         onSave={priceLibrary.save}
         inUse={new Set((estimate?.lines ?? []).flatMap((l) => (l.item ? [l.item.id] : [])))}
       />
@@ -1260,13 +1261,11 @@ const RetainingWallEditor: React.FC<{
                   onOpenLibrary={() => setLibraryOpen({ tab: "prices" })}
                   onOpenProposal={() => setProposalOpen(true)}
                   libraryNote={
-                    !priceLibrary.signedIn
-                      ? "Signed out: your price library is kept in this browser only."
-                      : priceLibrary.status === "offline"
-                        ? "Offline: using the prices saved on this device."
-                        : priceLibrary.status === "error"
-                          ? "Couldn't load your price library from your account; using this device's copy."
-                          : priceLibrary.error
+                    priceLibrary.status === "offline"
+                      ? "Offline: using the shared prices last loaded on this device."
+                      : priceLibrary.status === "error"
+                        ? "Couldn't load the shared prices; using the last ones loaded on this device."
+                        : priceLibrary.error
                   }
                 />
               )}

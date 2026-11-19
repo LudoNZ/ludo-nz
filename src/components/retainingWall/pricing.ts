@@ -3,8 +3,8 @@
  * wall's quantities and those prices, and the settings an estimate keeps
  * with its wall (markup, extra lines, the proposal's details).
  *
- * Pure: no React, no Firestore — see priceLibraryStore.ts for where the
- * library lives and estimateCard.tsx / proposalView.tsx for the screens.
+ * Pure: no React, no Firestore — see priceLibraryActions.ts for where the
+ * library lives (shared prices for everyone, company details per person) and estimateCard.tsx / proposalView.tsx for the screens.
  * Prices are NZD, excluding GST. */
 
 import type { ProfileTotals, WallProfile } from "./postProfile"
@@ -138,6 +138,8 @@ export const STARTER_PRICE_ITEMS: PriceItem[] = [
  * 19 Nov 2026 (non high-density poles, priced per post by SED band).
  * Each band is matched to the wall's "NNNmm round" post size at the
  * bottom of the band. */
+// TODO: the supplier's name is still to come
+export const POLE_SUPPLIER = "Supplier TBC (name to come)"
 export const POLE_PRICES_CONFIRMED = "2026-11-19T00:00:00.000Z"
 const POLE_BANDS: [number, [number, number][]][] = [
   [150, [[1.8, 28.14], [2.4, 38.31], [2.7, 43.53], [3.0, 49.27], [3.6, 61.01], [4.2, 75.88], [4.8, 91.03], [5.4, 98.68], [6.0, 109.15], [7.0, 126.23]]],
@@ -154,6 +156,7 @@ export const POLE_PRICE_LIST: PriceItem[] = POLE_BANDS.map(([sed, rows]) => ({
   unit: "each",
   price: 0,
   lengthPrices: rows.map(([lengthM, price]) => ({ lengthM, price })),
+  supplier: POLE_SUPPLIER,
   confirmedAt: POLE_PRICES_CONFIRMED,
 }))
 

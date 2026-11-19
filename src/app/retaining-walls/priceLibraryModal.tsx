@@ -59,11 +59,13 @@ const PriceLibraryModal: React.FC<{
   status: LibraryStatus
   error: string | null
   signedIn: boolean
+  /** an admin: can change the shared prices */
+  canEdit: boolean
   onSave: (next: PriceLibrary) => void
   /** item ids in use on the wall being priced, to mark them */
   inUse?: Set<string>
   initialTab?: "prices" | "company"
-}> = ({ isOpen, onClose, library, status, error, signedIn, onSave, inUse, initialTab = "prices" }) => {
+}> = ({ isOpen, onClose, library, status, error, signedIn, canEdit, onSave, inUse, initialTab = "prices" }) => {
   const [draft, setDraft] = useState<PriceLibrary>(library)
   const [tab, setTab] = useState<"prices" | "company">(initialTab)
   const [onlyStale, setOnlyStale] = useState(false)
@@ -144,15 +146,19 @@ const PriceLibraryModal: React.FC<{
         </div>
 
         <p className={styles.sync}>
-          {!signedIn
-            ? "Signed out: this library is kept on this device only. Sign in to keep it with your account."
-            : status === "loading"
-              ? "Loading your library…"
+          {tab === "prices"
+            ? status === "loading"
+              ? "Loading the prices…"
               : status === "offline"
-                ? "Offline: showing this device's copy."
+                ? "Offline: showing the prices last loaded on this device."
                 : status === "error"
-                  ? "Couldn't load your library from your account; showing this device's copy."
-                  : "Saved to your account as you go."}
+                  ? "Couldn't load the prices; showing the last ones loaded on this device."
+                  : canEdit
+                    ? "Shared prices: every estimate uses these. Saved as you go."
+                    : "Shared prices: every estimate uses these. Only an admin can change them."
+            : signedIn
+              ? "Your own: saved to your account as you go."
+              : "Sign in to save your company details."}
           {error && <span className={styles.error}> {error}</span>}
         </p>
 
@@ -168,216 +174,220 @@ const PriceLibraryModal: React.FC<{
                   <label className={styles.check}>
                     <input type="checkbox" checked={onlyStale} onChange={(e) => setOnlyStale(e.target.checked)} /> Show only these
                   </label>
-                  <button type="button" className={styles.secondary} onClick={confirmAll}>
-                    Confirm all {staleItems.length} as still right
-                  </button>
+                  {canEdit && (
+                    <button type="button" className={styles.secondary} onClick={confirmAll}>
+                      Confirm all {staleItems.length} as still right
+                    </button>
+                  )}
                 </span>
               </div>
             ) : (
               <p className={styles.allGood}>✓ Every price has been confirmed in the last 3 months.</p>
             )}
 
-            {PRICE_CATEGORIES.map((cat) => {
-              const items = draft.items.filter((i) => i.category === cat.id && (!onlyStale || isStale(i)))
-              if (onlyStale && items.length === 0) return null
-              return (
-                <section key={cat.id} className={styles.category}>
-                  <div className={styles.categoryHead}>
-                    <h3>{cat.label}</h3>
-                    <span className={styles.hint}>{cat.hint}</span>
-                  </div>
-                  {items.length === 0 && <p className={styles.empty}>No prices yet.</p>}
-                  {items.map((item) => {
-                    const stale = isStale(item)
-                    return (
-                      <div key={item.id} className={`${styles.item} ${stale ? styles.itemStale : ""}`}>
-                        <label className={styles.nameField}>
-                          <span>Item</span>
-                          <input value={item.name} placeholder="Description" onChange={(e) => setItem(item.id, { name: e.target.value })} />
-                        </label>
-                        {cat.id === "posts" && (
-                          <label className={styles.sizeField}>
-                            <span>Post size</span>
-                            <input
-                              value={item.sizeLabel ?? ""}
-                              list="priceLibraryPostSizes"
-                              placeholder="Any size"
-                              onChange={(e) => setItem(item.id, { sizeLabel: e.target.value || undefined })}
-                            />
+            <fieldset className={styles.readOnlyWrap} disabled={!canEdit}>
+              {PRICE_CATEGORIES.map((cat) => {
+                const items = draft.items.filter((i) => i.category === cat.id && (!onlyStale || isStale(i)))
+                if (onlyStale && items.length === 0) return null
+                return (
+                  <section key={cat.id} className={styles.category}>
+                    <div className={styles.categoryHead}>
+                      <h3>{cat.label}</h3>
+                      <span className={styles.hint}>{cat.hint}</span>
+                    </div>
+                    {items.length === 0 && <p className={styles.empty}>No prices yet.</p>}
+                    {items.map((item) => {
+                      const stale = isStale(item)
+                      return (
+                        <div key={item.id} className={`${styles.item} ${stale ? styles.itemStale : ""}`}>
+                          <label className={styles.nameField}>
+                            <span>Item</span>
+                            <input value={item.name} placeholder="Description" onChange={(e) => setItem(item.id, { name: e.target.value })} />
                           </label>
-                        )}
-                        {cat.id === "posts" && (
-                          <label className={styles.unitField}>
-                            <span>Priced</span>
-                            <select
-                              value={item.lengthPrices ? "length" : "metre"}
-                              onChange={(e) =>
-                                setItem(
-                                  item.id,
-                                  e.target.value === "length"
-                                    ? { lengthPrices: [{ lengthM: 2.4, price: 0 }], unit: "each" }
-                                    : { lengthPrices: undefined, unit: "m" },
-                                )
-                              }
-                            >
-                              <option value="metre">per metre</option>
-                              <option value="length">by length</option>
-                            </select>
-                          </label>
-                        )}
-                        {item.lengthPrices ? (
-                          <div className={styles.lengthPrices}>
-                            <span>Price per post by length (excl GST); a post is priced at the shortest length it fits in</span>
-                            <ul>
-                              {item.lengthPrices.map((lp, li) => {
-                                const setRow = (patch: Partial<typeof lp>) =>
-                                  setItem(item.id, { lengthPrices: item.lengthPrices!.map((r, j) => (j === li ? { ...r, ...patch } : r)) }, true)
-                                return (
-                                  <li key={li}>
-                                    <input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min={0.1}
-                                      step={0.1}
-                                      aria-label="Length in metres"
-                                      value={lp.lengthM}
-                                      onChange={(e) => {
-                                        const n = Number(e.target.value)
-                                        if (n > 0) setRow({ lengthM: n })
-                                      }}
-                                    />
-                                    <span>m</span>
-                                    <span className={styles.money}>
-                                      $
+                          {cat.id === "posts" && (
+                            <label className={styles.sizeField}>
+                              <span>Post size</span>
+                              <input
+                                value={item.sizeLabel ?? ""}
+                                list="priceLibraryPostSizes"
+                                placeholder="Any size"
+                                onChange={(e) => setItem(item.id, { sizeLabel: e.target.value || undefined })}
+                              />
+                            </label>
+                          )}
+                          {cat.id === "posts" && (
+                            <label className={styles.unitField}>
+                              <span>Priced</span>
+                              <select
+                                value={item.lengthPrices ? "length" : "metre"}
+                                onChange={(e) =>
+                                  setItem(
+                                    item.id,
+                                    e.target.value === "length"
+                                      ? { lengthPrices: [{ lengthM: 2.4, price: 0 }], unit: "each" }
+                                      : { lengthPrices: undefined, unit: "m" },
+                                  )
+                                }
+                              >
+                                <option value="metre">per metre</option>
+                                <option value="length">by length</option>
+                              </select>
+                            </label>
+                          )}
+                          {item.lengthPrices ? (
+                            <div className={styles.lengthPrices}>
+                              <span>Price per post by length (excl GST); a post is priced at the shortest length it fits in</span>
+                              <ul>
+                                {item.lengthPrices.map((lp, li) => {
+                                  const setRow = (patch: Partial<typeof lp>) =>
+                                    setItem(item.id, { lengthPrices: item.lengthPrices!.map((r, j) => (j === li ? { ...r, ...patch } : r)) }, true)
+                                  return (
+                                    <li key={li}>
                                       <input
                                         type="number"
                                         inputMode="decimal"
-                                        min={0}
-                                        step={0.01}
-                                        aria-label={`Price for ${lp.lengthM} m`}
-                                        value={lp.price}
+                                        min={0.1}
+                                        step={0.1}
+                                        aria-label="Length in metres"
+                                        value={lp.lengthM}
                                         onChange={(e) => {
                                           const n = Number(e.target.value)
-                                          if (e.target.value.trim() !== "" && n >= 0) setRow({ price: n })
+                                          if (n > 0) setRow({ lengthM: n })
                                         }}
                                       />
-                                    </span>
-                                    <button
-                                      type="button"
-                                      className={styles.remove}
-                                      aria-label={`Remove ${lp.lengthM} m`}
-                                      onClick={() => setItem(item.id, { lengthPrices: item.lengthPrices!.filter((_, j) => j !== li) })}
-                                    >
-                                      ✕
-                                    </button>
-                                  </li>
-                                )
-                              })}
-                            </ul>
-                            <button
-                              type="button"
-                              className={styles.secondary}
-                              onClick={() => {
-                                const longest = Math.max(0, ...item.lengthPrices!.map((r) => r.lengthM))
-                                setItem(item.id, { lengthPrices: [...item.lengthPrices!, { lengthM: Number((longest + 0.6).toFixed(1)), price: 0 }] })
-                              }}
-                            >
-                              + Length
-                            </button>
-                          </div>
-                        ) : (
-                          <label className={styles.priceField}>
-                            <span>Price (excl GST)</span>
-                            <span className={styles.money}>
-                              $
+                                      <span>m</span>
+                                      <span className={styles.money}>
+                                        $
+                                        <input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min={0}
+                                          step={0.01}
+                                          aria-label={`Price for ${lp.lengthM} m`}
+                                          value={lp.price}
+                                          onChange={(e) => {
+                                            const n = Number(e.target.value)
+                                            if (e.target.value.trim() !== "" && n >= 0) setRow({ price: n })
+                                          }}
+                                        />
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className={styles.remove}
+                                        aria-label={`Remove ${lp.lengthM} m`}
+                                        onClick={() => setItem(item.id, { lengthPrices: item.lengthPrices!.filter((_, j) => j !== li) })}
+                                      >
+                                        ✕
+                                      </button>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                              <button
+                                type="button"
+                                className={styles.secondary}
+                                onClick={() => {
+                                  const longest = Math.max(0, ...item.lengthPrices!.map((r) => r.lengthM))
+                                  setItem(item.id, { lengthPrices: [...item.lengthPrices!, { lengthM: Number((longest + 0.6).toFixed(1)), price: 0 }] })
+                                }}
+                              >
+                                + Length
+                              </button>
+                            </div>
+                          ) : (
+                            <label className={styles.priceField}>
+                              <span>Price (excl GST)</span>
+                              <span className={styles.money}>
+                                $
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={0}
+                                  step={0.01}
+                                  value={Number.isFinite(item.price) ? item.price : 0}
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value)
+                                    if (e.target.value.trim() !== "" && n >= 0) setItem(item.id, { price: n }, true)
+                                  }}
+                                />
+                              </span>
+                            </label>
+                          )}
+                          {!item.lengthPrices && (
+                            <label className={styles.unitField}>
+                              <span>Unit</span>
+                              <select value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value as PriceUnit })}>
+                                {PRICE_UNITS.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          {item.unit === "bag" && (
+                            <label className={styles.unitField}>
+                              <span>m³ per bag</span>
                               <input
                                 type="number"
                                 inputMode="decimal"
-                                min={0}
-                                step={0.01}
-                                value={Number.isFinite(item.price) ? item.price : 0}
+                                min={0.001}
+                                step={0.001}
+                                value={item.bagYieldM3 ?? 0.01}
                                 onChange={(e) => {
                                   const n = Number(e.target.value)
-                                  if (e.target.value.trim() !== "" && n >= 0) setItem(item.id, { price: n }, true)
+                                  if (n > 0) setItem(item.id, { bagYieldM3: n })
                                 }}
                               />
-                            </span>
-                          </label>
-                        )}
-                        {!item.lengthPrices && (
-                          <label className={styles.unitField}>
-                            <span>Unit</span>
-                            <select value={item.unit} onChange={(e) => setItem(item.id, { unit: e.target.value as PriceUnit })}>
-                              {PRICE_UNITS.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  {u.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                        {item.unit === "bag" && (
-                          <label className={styles.unitField}>
-                            <span>m³ per bag</span>
+                            </label>
+                          )}
+                          <label className={styles.supplierField}>
+                            <span>Supplier</span>
                             <input
-                              type="number"
-                              inputMode="decimal"
-                              min={0.001}
-                              step={0.001}
-                              value={item.bagYieldM3 ?? 0.01}
-                              onChange={(e) => {
-                                const n = Number(e.target.value)
-                                if (n > 0) setItem(item.id, { bagYieldM3: n })
-                              }}
+                              value={item.supplier ?? ""}
+                              placeholder="Optional"
+                              onChange={(e) => setItem(item.id, { supplier: e.target.value || undefined })}
                             />
                           </label>
-                        )}
-                        <label className={styles.supplierField}>
-                          <span>Supplier</span>
-                          <input
-                            value={item.supplier ?? ""}
-                            placeholder="Optional"
-                            onChange={(e) => setItem(item.id, { supplier: e.target.value || undefined })}
-                          />
-                        </label>
-                        <div className={styles.itemFoot}>
-                          <span className={stale ? styles.ageStale : styles.age}>
-                            {stale && "⚠ "}
-                            {describeAge(item)}
-                          </span>
-                          {inUse?.has(item.id) && <span className={styles.inUse}>used on this wall</span>}
-                          <span className={styles.itemButtons}>
-                            <button type="button" className={styles.secondary} onClick={() => setItem(item.id, {}, true)} title="The price is still right">
-                              Confirm
-                            </button>
-                            <button type="button" className={styles.remove} onClick={() => removeItem(item.id)} aria-label={`Remove ${item.name || "item"}`}>
-                              Remove
-                            </button>
-                          </span>
+                          <div className={styles.itemFoot}>
+                            <span className={stale ? styles.ageStale : styles.age}>
+                              {stale && "⚠ "}
+                              {describeAge(item)}
+                            </span>
+                            {inUse?.has(item.id) && <span className={styles.inUse}>used on this wall</span>}
+                            <span className={styles.itemButtons}>
+                              <button type="button" className={styles.secondary} onClick={() => setItem(item.id, {}, true)} title="The price is still right">
+                                Confirm
+                              </button>
+                              <button type="button" className={styles.remove} onClick={() => removeItem(item.id)} aria-label={`Remove ${item.name || "item"}`}>
+                                Remove
+                              </button>
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                  {!onlyStale && (
-                    <button type="button" className={styles.add} onClick={() => addItem(cat.id)}>
-                      + Add {cat.label.toLowerCase()} price
-                    </button>
-                  )}
-                  {!onlyStale && cat.id === "posts" && (
-                    <button
-                      type="button"
-                      className={styles.add}
-                      title="Round posts 150–274 SED, priced by length, from the supplier price list of 19 Nov 2026. Replaces an earlier copy of the list."
-                      onClick={() => update({ ...draft, items: withPolePriceList(draft.items) })}
-                    >
-                      {draft.items.some((i) => i.id.startsWith("pole-sed-"))
-                        ? "↻ Reset round pole prices to the supplier list"
-                        : "+ Add supplier round pole prices (150–274 SED)"}
-                    </button>
-                  )}
-                </section>
-              )
-            })}
+                      )
+                    })}
+                    {!onlyStale && (
+                      <button type="button" className={styles.add} onClick={() => addItem(cat.id)}>
+                        + Add {cat.label.toLowerCase()} price
+                      </button>
+                    )}
+                    {!onlyStale && cat.id === "posts" && (
+                      <button
+                        type="button"
+                        className={styles.add}
+                        title="Round posts 150–274 SED, priced by length, from the supplier price list of 19 Nov 2026. Replaces an earlier copy of the list."
+                        onClick={() => update({ ...draft, items: withPolePriceList(draft.items) })}
+                      >
+                        {draft.items.some((i) => i.id.startsWith("pole-sed-"))
+                          ? "↻ Reset round pole prices to the supplier list"
+                          : "+ Add supplier round pole prices (150–274 SED)"}
+                      </button>
+                    )}
+                  </section>
+                )
+              })}
+            </fieldset>
             <datalist id="priceLibraryPostSizes">
               {POST_SIZE_OPTIONS.map((s) => (
                 <option key={s} value={s} />
@@ -387,7 +397,7 @@ const PriceLibraryModal: React.FC<{
         )}
 
         {tab === "company" && (
-          <div className={styles.company}>
+          <fieldset className={`${styles.readOnlyWrap} ${styles.company}`} disabled={!signedIn}>
             <p className={styles.hint}>Printed on your proposals. Anything left blank shows as a placeholder to fill in.</p>
             {COMPANY_FIELDS.map((f) => (
               <label key={f.key} className={styles.companyField}>
@@ -408,7 +418,7 @@ const PriceLibraryModal: React.FC<{
                 )}
               </label>
             ))}
-          </div>
+          </fieldset>
         )}
 
         <div className={styles.footer}>
