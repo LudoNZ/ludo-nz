@@ -58,7 +58,7 @@ const PriceLibraryModal: React.FC<{
   library: PriceLibrary
   status: LibraryStatus
   error: string | null
-  /** an admin: can change the shared prices */
+  /** signed in: can change the library */
   canEdit: boolean
   onSave: (next: PriceLibrary) => void
   /** item ids in use on the wall being priced, to mark them */
