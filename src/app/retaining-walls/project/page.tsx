@@ -7,7 +7,16 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
-import { deleteProject, loadProject, makeProjectPublic, ProjectLocation, saveProject } from "@/components/retainingWall/wallProjectStore"
+import {
+  deleteProject,
+  loadProject,
+  makeProjectPublic,
+  newProjectId,
+  projectHref,
+  ProjectLocation,
+  saveProject,
+  saveProjectSoon,
+} from "@/components/retainingWall/wallProjectStore"
 import { activityProject, logWallActivity, logWallMilestone } from "@/components/retainingWall/wallActivity"
 import type { WallActivity } from "@/components/retainingWall/wallHistory"
 import RetainingWallEditor from "../retainingWallEditor"
@@ -233,6 +242,35 @@ const ProjectEditor = () => {
     setTimeout(() => setCopied(null), 2500)
   }
 
+  /** A private copy of this project, as it is now, in the signed-in
+   * person's own projects — then opens it. The original is left as it is. */
+  const [copying, setCopying] = useState<"idle" | "busy" | "failed">("idle")
+  const makePrivateCopy = async () => {
+    const user = auth?.currentUser
+    const wall = latest.current.wall
+    if (!user || !wall) return
+    const copyName = `${latest.current.name || "Untitled"} (my copy)`.slice(0, 100)
+    if (!window.confirm(`Make a private copy of "${latest.current.name}"? Only you will see the copy; changes to it won't affect the original.`)) return
+    setCopying("busy")
+    try {
+      const target: ProjectLocation = { kind: "private", uid: user.uid }
+      const id = newProjectId(target)
+      await saveProjectSoon(target, id, copyName, wall)
+      logWallMilestone(activityProject(target, id, copyName), "create", `Made a private copy of "${latest.current.name}"`, user)
+      if (navigator.onLine) router.push(projectHref(id))
+      else window.location.assign(projectHref(id))
+      setCopying("idle")
+    } catch (err) {
+      console.error("Making a private copy failed", err)
+      setCopying("failed")
+    }
+  }
+  const copyButton = auth?.currentUser ? (
+    <Button size="small" variant="secondary" onClick={makePrivateCopy} disabled={copying === "busy"}>
+      {copying === "busy" ? "Copying…" : copying === "failed" ? "Couldn't copy — try again" : "Make a private copy"}
+    </Button>
+  ) : null
+
   /** Moves this private project to the public ones (same id, same link). */
   const makePublic = async () => {
     const wall = latest.current.wall
@@ -312,6 +350,7 @@ const ProjectEditor = () => {
           actions={
             location.kind === "private" ? (
               <>
+                {copyButton}
                 <Button size="small" variant="secondary" onClick={makePublic} disabled={!online || publishing}>
                   {publishing ? "Making public…" : "Make public"}
                 </Button>
@@ -320,9 +359,12 @@ const ProjectEditor = () => {
                 </Button>
               </>
             ) : (
-              <Button size="small" variant="secondary" onClick={copyLink}>
-                {copied === "yes" ? "Link copied ✓" : copied === "failed" ? "Couldn't copy — use the address bar" : "Copy link"}
-              </Button>
+              <>
+                <Button size="small" variant="secondary" onClick={copyLink}>
+                  {copied === "yes" ? "Link copied ✓" : copied === "failed" ? "Couldn't copy — use the address bar" : "Copy link"}
+                </Button>
+                {copyButton}
+              </>
             )
           }
         />
