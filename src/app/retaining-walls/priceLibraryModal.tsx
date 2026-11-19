@@ -58,14 +58,13 @@ const PriceLibraryModal: React.FC<{
   library: PriceLibrary
   status: LibraryStatus
   error: string | null
-  signedIn: boolean
   /** an admin: can change the shared prices */
   canEdit: boolean
   onSave: (next: PriceLibrary) => void
   /** item ids in use on the wall being priced, to mark them */
   inUse?: Set<string>
   initialTab?: "prices" | "company"
-}> = ({ isOpen, onClose, library, status, error, signedIn, canEdit, onSave, inUse, initialTab = "prices" }) => {
+}> = ({ isOpen, onClose, library, status, error, canEdit, onSave, inUse, initialTab = "prices" }) => {
   const [draft, setDraft] = useState<PriceLibrary>(library)
   const [tab, setTab] = useState<"prices" | "company">(initialTab)
   const [onlyStale, setOnlyStale] = useState(false)
@@ -146,19 +145,15 @@ const PriceLibraryModal: React.FC<{
         </div>
 
         <p className={styles.sync}>
-          {tab === "prices"
-            ? status === "loading"
-              ? "Loading the prices…"
-              : status === "offline"
-                ? "Offline: showing the prices last loaded on this device."
-                : status === "error"
-                  ? "Couldn't load the prices; showing the last ones loaded on this device."
-                  : canEdit
-                    ? "Shared prices: every estimate uses these. Saved as you go."
-                    : "Shared prices: every estimate uses these. Only an admin can change them."
-            : signedIn
-              ? "Your own: saved to your account as you go."
-              : "Sign in to save your company details."}
+          {status === "loading"
+            ? "Loading the price library…"
+            : status === "offline"
+              ? "Offline: showing the library as last loaded on this device."
+              : status === "error"
+                ? "Couldn't load the price library; showing the last one loaded on this device."
+                : canEdit
+                  ? "The one price library: every estimate and proposal uses it. Saved as you go."
+                  : "The one price library: every estimate and proposal uses it. Only an admin can change it."}
           {error && <span className={styles.error}> {error}</span>}
         </p>
 
@@ -397,7 +392,7 @@ const PriceLibraryModal: React.FC<{
         )}
 
         {tab === "company" && (
-          <fieldset className={`${styles.readOnlyWrap} ${styles.company}`} disabled={!signedIn}>
+          <fieldset className={`${styles.readOnlyWrap} ${styles.company}`} disabled={!canEdit}>
             <p className={styles.hint}>Printed on your proposals. Anything left blank shows as a placeholder to fill in.</p>
             {COMPANY_FIELDS.map((f) => (
               <label key={f.key} className={styles.companyField}>

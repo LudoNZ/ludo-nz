@@ -828,7 +828,6 @@ const RetainingWallEditor: React.FC<{
         library={priceLibrary.library}
         status={priceLibrary.status}
         error={priceLibrary.error}
-        signedIn={priceLibrary.signedIn}
         canEdit={priceLibrary.canEdit}
         onSave={priceLibrary.save}
         inUse={new Set((estimate?.lines ?? []).flatMap((l) => (l.item ? [l.item.id] : [])))}

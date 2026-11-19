@@ -2,24 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAuth } from "@/context/auth"
-import { loadCompanyDetails, loadSharedPrices, saveCompanyDetails, saveSharedPrices } from "@/app/retaining-walls/priceLibraryActions"
-import { BLANK_COMPANY, CompanyDetails, libraryFromData, PriceItem, PriceLibrary } from "./pricing"
+import { loadPriceLibrary, savePriceLibrary } from "@/app/retaining-walls/priceLibraryActions"
+import { libraryFromData, PriceLibrary } from "./pricing"
 
-// a read-only copy of the shared prices, so an estimate still prices up on
-// site with no signal; never edited here, and replaced on every load
-const OFFLINE_COPY_KEY = "retainingWalls.sharedPrices.v1"
+// a read-only copy of the library, so an estimate still prices up on site
+// with no signal; never edited here, and replaced on every load
+const OFFLINE_COPY_KEY = "retainingWalls.sharedPrices.v2"
 
-const readOfflineCopy = (): PriceItem[] | null => {
+const readOfflineCopy = (): PriceLibrary | null => {
   try {
     const raw = localStorage.getItem(OFFLINE_COPY_KEY)
-    return raw ? libraryFromData({ items: JSON.parse(raw) }).items : null
+    return raw ? libraryFromData(JSON.parse(raw)) : null
   } catch {
     return null
   }
 }
-const writeOfflineCopy = (items: PriceItem[]) => {
+const writeOfflineCopy = (library: PriceLibrary) => {
   try {
-    localStorage.setItem(OFFLINE_COPY_KEY, JSON.stringify(items))
+    localStorage.setItem(OFFLINE_COPY_KEY, JSON.stringify(library))
   } catch {
     // storage full or blocked: prices still work while online
   }
@@ -27,43 +27,39 @@ const writeOfflineCopy = (items: PriceItem[]) => {
 
 export type LibraryStatus = "loading" | "ready" | "offline" | "error"
 
-/** The shared price library (one set of prices for everyone, kept in the
- * database; only admins can change it) plus the signed-in person's own
- * company details for their proposals. Signed out, company details
- * aren't saved. */
+/** The one price library (prices and company details), kept in the
+ * database. Everyone uses it; only admins can change it. */
 export function usePriceLibrary() {
   const auth = useAuth()
   const user = auth?.currentUser ?? null
-  const uid = user?.uid ?? null
   const canEdit = !!auth?.isAdmin
-  const [items, setItems] = useState<PriceItem[]>(() => libraryFromData(undefined).items)
-  const [company, setCompany] = useState<CompanyDetails>(BLANK_COMPANY)
+  const [library, setLibrary] = useState<PriceLibrary>(() => libraryFromData(undefined))
   const [status, setStatus] = useState<LibraryStatus>("loading")
   const [error, setError] = useState<string | null>(null)
-  const latestItems = useRef(items)
-  latestItems.current = items
+  const latest = useRef(library)
+  latest.current = library
 
-  // shared prices: for everyone, signed in or not
   useEffect(() => {
     let cancelled = false
-    // personal libraries used to be kept in the browser; clear them out
+    // older versions kept copies in the browser; clear them out
     try {
-      for (const k of Object.keys(localStorage)) if (k.startsWith("retainingWalls.priceLibrary.v1")) localStorage.removeItem(k)
+      for (const k of Object.keys(localStorage))
+        if (k.startsWith("retainingWalls.priceLibrary.v1") || k === "retainingWalls.sharedPrices.v1") localStorage.removeItem(k)
     } catch {
       // storage blocked: nothing to clear
     }
     const copy = readOfflineCopy()
-    if (copy) setItems(copy)
-    loadSharedPrices()
-      .then(({ items: fromServer }) => {
+    if (copy) setLibrary(copy)
+    loadPriceLibrary()
+      .then((fromServer) => {
         if (cancelled) return
-        setItems(fromServer)
+        setLibrary(fromServer)
         writeOfflineCopy(fromServer)
         setStatus("ready")
       })
       .catch((err) => {
         if (cancelled) return
-        console.error("Loading the shared prices failed:", err)
+        console.error("Loading the price library failed:", err)
         setStatus(navigator.onLine ? "error" : "offline")
       })
     return () => {
@@ -71,41 +67,18 @@ export function usePriceLibrary() {
     }
   }, [])
 
-  // company details: the signed-in person's own
-  useEffect(() => {
-    if (auth?.authLoading) return
-    if (!user) {
-      setCompany(BLANK_COMPANY)
-      return
-    }
-    let cancelled = false
-    user
-      .getIdToken()
-      .then(loadCompanyDetails)
-      .then((c) => !cancelled && setCompany(c))
-      .catch((err) => console.error("Loading company details failed:", err))
-    return () => {
-      cancelled = true
-    }
-  }, [auth?.authLoading, uid, user])
-
   const save = useCallback(
     async (next: PriceLibrary) => {
+      if (!user || !canEdit) return
+      setLibrary(next)
       setError(null)
-      const pricesChanged = canEdit && next.items !== latestItems.current
-      if (pricesChanged) setItems(next.items)
-      setCompany(next.company)
-      if (!user) return
       try {
-        const token = await user.getIdToken()
-        if (pricesChanged) {
-          const saved = await saveSharedPrices(token, next.items)
-          if (latestItems.current === next.items) {
-            setItems(saved)
-            writeOfflineCopy(saved)
-          }
+        const saved = await savePriceLibrary(await user.getIdToken(), next)
+        // a newer edit may have landed while this one was saving
+        if (latest.current === next) {
+          setLibrary(saved)
+          writeOfflineCopy(saved)
         }
-        await saveCompanyDetails(token, next.company)
       } catch (err) {
         console.error("Saving the price library failed:", err)
         setError(navigator.onLine ? "Couldn't save. Try again." : "You're offline: changes can't be saved until you're back online.")
@@ -114,5 +87,5 @@ export function usePriceLibrary() {
     [user, canEdit],
   )
 
-  return { library: { items, company } as PriceLibrary, status, error, save, signedIn: !!user, canEdit }
+  return { library, status, error, save, signedIn: !!user, canEdit }
 }

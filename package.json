@@ -7,7 +7,8 @@
     "build": "next build",
     "deploy": "npm run build && firebase deploy",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:prices": "npx tsx --env-file=.env.local scripts/seedPriceLibrary.ts"
   },
   "dependencies": {
     "firebase": "^11.10.0",
