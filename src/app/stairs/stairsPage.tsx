@@ -74,9 +74,24 @@ const NumberField: React.FC<{
  * wedge blocks screwed on top to make each step, and the decking boards
  * laid out on every tread (and riser, if closed) — to-scale side and plan
  * views, plus a cut list. */
-const StairsPage = () => {
-  const [input, setInput] = useState<StairInput>(DEFAULT_INPUT)
-  const set = <K extends keyof StairInput>(key: K, value: StairInput[K]) => setInput((s) => ({ ...s, [key]: value }))
+const StairsPage: React.FC<{
+  /** set when the stair is part of something else (a site project): it
+   * owns the inputs, and the page drops its own heading */
+  value?: StairInput
+  onChange?: (input: StairInput) => void
+  /** the total rise is set from outside (the height of the wall the stair
+   * comes down from) — shown read only, with why */
+  riseNote?: string
+}> = ({ value, onChange, riseNote }) => {
+  const [own, setOwn] = useState<StairInput>(DEFAULT_INPUT)
+  const input = value ?? own
+  const setInput = (next: StairInput | ((s: StairInput) => StairInput)) => {
+    const resolved = typeof next === "function" ? next(input) : next
+    if (value) onChange?.(resolved)
+    else setOwn(resolved)
+  }
+  const embedded = value !== undefined
+  const set = <K extends keyof StairInput>(key: K, v: StairInput[K]) => setInput((s) => ({ ...s, [key]: v }))
 
   const r = useMemo(() => calculateStairs(input), [input])
   const turned = input.turns.length > 0
@@ -132,28 +147,40 @@ const StairsPage = () => {
     )
 
   return (
-    <div className={styles.stairsPage}>
-      <h1>Stairs Calculator</h1>
-      <p className={styles.intro}>
-        A straight flight of deck stairs from the ground up to a deck. Set the height and it works out the fewest steps
-        that meet the Building Code, frames them on straight stringers with wedge blocks, and shows exactly where the
-        decking boards land on every tread.
-      </p>
+    <div className={embedded ? styles.embedded : styles.stairsPage}>
+      {!embedded && (
+        <>
+          <h1>Stairs Calculator</h1>
+          <p className={styles.intro}>
+            A straight flight of deck stairs from the ground up to a deck. Set the height and it works out the fewest
+            steps that meet the Building Code, frames them on straight stringers with wedge blocks, and shows exactly
+            where the decking boards land on every tread.
+          </p>
+        </>
+      )}
 
       <div className={styles.layout}>
         <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
           <fieldset>
             <legend>Stair</legend>
-            <NumberField
-              id="rise"
-              label="Total rise"
-              hint="Ground to the top of the deck boards"
-              value={input.totalRise}
-              min={100}
-              max={4000}
-              step={10}
-              onChange={(v) => set("totalRise", Math.max(100, v))}
-            />
+            {riseNote ? (
+              <div className={styles.field}>
+                <label>Total rise</label>
+                <span className={styles.hint}>{riseNote}</span>
+                <strong>{mm(input.totalRise)}</strong>
+              </div>
+            ) : (
+              <NumberField
+                id="rise"
+                label="Total rise"
+                hint="Ground to the top of the deck boards"
+                value={input.totalRise}
+                min={100}
+                max={4000}
+                step={10}
+                onChange={(v) => set("totalRise", Math.max(100, v))}
+              />
+            )}
             <div className={styles.field}>
               <label>Risers (steps up)</label>
               <span className={styles.hint}>

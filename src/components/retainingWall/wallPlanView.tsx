@@ -1,7 +1,7 @@
 "use client"
 
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
-import { useRef, useState } from "react"
+import { ReactNode, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
 import { WallProfile } from "./postProfile"
@@ -86,11 +86,18 @@ const WallPlanView: React.FC<{
   selectedObstructionId?: string | null
   onSelectObstruction?: (id: string) => void
   onObstructionChange?: (id: string, patch: Partial<Obstruction>) => void
+  /** more to draw on the plan (stairs off the wall, say), in plan metres,
+   * given the line weight and text size the plan's drawn at */
+  overlay?: (sizes: { strokeW: number; fontSize: number }) => ReactNode
+  /** points the overlay reaches, so the view fits them in too */
+  overlayPoints?: PlanPoint[]
 }> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
   onSetBayCount,
   selectedObstructionId = null,
   onSelectObstruction,
   onObstructionChange,
+  overlay,
+  overlayPoints = [],
   readOnly = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -103,7 +110,7 @@ const WallPlanView: React.FC<{
   const editing = editingWalls && !readOnly
   const dragRef = useRef<{ index: number; startClientX: number; startClientY: number; dragging: boolean } | null>(null)
 
-  const view = frozenView ?? fitViewBox(points)
+  const view = frozenView ?? fitViewBox([...points, ...overlayPoints])
   const scale = Math.max(view.w, view.h)
   const fontSize = scale * 0.028
   const strokeW = scale * 0.008
@@ -138,7 +145,7 @@ const WallPlanView: React.FC<{
     if (readOnly) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { index, startClientX: e.clientX, startClientY: e.clientY, dragging: false }
-    setFrozenView(fitViewBox(points))
+    setFrozenView(fitViewBox([...points, ...overlayPoints]))
   }
   const handlePointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current
@@ -210,7 +217,7 @@ const WallPlanView: React.FC<{
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     obDrag.current = { id, mode, pointerId: e.pointerId }
-    setFrozenView(fitViewBox(points))
+    setFrozenView(fitViewBox([...points, ...overlayPoints]))
     onSelectObstruction?.(id)
   }
   const moveObDrag = (e: React.PointerEvent) => {
@@ -337,6 +344,8 @@ const WallPlanView: React.FC<{
               </g>
             )
           })}
+
+          {overlay?.({ strokeW, fontSize })}
 
           {/* run labels, placed clear of each other and of the walls (see
               placeLabels) — on the low side where there's room */}

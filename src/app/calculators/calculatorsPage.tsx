@@ -67,6 +67,14 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     tags: ["Rise & going", "NZBC D1 aware", "Board layout", "Cut list"],
     link: "/stairs",
   },
+  {
+    id: "site-projects",
+    title: "Site Projects",
+    description:
+      "Put more than one calculator on one site — starting with stairs off a retaining wall: pin the top tread to a point along the wall and the rise comes from the wall's height there.",
+    tags: ["Wall + stairs", "Fixed top tread", "Saved projects"],
+    link: "/site-projects",
+  },
 ]
 
 // Ideas queued up for the same rule-of-thumb, real-materials-list treatment

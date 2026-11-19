@@ -24,7 +24,7 @@ import ConcreteSpeedRun from "@/components/retainingWall/concreteSpeedRun"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import WallRenderView from "@/components/retainingWall/wallRenderView"
 import NumField from "@/components/weatherboards/numField"
-import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, FixedPost, MIN_FIXED_GAP_M, postFractions, RunSpacing, WallOrderRows } from "@/components/retainingWall/postProfile"
+import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, FixedPost, MIN_FIXED_GAP_M, postFractions, RunSpacing, WallOrderRows, WallProfile } from "@/components/retainingWall/postProfile"
 import { followBayRecord, followPosts, followRecord } from "@/components/retainingWall/postFollow"
 import { Obstruction } from "@/components/retainingWall/obstructions"
 import { overridesForWall, profileForWall, PartialBoardOrder, PlacedBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
@@ -63,6 +63,29 @@ const UNDO_VISIBLE_MS = 10_000
 /** the post size box's value for "each post sized for its own height" */
 const GRADED = "__graded"
 
+/** What the editor hands an add-on: the wall as it's worked out now. */
+export interface EditorAddOnContext {
+  profile: WallProfile | null
+  planPoints: PlanPoint[]
+  retainedSide: RetainedSide
+  locked: boolean
+  /** the wall shown in the elevation, where a new thing goes */
+  shownSegment: number
+  /** what a wall's start or end post is called */
+  endName: (segmentIndex: number, which: "start" | "end") => string
+}
+
+export interface EditorAddOns {
+  /** drawn over the plan, in plan metres */
+  planOverlay?: (ctx: EditorAddOnContext, sizes: { strokeW: number; fontSize: number }) => ReactNode
+  /** points the overlay reaches, so the plan fits them in */
+  planPoints?: (ctx: EditorAddOnContext) => PlanPoint[]
+  /** cards after the obstructions */
+  cards?: (ctx: EditorAddOnContext) => ReactNode
+  /** their entries in the side rail, after Obstructions */
+  rail?: RailSection[]
+}
+
 /** The retaining wall calculator itself, with no idea where its wall is
  * kept: it starts from `initial` (read once, on mount — the caller mounts
  * it only once the wall has loaded), owns the wall from then on, and
@@ -78,7 +101,10 @@ const RetainingWallEditor: React.FC<{
   onProposalPrinted?: (label: string) => void
   /** shown in the proposal's title */
   projectName?: string
-}> = ({ initial, onChange, header, onActivity, onProposalPrinted, projectName }) => {
+  /** more on the plan, and cards after the obstructions, for things that
+   * sit on the wall from other calculators (see site projects) */
+  addOns?: EditorAddOns
+}> = ({ initial, onChange, header, onActivity, onProposalPrinted, projectName, addOns }) => {
   // the wall's shape seen from above: an open run of straight walls (A,
   // B, C…) joined at corners. Total wall length is just this unfolded.
   const [planPoints, setPlanPoints] = useState<PlanPoint[]>(initial.planPoints)
@@ -880,12 +906,15 @@ const RetainingWallEditor: React.FC<{
 
   // where the side panel can jump to — it leaves out any that aren't on
   // the page right now (no results until the wall has a height, say)
+  const addOnContext: EditorAddOnContext = { profile, planPoints, retainedSide, locked, shownSegment: shownSegment ?? 0, endName }
+
   const railSections: RailSection[] = [
     { id: "rw-top", label: "Top", icon: <TopIcon /> },
     { id: "rw-inputs", label: "Wall & ground", icon: <SlidersIcon /> },
     { id: "rw-posts-holes", label: "Posts & holes", icon: <PostHoleIcon /> },
     { id: "rw-plan", label: "Plan", icon: <PlanViewIcon /> },
     { id: "rw-obstructions", label: "Obstructions", icon: <PostHoleIcon /> },
+    ...(addOns?.rail ?? []),
     { id: "rw-elevation", label: "Elevation", icon: <ElevationIcon /> },
     { id: "rw-3d", label: "3D view", icon: <Render3DIcon /> },
     { id: "rw-materials", label: "Materials", icon: <MaterialsIcon /> },
@@ -1130,6 +1159,8 @@ const RetainingWallEditor: React.FC<{
           selectedObstructionId={selectedObstruction}
           onSelectObstruction={setSelectedObstruction}
           onObstructionChange={(id, patch) => !locked && setObstructions((list) => list.map((o) => (o.id === id ? { ...o, ...patch } : o)))}
+          overlay={addOns?.planOverlay ? (sizes) => addOns.planOverlay?.(addOnContext, sizes) : undefined}
+          overlayPoints={addOns?.planPoints?.(addOnContext)}
         />
       </div>
 
@@ -1146,6 +1177,8 @@ const RetainingWallEditor: React.FC<{
         onSelect={setSelectedObstruction}
         locked={locked}
       />
+
+      {addOns?.cards?.(addOnContext)}
 
       {!profile ? (
         <p className={styles.hint}>Enter a wall length and retained height to see a materials estimate.</p>

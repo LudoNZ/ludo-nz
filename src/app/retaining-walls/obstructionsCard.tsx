@@ -17,7 +17,7 @@ import styles from "./obstructionsCard.module.scss"
 
 /** A number box that commits when it's left (or Enter is pressed), in
  * display units: `scale` turns the stored value (m) into what's shown. */
-const UnitField: React.FC<{
+export const UnitField: React.FC<{
   id: string
   label: string
   value: number | null
