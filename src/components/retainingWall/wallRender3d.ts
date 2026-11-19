@@ -11,6 +11,7 @@
 
 import { bayCourseLayout, BoardHighlight, ProfilePost, WallProfile } from "./postProfile"
 import { CalcSettings } from "./calcSettings"
+import { OBSTRUCTION_TYPES } from "./obstructions"
 import { PlanPoint, RetainedSide, sideNormal } from "./wallPlan"
 
 type V3 = [number, number, number]
@@ -274,7 +275,11 @@ export function buildRenderScene(
   const earthFrontN = maxHalf + t
 
   const lowestGround = Math.min(...posts.map((p) => p.groundLevelM))
-  const deepest = Math.min(...posts.map((p) => p.groundLevelM - p.embedmentM))
+  const shownObstructions = options.showFootings ? profile.obstructions.filter((z) => z.onWall && runs[z.obstruction.segmentIndex]) : []
+  const deepest = Math.min(
+    ...posts.map((p) => p.groundLevelM - p.embedmentM),
+    ...shownObstructions.map((z) => z.groundLevelM - z.zoneBottomDepthM)
+  )
   const slabBottom = options.showFootings ? deepest - 0.15 : lowestGround - 0.3
 
   const items: Item[] = []
@@ -627,6 +632,40 @@ export function buildRenderScene(
       })
       items.push({ faces: prism(hole, p.groundLevelM - p.embedmentM, p.groundLevelM - 0.005, focused ? COLORS.focusConcrete : COLORS.concrete), solid: true, key: 0, layer: LAYER.footing, opacity: focused ? 0.8 : 0.55, post: p.index })
       items.push({ faces: prism(footprint, postBottom, p.groundLevelM - 0.004, focused ? COLORS.highlight : COLORS.post), solid: true, key: 1, layer: LAYER.footing, opacity: 0.8, post: p.index })
+    }
+  })
+
+  // ── obstructions in the ground, with the footings: the thing itself
+  // and a faint shell for its clearance, running out under the ground in
+  // front and the earth behind ──────────────────────────────────────
+  shownObstructions.forEach((z) => {
+    const o = z.obstruction
+    const run = runs[o.segmentIndex]
+    const th = (o.angleDeg * Math.PI) / 180
+    const along = add(scale(run.dir, Math.cos(th)), scale(run.normal, Math.sin(th)))
+    const across: V3 = [-along[1], along[0], 0]
+    const at = add(run.start, scale(run.dir, z.centreXM - run.seg.startXM))
+    const frame: RunFrame = { origin: at, dir: across, normal: along }
+    const midZ = z.groundLevelM - o.depthM - o.sizeM / 2
+    const reach = Math.max(GROUND_FRONT_M, EARTH_BACK_M) / Math.max(0.5, Math.sin(th))
+    const outline = (half: number): [number, number][] =>
+      OBSTRUCTION_TYPES[o.type].shape === "round"
+        ? Array.from({ length: 12 }, (_, k) => {
+            const a = (k / 12) * Math.PI * 2
+            return [Math.cos(a) * half, midZ + Math.sin(a) * half]
+          })
+        : [
+            [-half, midZ - half],
+            [half, midZ - half],
+            [half, midZ + half],
+            [-half, midZ + half],
+          ]
+    const color = OBSTRUCTION_TYPES[o.type].color
+    items.push({ faces: extrude(frame, outline(o.sizeM / 2), -reach, reach, color), solid: true, key: 2, layer: LAYER.footing, opacity: 0.9 })
+    if (z.clearanceM > 0) {
+      // the clearance shell, cut off at the ground
+      const shell = outline(o.sizeM / 2 + z.clearanceM).map(([u, zz]): [number, number] => [u, Math.min(zz, z.groundLevelM - 0.01)])
+      items.push({ faces: extrude(frame, shell, -reach, reach, color), solid: true, key: 3, layer: LAYER.footing, opacity: 0.18 })
     }
   })
 

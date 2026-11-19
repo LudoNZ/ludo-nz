@@ -5,7 +5,8 @@ import { createPortal } from "react-dom"
 import { CalcSettings } from "./calcSettings"
 import type { ProfileTotals, WallProfile } from "./postProfile"
 import { BLANK_COMPANY, CompanyDetails, Estimate, EstimateSettings, formatNzd, ProposalDetails } from "./pricing"
-import { PlanPoint, RetainedSide, totalLength } from "./wallPlan"
+import { PlanPoint, RetainedSide, segmentLabel, totalLength } from "./wallPlan"
+import { OBSTRUCTION_TYPES } from "./obstructions"
 import { buildRenderScene } from "./wallRender3d"
 import styles from "./proposalView.module.scss"
 
@@ -308,6 +309,66 @@ const ProposalView: React.FC<{
               ))}
             </ul>
           </section>
+
+          {profile.obstructions.length > 0 && (
+            <section className={styles.section}>
+              <h2>Services and obstructions</h2>
+              <p className={styles.obstructionNote}>
+                Known services and obstructions along the wall line, with the clearance kept round each. Posts are set
+                either side so no hole is dug within the clearance. Positions are to the centre line, along the wall.
+              </p>
+              <table className={styles.prices}>
+                <thead>
+                  <tr>
+                    <th scope="col">What</th>
+                    <th scope="col">Where</th>
+                    <th scope="col" className={styles.num}>
+                      Angle
+                    </th>
+                    <th scope="col" className={styles.num}>
+                      Depth to top
+                    </th>
+                    <th scope="col" className={styles.num}>
+                      Size
+                    </th>
+                    <th scope="col" className={styles.num}>
+                      Clearance
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profile.obstructions.map((z) => {
+                    const o = z.obstruction
+                    const count = profile.segments.length
+                    const wall = count > 1 ? `wall ${segmentLabel(o.segmentIndex)}` : "the wall"
+                    const end =
+                      o.from === "start"
+                        ? o.segmentIndex === 0
+                          ? `the start of ${wall}`
+                          : `corner ${segmentLabel(o.segmentIndex - 1)}/${segmentLabel(o.segmentIndex)}`
+                        : o.segmentIndex === count - 1
+                          ? `the end of ${wall}`
+                          : `corner ${segmentLabel(o.segmentIndex)}/${segmentLabel(o.segmentIndex + 1)}`
+                    return (
+                      <tr key={o.id}>
+                        <td>
+                          {OBSTRUCTION_TYPES[o.type].label}
+                          {o.label && <span className={styles.lineDetail}>{o.label}</span>}
+                        </td>
+                        <td>
+                          {o.distanceM.toFixed(2)} m from {end}
+                        </td>
+                        <td className={styles.num}>{o.angleDeg}°</td>
+                        <td className={styles.num}>{Math.round(o.depthM * 1000)} mm</td>
+                        <td className={styles.num}>{Math.round(o.sizeM * 1000)} mm</td>
+                        <td className={styles.num}>{Math.round(z.clearanceM * 1000)} mm</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           <section className={styles.section}>
             <h2>Price breakdown</h2>
