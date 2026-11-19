@@ -287,3 +287,20 @@
   color: #b5651d;
   text-decoration: underline;
 }
+
+// a post pinned at a set distance: a small triangle under it at ground level
+.fixedMark {
+  fill: #b5651d;
+  stroke: #fff;
+  pointer-events: none;
+}
+
+.fixedMarkSwatch {
+  width: 0;
+  height: 0;
+  display: inline-block;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #b5651d;
+  flex-shrink: 0;
+}

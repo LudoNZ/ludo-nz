@@ -24,7 +24,8 @@ import ConcreteSpeedRun from "@/components/retainingWall/concreteSpeedRun"
 import WallPlanView from "@/components/retainingWall/wallPlanView"
 import WallRenderView from "@/components/retainingWall/wallRenderView"
 import NumField from "@/components/weatherboards/numField"
-import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, RunSpacing, segmentBayCounts, WallOrderRows } from "@/components/retainingWall/postProfile"
+import { BoardHighlight, boardRowsByWall, buildWallProfile, ControlPoints, DepthPoints, FixedPost, MIN_FIXED_GAP_M, RunSpacing, segmentPostFractions, WallOrderRows } from "@/components/retainingWall/postProfile"
+import { followBayRecord, followPosts, followRecord } from "@/components/retainingWall/postFollow"
 import { overridesForWall, PartialBoardOrder, PlacedBoardOrder, WallProject } from "@/components/retainingWall/wallProject"
 import {
   PlanPoint,
@@ -123,7 +124,7 @@ const RetainingWallEditor: React.FC<{
   // keyed by post index — a post with an entry here is "set by hand"; every
   // other post rakes (linearly interpolates) between whichever of these
   // bracket it. When the post layout changes they follow their posts
-  // rather than being wiped — see the alignedCounts effect below.
+  // rather than being wiped — see the alignedLayout effect below.
   const [controlPoints, setControlPoints] = useState<ControlPoints>(initial.controlPoints)
   // hole depths set by hand, keyed by post index the same way — so they
   // follow their posts along with the hand-set levels
@@ -276,7 +277,7 @@ const RetainingWallEditor: React.FC<{
     restoringRef.current = true
     // the restored wall's hand-set levels already match its own post
     // layout; tell the follow-their-posts effect so, or it would shift them
-    alignedCounts.current = segmentBayCounts(segmentLengths(wall.planPoints), wall.retainedHeightM, wall.soil, wall.calcSettings, wall.runSpacing).join(",")
+    alignedLayout.current = JSON.stringify(segmentPostFractions(segmentLengths(wall.planPoints), wall.retainedHeightM, wall.soil, wall.calcSettings, wall.runSpacing))
     setPlanPoints(wall.planPoints)
     setRetainedSide(wall.retainedSide)
     setRetainedHeight(String(wall.retainedHeightM))
@@ -384,72 +385,37 @@ const RetainingWallEditor: React.FC<{
     onChangeRef.current(wall)
   }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, gradePostSizes, postSizes, holeDiametersMm, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
 
-  // Hand-set levels and depths are keyed by post index, so whenever the
-  // post layout changes — a wall reshaped, a post added, different soil,
-  // height or calculation settings — they have to follow their posts.
-  // `alignedCounts` is the layout (bays per wall) the keys currently
-  // match. When the layout moves on, everything on walls whose post count
-  // is unchanged from the start of the wall, or from the end, is kept
-  // (shifted to its post's new number); only posts inside the walls that
-  // actually changed are let go, since those posts have all moved.
-  const bayCountsKey = retainedHeightM > 0 ? segmentBayCounts(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing).join(",") : null
-  const alignedCounts = useRef<string | null>(bayCountsKey)
+  // Hand-set levels, depths and sizes are keyed by post index, so whenever
+  // the post layout changes — a wall reshaped, a post added or pinned,
+  // different soil, height or calculation settings — they have to follow
+  // their posts (see followPosts). `alignedLayout` is the layout (every
+  // wall's posts, as fractions along it) the keys currently match.
+  const layoutKey = retainedHeightM > 0 ? JSON.stringify(segmentPostFractions(segmentLengthsM, retainedHeightM, soil, calcSettings, runSpacing)) : null
+  const alignedLayout = useRef<string | null>(layoutKey)
   // set when a wall is added before wall A: every existing post moves along,
   // including post 0, which otherwise counts as unchanged
   const prependedRef = useRef(false)
   useEffect(() => {
-    if (bayCountsKey === null) return
-    if (alignedCounts.current === null || alignedCounts.current === bayCountsKey) {
-      alignedCounts.current = bayCountsKey
+    if (layoutKey === null) return
+    if (alignedLayout.current === null || alignedLayout.current === layoutKey) {
+      alignedLayout.current = layoutKey
       return
     }
     const prepended = prependedRef.current
     prependedRef.current = false
-    const before = alignedCounts.current.split(",").map(Number)
-    const after = bayCountsKey.split(",").map(Number)
-    alignedCounts.current = bayCountsKey
-    let prefix = 0
-    while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++
-    let suffix = 0
-    while (
-      suffix < before.length - prefix &&
-      suffix < after.length - prefix &&
-      before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-    )
-      suffix++
-    const sum = (counts: number[]) => counts.reduce((t, n) => t + n, 0)
-    // last post of the unchanged walls at the start (none if a wall was added before them)
-    const keepUpTo = prepended && prefix === 0 ? -1 : sum(before.slice(0, prefix))
-    const keepFrom = sum(before) - sum(before.slice(before.length - suffix)) // first post of the unchanged walls at the end
-    const shiftBy = sum(after) - sum(before)
-    const follow = <T,>(points: Record<number, T>): Record<number, T> => {
-      const next: Record<number, T> = {}
-      for (const [key, value] of Object.entries(points)) {
-        const i = Number(key)
-        if (i <= keepUpTo) next[i] = value as T
-        else if (i >= keepFrom) next[i + shiftBy] = value as T
-      }
-      return next
-    }
+    const map = followPosts(JSON.parse(alignedLayout.current) as number[][], JSON.parse(layoutKey) as number[][], prepended)
+    alignedLayout.current = layoutKey
+    const follow = <T,>(record: Record<number, T>): Record<number, T> => followRecord(record, map)
     setControlPoints(follow)
     setDepthPoints(follow)
     setMeasuredHoleDepthsMm(follow)
     setPostSizes(follow)
     setHoleDiametersMm(follow)
-    setSelection([])
-    // bay heights are keyed by the bay's left post, so the last bay of
-    // the unchanged walls at the start is the one *before* keepUpTo
-    setBayCourses((counts) => {
-      const next: Record<string, number> = {}
-      for (const [key, value] of Object.entries(counts)) {
-        const i = Number(key)
-        if (i < keepUpTo) next[key] = value
-        else if (i >= keepFrom) next[String(i + shiftBy)] = value
-      }
-      return next
-    })
-    setSelectedIndex(null)
-  }, [bayCountsKey])
+    setBayCourses((counts) => followBayRecord(counts, map))
+    // the open post stays open, wherever it's moved to
+    setSelection((list) => list.map(map).filter((i): i is number => i !== null))
+    setSelectedIndex((i) => (i === null ? null : map(i)))
+  }, [layoutKey])
 
   const profile = !isNaN(retainedHeightM)
     ? buildWallProfile(segmentLengthsM, retainedHeightM, soil, controlPoints, topCapEnabled, rlDatumM, calcSettings, overrides)
@@ -568,11 +534,32 @@ const RetainingWallEditor: React.FC<{
     setPlanPoints(next)
   }
 
-  /** Sets (or, with null, clears) one wall's hand-set spacing. Hand-set
-   * levels follow their posts — see the alignedCounts effect. */
+  /** Sets (or, with null, clears) one wall's hand-set post count or
+   * spacing, keeping any posts fixed on it. Hand-set levels follow their
+   * posts — see the alignedLayout effect. */
   const applyRunSpacing = (segmentIndex: number, spacing: RunSpacing | null) => {
+    const fixedPosts = runSpacing[segmentIndex]?.fixedPosts
+    setRunFor(segmentIndex, { ...(spacing ?? {}), ...(fixedPosts?.length ? { fixedPosts } : {}) })
+  }
+  /** one wall's whole spacing entry, emptied back to null */
+  const setRunFor = (segmentIndex: number, spacing: RunSpacing) => {
     if (!profile) return
-    setRunSpacing(Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? spacing : (runSpacing[i] ?? null))))
+    const tidy: RunSpacing | null = spacing.bayCount || spacing.maxSpacingM || spacing.fixedPosts?.length ? spacing : null
+    setRunSpacing(Array.from({ length: profile.segments.length }, (_, i) => (i === segmentIndex ? tidy : (runSpacing[i] ?? null))))
+  }
+  /** pins a post on a wall (slot null adds one), or with null unpins it */
+  const setFixedPost = (segmentIndex: number, slot: number | null, fixed: FixedPost | null) => {
+    const current = runSpacing[segmentIndex] ?? {}
+    const list = [...(current.fixedPosts ?? [])]
+    if (slot === null) {
+      if (fixed) list.push(fixed)
+    } else if (fixed) list[slot] = fixed
+    else list.splice(slot, 1)
+    // pinning a post keeps the wall's post count where it is, so the
+    // other posts just share out the room either side of it
+    const bays = profile ? profile.segments[segmentIndex].endPostIndex - profile.segments[segmentIndex].startPostIndex : undefined
+    const keepCount = slot === null && fixed && !current.maxSpacingM ? { bayCount: current.bayCount ?? bays } : {}
+    setRunFor(segmentIndex, { ...current, ...keepCount, fixedPosts: list })
   }
 
   // stepping: per wall, or every wall at once from the whole-wall view
@@ -604,6 +591,31 @@ const RetainingWallEditor: React.FC<{
   }
 
   const selectedPost = profile && selectedIndex !== null ? profile.posts[selectedIndex] : null
+  // the wall a post stands part way along — none for a corner or wall end,
+  // which can't be moved along the wall
+  const runOf = (index: number) => profile?.segments.find((seg) => index > seg.startPostIndex && index < seg.endPostIndex) ?? null
+  const selectedRun = selectedPost ? runOf(selectedPost.index) : null
+  /** what a wall's start or end post is called */
+  const endName = (segmentIndex: number, which: "start" | "end") => {
+    const count = profile?.segments.length ?? 1
+    const wall = count > 1 ? `wall ${segmentLabel(segmentIndex)}` : "the wall"
+    if (which === "start") return segmentIndex === 0 ? `the start of ${wall}` : `corner ${segmentLabel(segmentIndex - 1)}/${segmentLabel(segmentIndex)}`
+    return segmentIndex === count - 1 ? `the end of ${wall}` : `corner ${segmentLabel(segmentIndex)}/${segmentLabel(segmentIndex + 1)}`
+  }
+  const selectedFixed = selectedPost?.fixed ? runSpacing[selectedPost.fixed.segmentIndex]?.fixedPosts?.[selectedPost.fixed.slot] ?? null : null
+  /** pin (or move, or with null unpin) the open post, measured from `from` */
+  const pinSelected = (from: "start" | "end" | null, distanceM?: number) => {
+    if (!selectedPost || !selectedRun || locked) return
+    const slot = selectedPost.fixed?.slot ?? null
+    if (!from) {
+      if (slot !== null) setFixedPost(selectedRun.index, slot, null)
+      return
+    }
+    const here = from === "start" ? selectedPost.xM - selectedRun.startXM : selectedRun.endXM - selectedPost.xM
+    const d = Math.round((distanceM ?? here) * 1000) / 1000
+    if (!(d >= MIN_FIXED_GAP_M && d <= selectedRun.lengthM - MIN_FIXED_GAP_M)) return
+    setFixedPost(selectedRun.index, slot, { from, distanceM: d })
+  }
   // for a corner post: the wall that ends on it (the one after it is the next letter)
   const cornerBefore = selectedPost?.isCorner && profile ? profile.segments.find((seg) => seg.endPostIndex === selectedPost.index)?.index ?? null : null
   const allBlocked = profile ? profile.posts.length === profile.engineerPostIndices.length : false
@@ -1175,7 +1187,7 @@ const RetainingWallEditor: React.FC<{
                   leaves the post counts to the plan's own table */}
               {(shownSegment !== null ? [profile.segments[shownSegment]] : profile.segments.length === 1 ? profile.segments : []).map((seg) => {
                 const bays = seg.endPostIndex - seg.startPostIndex
-                const tooWide = seg.postSpacingM > seg.tableMaxSpacingM + 1e-6
+                const tooWide = seg.maxBayM > seg.tableMaxSpacingM + 1e-6
                 const setSpacing = runSpacing[seg.index]?.maxSpacingM
                 return (
                   <div key={seg.index} className={styles.spacingRow}>
@@ -1201,9 +1213,23 @@ const RetainingWallEditor: React.FC<{
                       </button>
                     </span>
                     <span className={tooWide ? styles.spacingWarn : undefined}>
-                      at {Math.round(seg.postSpacingM * 1000)}mm centres
+                      {seg.evenlySpaced ? `at ${Math.round(seg.postSpacingM * 1000)}mm centres` : `at up to ${Math.round(seg.maxBayM * 1000)}mm centres`}
                       {tooWide ? ` ⚠ over the table’s ${Math.round(seg.tableMaxSpacingM * 1000)}mm max` : ""}
                     </span>
+                    {(runSpacing[seg.index]?.fixedPosts ?? []).map((f, slot) => {
+                      const post = profile.posts.find((p) => p.fixed?.segmentIndex === seg.index && p.fixed.slot === slot)
+                      const ignored = seg.ignoredFixed.includes(slot)
+                      return (
+                        <span key={slot} className={ignored ? styles.spacingWarn : undefined}>
+                          📌 {post ? `#${post.index + 1} ` : ""}
+                          {f.distanceM.toFixed(2)} m from {endName(seg.index, f.from)}
+                          {ignored ? " ⚠ not used — past the end of the wall, or too close to another post" : ""}{" "}
+                          <button type="button" className={styles.inlineLink} onClick={() => setFixedPost(seg.index, slot, null)}>
+                            unfix
+                          </button>
+                        </span>
+                      )
+                    })}
                     <label className={styles.spacingField}>
                       Max spacing (mm)
                       <input
@@ -1409,6 +1435,49 @@ const RetainingWallEditor: React.FC<{
                           Use {selectedPost.sizeLabel} for the rest of this wall
                         </button>
                       </p>
+                    )}
+                    {selectedRun && (
+                      <>
+                        <div className={styles.editFields}>
+                          <div className={styles.field}>
+                            <label htmlFor="postFixed">Position along the wall</label>
+                            <select id="postFixed" value={selectedFixed?.from ?? ""} onChange={(e) => pinSelected((e.target.value || null) as "start" | "end" | null)}>
+                              <option value="">Not fixed — spread out evenly</option>
+                              <option value="start">Fixed — measured from {endName(selectedRun.index, "start")}</option>
+                              <option value="end">Fixed — measured from {endName(selectedRun.index, "end")}</option>
+                            </select>
+                          </div>
+                          {selectedFixed && (
+                            <div className={styles.field}>
+                              <label htmlFor="postFixedAt">Distance, centre to centre (m)</label>
+                              <input
+                                id="postFixedAt"
+                                key={`fixed-${selectedPost.index}-${selectedFixed.from}-${selectedFixed.distanceM}`}
+                                type="number"
+                                step={0.01}
+                                min={MIN_FIXED_GAP_M}
+                                inputMode="decimal"
+                                defaultValue={selectedFixed.distanceM}
+                                onBlur={(e) => {
+                                  const d = parseFloat(e.target.value)
+                                  if (d > 0 && d !== selectedFixed.distanceM) pinSelected(selectedFixed.from, d)
+                                  else e.target.value = String(selectedFixed.distanceM)
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") e.currentTarget.blur()
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <p className={styles.cornerNote}>
+                          {(selectedPost.xM - selectedRun.startXM).toFixed(3)} m from {endName(selectedRun.index, "start")},{" "}
+                          {(selectedRun.endXM - selectedPost.xM).toFixed(3)} m from {endName(selectedRun.index, "end")}.{" "}
+                          {selectedFixed
+                            ? "This post stays put; the posts either side of it share out the room evenly. Changing the wall's far end doesn't move it."
+                            : "Fix it to hold it at a set distance from either end — say to land a post clear of a pipe — and the posts either side share out the room evenly."}
+                        </p>
+                      </>
                     )}
                     </fieldset>
                     {selectedPost.isCorner && (

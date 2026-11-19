@@ -249,6 +249,14 @@ const WallProfileDiagram: React.FC<{
                     className={p.depthSet === "rake" ? styles.depthDotRake : styles.depthDotLone}
                   />
                 )}
+                {/* pinned at a set distance: a pin head over the post */}
+                {p.fixed && (
+                  <path
+                    d={`M ${px} ${y(p.groundLevelM) + fontSize * 0.05} l ${-fontSize * 0.25} ${fontSize * 0.45} h ${fontSize * 0.5} z`}
+                    className={styles.fixedMark}
+                    strokeWidth={strokeW * 0.4}
+                  />
+                )}
                 {p.isCorner && (
                   <rect
                     x={px - strokeW * 3}
@@ -478,6 +486,11 @@ const WallProfileDiagram: React.FC<{
           <span>
             <span className={`${styles.swatch} ${styles.stepSwatch}`} /> Step in the top of the wall — courses up (+) or
             down (−) at the post
+          </span>
+        )}
+        {profile.posts.some((p) => p.fixed) && (
+          <span>
+            <span className={styles.fixedMarkSwatch} /> Post fixed at a set distance from a corner or wall end
           </span>
         )}
         <span>

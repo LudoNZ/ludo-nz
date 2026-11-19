@@ -57,8 +57,14 @@ export interface ProfileSegment {
   startXM: number
   endXM: number
   lengthM: number
-  /** m, this run's own even post centres */
+  /** m, this run's average post centres (its length over its bays) */
   postSpacingM: number
+  /** m, its widest bay */
+  maxBayM: number
+  /** true when every bay is the same width (nothing forces a post in) */
+  evenlySpaced: boolean
+  /** fixed posts (slots in RunSpacing.fixedPosts) that couldn't be used */
+  ignoredFixed: number[]
   /** m, the widest centres the reference table allows here */
   tableMaxSpacingM: number
   /** bays the table alone would give this run */
@@ -91,6 +97,9 @@ export interface ProfilePost {
   retainedHeightM: number
   isControlPoint: boolean
   isCorner: boolean
+  /** set when this post is pinned at a distance from one end of its run:
+   * which run, and its slot in that run's RunSpacing.fixedPosts */
+  fixed: { segmentIndex: number; slot: number } | null
   /** true if this post's local retained height is outside DIY territory
    * (over the limit, or <= 0) — its own numbers below are still computed
    * (so the diagram can draw it and flag it), but it's excluded from every
@@ -245,6 +254,94 @@ export interface BoardLayerSummary {
 export interface RunSpacing {
   bayCount?: number
   maxSpacingM?: number
+  /** posts pinned at a set distance from one end of the run — the posts
+   * between them (and the run's ends) are spread evenly as usual */
+  fixedPosts?: FixedPost[]
+}
+
+/** A post held at `distanceM` from the run's start or end post, measured
+ * centre to centre. Measured from one chosen end, so changing the far
+ * end of the wall leaves it where it is. */
+export interface FixedPost {
+  from: "start" | "end"
+  distanceM: number
+}
+
+/** closest two pinned posts can be, or one to a run's end post */
+export const MIN_FIXED_GAP_M = 0.1
+
+/** A post forced in at a set place along a run, either pinned by hand
+ * (`fixed`, its slot in RunSpacing.fixedPosts) or put in to keep clear of
+ * something in the ground (`clear`, the obstruction's id). */
+export type RunAnchorTag = { kind: "fixed"; slot: number } | { kind: "clear"; obstructionId: string }
+
+export interface RunLayout {
+  /** m from the run's start, every post after its first — the last one
+   * is the run's end post, at its full length */
+  offsetsM: number[]
+  /** in step with offsetsM: why that post is where it is, if it's forced */
+  tags: (RunAnchorTag | null)[]
+  /** slots of fixed posts that couldn't be used: past the end of the
+   * run, or too close to its end or to another fixed post */
+  ignoredFixed: number[]
+}
+
+/** Where the posts go along one straight run: forced posts (pinned by
+ * hand, or put in either side of an obstruction) split it into stretches,
+ * and each stretch is spread out evenly — no wider than the spacing in
+ * force, or, with a post count set, that many bays shared out so the
+ * widest bay is as narrow as it can be. */
+export function layoutRun(
+  lengthM: number,
+  tableMaxSpacingM: number,
+  spacing: RunSpacing | null | undefined,
+  extraAnchors: { atM: number; tag: RunAnchorTag }[] = []
+): RunLayout {
+  const wanted: { atM: number; tag: RunAnchorTag }[] = [
+    ...(spacing?.fixedPosts ?? []).map((f, slot) => ({
+      atM: f.from === "end" ? lengthM - f.distanceM : f.distanceM,
+      tag: { kind: "fixed", slot } as RunAnchorTag,
+    })),
+    ...extraAnchors,
+  ].sort((a, b) => a.atM - b.atM)
+  const anchors: { atM: number; tag: RunAnchorTag }[] = []
+  const ignoredFixed: number[] = []
+  for (const a of wanted) {
+    const prev = anchors.length ? anchors[anchors.length - 1].atM : 0
+    const ok = Number.isFinite(a.atM) && a.atM - prev >= MIN_FIXED_GAP_M - 1e-9 && lengthM - a.atM >= MIN_FIXED_GAP_M - 1e-9
+    if (ok) anchors.push(a)
+    else if (a.tag.kind === "fixed") ignoredFixed.push(a.tag.slot)
+  }
+  const breaks = [0, ...anchors.map((a) => a.atM), lengthM]
+  const spans = breaks.slice(1).map((b, i) => b - breaks[i])
+
+  let bays: number[]
+  if (spacing?.bayCount && spacing.bayCount >= 1) {
+    // that many bays in all (at least one per stretch), each one added
+    // where it narrows the widest bay most
+    const total = Math.min(MAX_RUN_BAYS, Math.max(spans.length, Math.round(spacing.bayCount)))
+    bays = spans.map(() => 1)
+    for (let n = spans.length; n < total; n++) {
+      let widest = 0
+      spans.forEach((len, i) => {
+        if (len / bays[i] > spans[widest] / bays[widest] + 1e-9) widest = i
+      })
+      bays[widest]++
+    }
+  } else {
+    const maxM = spacing?.maxSpacingM && spacing.maxSpacingM > 0 ? spacing.maxSpacingM : tableMaxSpacingM
+    bays = spans.map((len) => Math.min(MAX_RUN_BAYS, bayCountFor(len, maxM)))
+  }
+
+  const offsetsM: number[] = []
+  const tags: (RunAnchorTag | null)[] = []
+  spans.forEach((len, i) => {
+    for (let k = 1; k <= bays[i]; k++) {
+      offsetsM.push(k === bays[i] ? breaks[i + 1] : breaks[i] + (len * k) / bays[i])
+      tags.push(k === bays[i] && i < anchors.length ? anchors[i].tag : null)
+    }
+  })
+  return { offsetsM, tags, ignoredFixed }
 }
 
 /** most bays a single run can be given by hand */
@@ -376,7 +473,8 @@ interface ResolvedLevel {
 }
 
 /** Resolves post `i`'s ground/top level: its own control point if it has
- * one, else linearly interpolated between the nearest control points
+ * one, else linearly interpolated (by distance along the wall, `postXs`)
+ * between the nearest control points
  * bracketing it, else held flat at whichever single control point is
  * nearest, else the uniform default if there are no control points at
  * all yet. `sortedCpIndices` must be sorted ascending.
@@ -388,7 +486,8 @@ function resolveLevel(
   i: number,
   controlPoints: ControlPoints,
   sortedCpIndices: number[],
-  retainedHeightM: number
+  retainedHeightM: number,
+  postXs: number[]
 ): ResolvedLevel {
   const same = (c: ControlPoint): ResolvedLevel => ({ groundLevelM: c.groundLevelM, topLevelM: c.topLevelM, topAfterLevelM: c.topLevelM })
   if (controlPoints[i]) {
@@ -411,7 +510,9 @@ function resolveLevel(
     return same({ ...cp, topLevelM: cp.topAfterLevelM ?? cp.topLevelM })
   }
 
-  const t = (i - before) / (after - before)
+  // by distance along the wall, so a wide bay rises (or falls) more than a narrow one
+  const span = postXs[after] - postXs[before]
+  const t = span > 0 ? (postXs[i] - postXs[before]) / span : (i - before) / (after - before)
   const cpBefore = controlPoints[before]
   const cpAfter = controlPoints[after]
   const fromTop = cpBefore.topAfterLevelM ?? cpBefore.topLevelM
@@ -691,12 +792,6 @@ function planBoardLayers(
  * spacing from tipping into one extra bay on floating-point noise. */
 const bayCountFor = (lengthM: number, maxSpacingM: number): number => Math.max(1, Math.ceil(lengthM / maxSpacingM - 1e-9))
 
-const resolveBayCount = (lengthM: number, tableMaxSpacingM: number, spacing: RunSpacing | null | undefined): number => {
-  if (spacing?.bayCount && spacing.bayCount >= 1) return Math.min(MAX_RUN_BAYS, Math.round(spacing.bayCount))
-  if (spacing?.maxSpacingM && spacing.maxSpacingM > 0) return Math.min(MAX_RUN_BAYS, bayCountFor(lengthM, spacing.maxSpacingM))
-  return bayCountFor(lengthM, tableMaxSpacingM)
-}
-
 /** Bay count per run for a given shape — two shapes with the same counts
  * have the same post indices, so hand-set post levels (keyed by index)
  * stay valid when moving between them. */
@@ -712,7 +807,25 @@ export function segmentBayCounts(
   return segmentLengthsM
     .map((l, i) => ({ l, spacing: runSpacing?.[i] }))
     .filter((r) => r.l > 0)
-    .map((r) => resolveBayCount(r.l, maxSpacingM, r.spacing))
+    .map((r) => layoutRun(r.l, maxSpacingM, r.spacing).offsetsM.length)
+}
+
+/** Every run's posts as fractions of the way along it (0 to 1, the
+ * run's start post first) — the post layout to compare when deciding
+ * how hand-set values follow their posts after a change. */
+export function segmentPostFractions(
+  segmentLengthsM: number[],
+  retainedHeightM: number,
+  soil: SoilType,
+  settings: CalcSettings,
+  runSpacing: (RunSpacing | null | undefined)[] | null = null
+): number[][] {
+  if (!(retainedHeightM > 0)) return []
+  const { maxSpacingM } = findReferenceRow(settings, Math.min(retainedHeightM, ENGINEER_HEIGHT_LIMIT_M), soil)
+  return segmentLengthsM
+    .map((l, i) => ({ l, spacing: runSpacing?.[i] }))
+    .filter((r) => r.l > 0)
+    .map((r) => [0, ...layoutRun(r.l, maxSpacingM, r.spacing).offsetsM.map((x) => Math.round((x / r.l) * 1e5) / 1e5)])
 }
 
 /** Rebuilds a plan for a design saved before plans existed: a straight
@@ -780,6 +893,7 @@ export function buildWallProfile(
   // run's last (the shared corner post), so only the very first run
   // contributes its own starting post
   const postXs: number[] = [0]
+  const fixedAt = new Map<number, { segmentIndex: number; slot: number }>()
   const cornerIndices = new Set<number>()
   const segments: ProfileSegment[] = []
   let runStartXM = 0
@@ -787,15 +901,25 @@ export function buildWallProfile(
     const spacing = runsIn[index].spacing
     const stepped = Boolean(runsIn[index].stepped)
     const tableBayCount = bayCountFor(lengthM, layoutRow.maxSpacingM)
-    const bayCount = resolveBayCount(lengthM, layoutRow.maxSpacingM, spacing)
+    const layout = layoutRun(lengthM, layoutRow.maxSpacingM, spacing)
+    const bayCount = layout.offsetsM.length
     const startPostIndex = postXs.length - 1
-    for (let k = 1; k <= bayCount; k++) postXs.push(runStartXM + (lengthM * k) / bayCount)
+    const xs = [0, ...layout.offsetsM]
+    layout.offsetsM.forEach((x, k) => {
+      postXs.push(runStartXM + x)
+      const tag = layout.tags[k]
+      if (tag?.kind === "fixed") fixedAt.set(postXs.length - 1, { segmentIndex: index, slot: tag.slot })
+    })
     const endPostIndex = postXs.length - 1
+    const bayWidths = xs.slice(1).map((x, k) => x - xs[k])
     segments.push({ index, startPostIndex, endPostIndex, startXM: runStartXM, endXM: runStartXM + lengthM, lengthM,
       postSpacingM: lengthM / bayCount,
+      maxBayM: Math.max(...bayWidths),
+      evenlySpaced: Math.max(...bayWidths) - Math.min(...bayWidths) < 0.0005,
+      ignoredFixed: layout.ignoredFixed,
       tableMaxSpacingM: layoutRow.maxSpacingM,
       tableBayCount,
-      spacingOverridden: Boolean((spacing?.bayCount && spacing.bayCount >= 1) || (spacing?.maxSpacingM && spacing.maxSpacingM > 0)),
+      spacingOverridden: Boolean((spacing?.bayCount && spacing.bayCount >= 1) || (spacing?.maxSpacingM && spacing.maxSpacingM > 0) || spacing?.fixedPosts?.length),
       stepped,
       stepsEdited: false,
     })
@@ -826,7 +950,7 @@ export function buildWallProfile(
     .sort((a, b) => a - b)
 
   const posts: ProfilePost[] = Array.from({ length: postCount }, (_, i) => {
-    const resolved = resolveLevel(i, effectiveControlPoints, sortedCpIndices, retainedHeightM)
+    const resolved = resolveLevel(i, effectiveControlPoints, sortedCpIndices, retainedHeightM, postXs)
     const groundLevelM = resolved.groundLevelM
     const topBeforeM = resolved.topLevelM
     const topAfterM = cornerIndices.has(i) ? resolved.topAfterLevelM : resolved.topLevelM
@@ -859,6 +983,7 @@ export function buildWallProfile(
       retainedHeightM: localHeightM,
       isControlPoint: Boolean(controlPoints[i]),
       isCorner: cornerIndices.has(i),
+      fixed: fixedAt.get(i) ?? null,
       needsEngineer,
       sizeLabel,
       widthM,

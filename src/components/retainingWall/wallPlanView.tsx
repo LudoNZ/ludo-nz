@@ -212,15 +212,18 @@ const WallPlanView: React.FC<{
             const at = pointAtDistance(points, post.xM)
             const size = postSize(post.widthM)
             return (
-              <rect
-                key={`post-${post.index}`}
-                x={at.xM - size / 2}
-                y={at.yM - size / 2}
-                width={size}
-                height={size}
-                className={post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post}
-                strokeWidth={strokeW * 0.4}
-              />
+              <g key={`post-${post.index}`}>
+                <rect
+                  x={at.xM - size / 2}
+                  y={at.yM - size / 2}
+                  width={size}
+                  height={size}
+                  className={post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post}
+                  strokeWidth={strokeW * 0.4}
+                />
+                {/* a post pinned at a set distance: ringed */}
+                {post.fixed && <circle cx={at.xM} cy={at.yM} r={size * 1.1} className={styles.postFixedRing} strokeWidth={strokeW * 0.5} />}
+              </g>
             )
           })}
 

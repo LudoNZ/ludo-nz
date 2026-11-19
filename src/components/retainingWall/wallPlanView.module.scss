@@ -443,3 +443,10 @@
     }
   }
 }
+
+// a post pinned at a set distance from a corner or wall end
+.postFixedRing {
+  fill: none;
+  stroke: #b5651d;
+  pointer-events: none;
+}

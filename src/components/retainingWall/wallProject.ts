@@ -175,9 +175,14 @@ const isPoint = (p: unknown): p is PlanPoint =>
 
 const runSpacingFromData = (raw: unknown): RunSpacing | null => {
   const r = (typeof raw === "object" && raw !== null ? raw : {}) as RunSpacing
-  if (typeof r.bayCount === "number" && r.bayCount >= 1) return { bayCount: Math.round(r.bayCount) }
-  if (typeof r.maxSpacingM === "number" && r.maxSpacingM > 0) return { maxSpacingM: r.maxSpacingM }
-  return null
+  const out: RunSpacing = {}
+  if (typeof r.bayCount === "number" && r.bayCount >= 1) out.bayCount = Math.round(r.bayCount)
+  else if (typeof r.maxSpacingM === "number" && r.maxSpacingM > 0) out.maxSpacingM = r.maxSpacingM
+  const fixed = (Array.isArray(r.fixedPosts) ? r.fixedPosts : []).filter(
+    (f) => typeof f === "object" && f !== null && (f.from === "start" || f.from === "end") && typeof f.distanceM === "number" && f.distanceM > 0
+  )
+  if (fixed.length) out.fixedPosts = fixed.map((f) => ({ from: f.from, distanceM: f.distanceM }))
+  return Object.keys(out).length ? out : null
 }
 
 /** Reads a stored wall defensively — anything missing or malformed falls
