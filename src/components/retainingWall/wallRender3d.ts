@@ -37,6 +37,9 @@ export interface RenderPolygon {
   opacity?: number
   /** the post this face belongs to (post or footing), for tapping */
   post?: number
+  /** part of an obstruction's clearance shell: shown on screen, left off
+   * printouts so only the thing itself is drawn */
+  clearance?: boolean
 }
 
 export interface RenderScene {
@@ -154,6 +157,8 @@ interface Item {
   opacity?: number
   /** the post it belongs to, passed through to its polygons */
   post?: number
+  /** an obstruction's clearance shell, passed through to its polygons */
+  clearance?: boolean
 }
 
 /** a convex solid: point each face's winding outward from the middle */
@@ -664,7 +669,7 @@ export function buildRenderScene(
     if (z.clearanceM > 0) {
       // the clearance shell, cut off at the ground
       const shell = outline(o.sizeM / 2 + z.clearanceM).map(([u, zz]): [number, number] => [u, Math.min(zz, z.groundLevelM - 0.01)])
-      items.push({ faces: extrude(frame, shell, -reach, reach, color), solid: true, key: 3, layer: LAYER.footing, opacity: 0.22 })
+      items.push({ faces: extrude(frame, shell, -reach, reach, color), solid: true, key: 3, layer: LAYER.footing, opacity: 0.22, clearance: true })
     }
     // marked out on the ground over it, like service paint: on the low
     // side at the ground, behind the wall on the retained earth
@@ -896,7 +901,7 @@ export function buildRenderScene(
         minY = Math.min(minY, y)
         maxY = Math.max(maxY, y)
       })
-      polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke, opacity: it.opacity, post: it.post })
+      polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke, opacity: it.opacity, post: it.post, clearance: it.clearance })
     })
   })
   if (!polygons.length) return null

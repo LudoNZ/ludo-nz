@@ -291,7 +291,8 @@ const ProposalView: React.FC<{
                   </linearGradient>
                 </defs>
                 <rect x={scene.viewBox.x} y={scene.viewBox.y} width={scene.viewBox.w} height={scene.viewBox.h} fill="url(#proposalSky)" />
-                {scene.polygons.map((poly, i) => (
+                {/* the proposal prints: obstructions without their clearance shell */}
+                {scene.polygons.filter((poly) => !poly.clearance).map((poly, i) => (
                   <polygon key={i} points={poly.points} fill={poly.fill} stroke={poly.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" opacity={poly.opacity} />
                 ))}
               </svg>

@@ -155,6 +155,7 @@ Show footings
                 strokeWidth={strokeW}
                 strokeLinejoin="round"
                 opacity={p.opacity}
+                className={p.clearance ? styles.clearance : undefined}
                 onClick={onSelectPost && p.post !== undefined ? () => onSelectPost(p.post!) : undefined}
                 style={onSelectPost && p.post !== undefined ? { cursor: "pointer" } : undefined}
               />

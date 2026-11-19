@@ -119,6 +119,11 @@
       object-fit: contain;
     }
 
+    // obstructions print as just the thing itself, not its clearance shell
+    .printArea .clearance {
+      visibility: hidden;
+    }
+
     .caption {
       display: block;
       text-align: center;
