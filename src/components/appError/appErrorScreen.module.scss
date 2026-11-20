@@ -1,0 +1,57 @@
+.root {
+  max-width: 34rem;
+  margin: 3rem auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.title {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.lead {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.primary,
+.secondary {
+  min-height: 2.5rem;
+  padding: 0 1.1rem;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--color-primary, #137a22);
+  color: #fff;
+}
+
+.secondary {
+  border: 1px solid var(--color-primary, #137a22);
+  background: none;
+  color: inherit;
+}
+
+.details {
+  font-size: 0.8rem;
+  opacity: 0.75;
+
+  code {
+    display: block;
+    margin-top: 0.4rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
