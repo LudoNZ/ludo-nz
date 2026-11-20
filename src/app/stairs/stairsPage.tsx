@@ -111,15 +111,15 @@ const StairsPage: React.FC<{
 
   const complianceText =
     r.compliance === "main"
-      ? `Meets ${MAIN_PRIVATE.label.toLowerCase()} limits (rise ≤ ${MAIN_PRIVATE.maxRise}, going ≥ ${MAIN_PRIVATE.minGoing}, ≤ ${MAIN_PRIVATE.maxPitchDeg}°, 2R + G ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max}).`
+      ? `Meets ${MAIN_PRIVATE.label.toLowerCase()} limits (rise ≤ ${MAIN_PRIVATE.maxRise}, run ≥ ${MAIN_PRIVATE.minGoing}, ≤ ${MAIN_PRIVATE.maxPitchDeg}°, 2 × rise + run ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max}).`
       : r.compliance === "service"
-        ? `Only OK as a service stair (rise ≤ ${SERVICE.maxRise}, going ≥ ${SERVICE.minGoing}, ≤ ${SERVICE.maxPitchDeg}°) — ${r.serviceNotes.join("; ")}. A service stair is one that isn't the main way up, e.g. down to a back yard, shed or plant area. Not for the main entrance stair.`
+        ? `Only OK as a service stair (rise ≤ ${SERVICE.maxRise}, run ≥ ${SERVICE.minGoing}, ≤ ${SERVICE.maxPitchDeg}°) — ${r.serviceNotes.join("; ")}. A service stair is one that isn't the main way up, e.g. down to a back yard, shed or plant area. Not for the main entrance stair.`
         : `Doesn't meet the Building Code even as a service stair: ${r.failures.join("; ")}.`
 
   const notes: string[] = []
   if (rip && rip.width < MIN_RIP)
     notes.push(
-      `The back board on each tread is ripped to only ${mm(rip.width)} — too thin to fix well. Change the nosing or going so boards fit.`,
+      `The back board on each tread is ripped to only ${mm(rip.width)} — too thin to fix well. Change the nosing or run so boards fit.`,
     )
   if (riserRip && riserRip.width < MIN_RIP)
     notes.push(
@@ -166,6 +166,7 @@ const StairsPage: React.FC<{
         <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
           <fieldset>
             <legend>Stair</legend>
+            <div className={styles.pair}>
             {riseNote ? (
               <div className={styles.field}>
                 <label>Total rise</label>
@@ -184,6 +185,21 @@ const StairsPage: React.FC<{
                 onChange={(v) => set("totalRise", Math.max(100, v))}
               />
             )}
+            {!layout && r.treads > 0 && (
+              // the run of every step together: setting it sets each
+              // step's run (to the whole mm), so the two stay in step
+              <NumberField
+                id="totalRun"
+                label="Total run"
+                hint={`Across ${r.treads} tread${r.treads === 1 ? "" : "s"}; sets each step's run`}
+                value={r.totalRun}
+                min={100 * r.treads}
+                max={450 * r.treads}
+                step={10}
+                onChange={(v) => set("going", Math.max(100, Math.round(v / r.treads)))}
+              />
+            )}
+            </div>
             <div className={styles.field}>
               <label>Risers (steps up)</label>
               <span className={styles.hint}>
@@ -228,7 +244,7 @@ const StairsPage: React.FC<{
                   <dd>{mm(r.rise)}</dd>
                 </div>
                 <div className={styles[levelOf(r.going, MAIN_PRIVATE.minGoing, SERVICE.minGoing, "min")]}>
-                  <dt>Going</dt>
+                  <dt>Run</dt>
                   <dd>{mm(r.going)}</dd>
                 </div>
                 <div>
@@ -236,7 +252,7 @@ const StairsPage: React.FC<{
                   <dd>{r.treads}</dd>
                 </div>
                 <div>
-                  <dt>{layout ? "Footprint" : "Run"}</dt>
+                  <dt>{layout ? "Footprint" : "Total run"}</dt>
                   <dd>
                     {layout
                       ? `${((layout.bbox.maxX - layout.bbox.minX) / 1000).toFixed(1)}×${((layout.bbox.maxY - layout.bbox.minY) / 1000).toFixed(1)}`
@@ -247,7 +263,7 @@ const StairsPage: React.FC<{
             </div>
             <NumberField
               id="going"
-              label="Going"
+              label="Run (each step)"
               hint={`Front to back of each step, nosing to nosing — min ${MAIN_PRIVATE.minGoing} (${SERVICE.minGoing} service)`}
               value={input.going}
               min={150}
@@ -291,8 +307,8 @@ const StairsPage: React.FC<{
                 {outer
                   ? `Just the two outside stringers, with wedge blocks. Between them a joist at each riser runs from the top of its tread down to ${NOG_DEPTH} mm below the tread beneath, so ${NOG_DEPTH} mm nogs fit between the joists for the boards to fix to.`
                   : stacked
-                  ? "A flat, level frame for each step, running all the way back to the deck. Each one sits on the frame below and is one going shorter. Best for small stairs."
-                  : "An uncut stringer at the stair's pitch, with a right-angle triangle block (rise × going) fixed on top for each tread."}
+                  ? "A flat, level frame for each step, running all the way back to the deck. Each one sits on the frame below and is one step's run shorter. Best for small stairs."
+                  : "An uncut stringer at the stair's pitch, with a right-angle triangle block (rise × run) fixed on top for each tread."}
               </span>
             </div>
             <div className={styles.row}>
@@ -449,7 +465,7 @@ const StairsPage: React.FC<{
         <div className={styles.results}>
           <div className={`${styles.compliance} ${styles[r.compliance]}`}>
             <strong>
-              {r.risers} risers of {mm(r.rise)} · {r.treads} treads of {mm(r.going)} · {m(r.totalRun)} run ·{" "}
+              {r.risers} risers of {mm(r.rise)} · {r.treads} treads of {mm(r.going)} · {m(r.totalRun)} total run ·{" "}
               {r.pitchDeg.toFixed(1)}°
             </strong>
             <p>{complianceText}</p>
@@ -541,9 +557,9 @@ const StairsPage: React.FC<{
                 title="Steps"
                 rows={[
                   { label: "Rise", value: `${r.risers} × ${mm(r.rise)}` },
-                  { label: "Going", value: mm(r.going) },
+                  { label: "Run", value: mm(r.going) },
                   { label: "Pitch", value: `${r.pitchDeg.toFixed(1)}°` },
-                  { label: "2R + G", value: mm(r.twoRPlusG) },
+                  { label: "2 × rise + run", value: mm(r.twoRPlusG) },
                   {
                     label: "Longest climb",
                     value: `${m(layout.maxRiseBetweenLandings)} between landings`,
@@ -579,8 +595,8 @@ const StairsPage: React.FC<{
                             label: "Levels",
                             value: t.regions.map((g) => `+${Math.round(g.height)}`).join(", "),
                           },
-                          { label: "Going at centre", value: mm(t.regions[0].going) },
-                          { label: "Going at outside", value: mm(t.regions[0].outerGoing) },
+                          { label: "Run at centre", value: mm(t.regions[0].going) },
+                          { label: "Run at outside", value: mm(t.regions[0].outerGoing) },
                         ]),
                     {
                       label: "Platform",
@@ -600,7 +616,7 @@ const StairsPage: React.FC<{
                   note={
                     t.spec.kind === "landing"
                       ? `A platform: a frame of ${t.joistDepth} × ${input.stringerThickness} round the outside with joists at the board-span spacing inside, on ${POST_SIZE} × ${POST_SIZE} H5 posts set ${POST_EMBED} mm in concrete at the corners (and no more than 1.2 m apart). Landings want to be at least as wide as the stair and 900 mm long.`
-                      : `The bottom winder is a platform covering the whole turn, on posts like a landing. Each winder above is a frame ${mm(r.rise)} high sitting on the one below, covering its own tread and every winder after it, so the winders stack up like the stacked-frames stair. Winder goings are taken at the centre of the stair width (the pitch line). They converge to a point at the inside corner, which wants a newel post. Check winder rules against D1/AS1.`
+                      : `The bottom winder is a platform covering the whole turn, on posts like a landing. Each winder above is a frame ${mm(r.rise)} high sitting on the one below, covering its own tread and every winder after it, so the winders stack up like the stacked-frames stair. Winder runs are taken at the centre of the stair width (the pitch line). They converge to a point at the inside corner, which wants a newel post. Check winder rules against D1/AS1.`
                   }
                   noteToggle
                 />
@@ -633,10 +649,10 @@ const StairsPage: React.FC<{
                 title="Steps"
                 rows={[
                   { label: "Rise", value: `${r.risers} × ${mm(r.rise)}` },
-                  { label: "Going", value: `${r.treads} × ${mm(r.going)}` },
+                  { label: "Run", value: `${r.treads} × ${mm(r.going)}` },
                   { label: "Total run", value: mm(r.totalRun) },
                   { label: "Pitch", value: `${r.pitchDeg.toFixed(1)}°` },
-                  { label: "2R + G", value: mm(r.twoRPlusG) },
+                  { label: "2 × rise + run", value: mm(r.twoRPlusG) },
                 ]}
                 note="The top riser steps up onto the deck itself, so there's one fewer tread than risers."
                 noteToggle
@@ -844,9 +860,9 @@ const StairsPage: React.FC<{
       />
 
       <p className={styles.disclaimer}>
-        Rise and going limits are from NZ Building Code clause D1 (D1/AS1): main private stairs max{" "}
-        {MAIN_PRIVATE.maxRise} mm rise and min {MAIN_PRIVATE.minGoing} mm going. Service stairs, ones that aren&apos;t
-        the main way up, are allowed up to {SERVICE.maxRise} mm rise and down to {SERVICE.minGoing} mm going. Use that
+        Rise and run limits are from NZ Building Code clause D1 (D1/AS1): main private stairs max{" "}
+        {MAIN_PRIVATE.maxRise} mm rise and min {MAIN_PRIVATE.minGoing} mm run. Service stairs, ones that aren&apos;t
+        the main way up, are allowed up to {SERVICE.maxRise} mm rise and down to {SERVICE.minGoing} mm run. Use that
         only if you really have to squeeze a stair in. Handrails and barriers (D1 / F4) aren&apos;t covered here; check
         them for your stair. It&apos;s a rule-of-thumb guide, not a substitute for your building consent documents.
       </p>

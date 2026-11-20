@@ -83,6 +83,18 @@
   }
 }
 
+/** two fields side by side (total rise and total run), stacked when narrow */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.75rem;
+
+  // the inputs line up across, however long each hint is
+  > .field > :last-child {
+    margin-top: auto;
+  }
+}
+
 .fieldHeader {
   display: flex;
   justify-content: space-between;

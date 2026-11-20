@@ -238,7 +238,7 @@ export const StairElevation: React.FC<{
             <line x1={0} y1={runDimY - font * 0.4} x2={0} y2={runDimY + font * 0.4} strokeWidth={stroke} />
             <line x1={xTop} y1={runDimY - font * 0.4} x2={xTop} y2={runDimY + font * 0.4} strokeWidth={stroke} />
             <text x={xTop / 2} y={runDimY + font * 1.15} fontSize={font} className={styles.dimText} textAnchor="middle">
-              {Math.round(result.totalRun)} run
+              {Math.round(result.totalRun)} total run
             </text>
           </g>
         )}
@@ -247,7 +247,7 @@ export const StairElevation: React.FC<{
         {k > 0 && (
           <g className={styles.stepDim}>
             <text x={(k - 0.5) * G} y={-(k * R) - font * 0.5} fontSize={font * 0.85} textAnchor="middle" className={styles.dimText}>
-              G {Math.round(G)}
+              Run {Math.round(G)}
             </text>
             <text
               x={(k - 1) * G - (input.riserBoards ? t : 0) - font * 0.3}
@@ -256,7 +256,7 @@ export const StairElevation: React.FC<{
               textAnchor="end"
               className={styles.dimText}
             >
-              R {Math.round(R)}
+              Rise {Math.round(R)}
             </text>
           </g>
         )}

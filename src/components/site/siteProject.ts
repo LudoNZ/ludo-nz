@@ -561,6 +561,6 @@ export function siteStairScope(placements: StairPlacement[], wallCount: number, 
     const fill = st.bottomOffsetMm > 0 ? `, landing on ground built up ${Math.round(st.bottomOffsetMm)} mm` : ""
     const top = st.top === "wallRiser" ? ", the wall being the top riser" : ", with its top tread level with the top of the wall"
     const posts = r.stringer.posts.length > 0 || p.layout.turns.some((t) => !t.onPads && t.posts.length) ? " Support posts concreted in." : ""
-    return `${name} a timber stair down from ${wall}, ${i.width} mm wide: ${r.risers} risers of ${Math.round(r.rise)} mm and ${Math.round(r.going)} mm goings${turns ? `, with ${turns} turn${turns > 1 ? "s" : ""}` : ""}${top}${fill}. Framed in H3.2 ${framing}, with ${i.boardWidth} × ${i.boardThickness} decking treads${i.riserBoards ? " and riser boards" : ""}.${posts}`
+    return `${name} a timber stair down from ${wall}, ${i.width} mm wide: ${r.risers} risers of ${Math.round(r.rise)} mm and runs of ${Math.round(r.going)} mm${turns ? `, with ${turns} turn${turns > 1 ? "s" : ""}` : ""}${top}${fill}. Framed in H3.2 ${framing}, with ${i.boardWidth} × ${i.boardThickness} decking treads${i.riserBoards ? " and riser boards" : ""}.${posts}`
   })
 }

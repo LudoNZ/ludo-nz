@@ -134,7 +134,7 @@ const StairsCard: React.FC<{
                 {segments.length > 1 ? `Wall ${segmentLabel(st.segmentIndex)} · ` : ""}
                 {STAIR_ANCHOR_LABELS[st.anchor].replace("Its ", "")} {st.distanceM.toFixed(2)} m from {endName(st.segmentIndex, st.from)}
                 {p
-                  ? ` · ${p.result.risers} risers of ${Math.round(p.result.rise)} (${p.input.totalRise} total) · ${Math.round(p.result.going)} going · ${(p.result.totalRun / 1000).toFixed(2)} m out · ${complianceText(p)}`
+                  ? ` · ${p.result.risers} risers of ${Math.round(p.result.rise)} (${p.input.totalRise} total) · ${Math.round(p.result.going)} run · ${(p.result.totalRun / 1000).toFixed(2)} m out · ${complianceText(p)}`
                   : " · the wall needs a height first"}
               </p>
               {p?.problems.map((msg) => (

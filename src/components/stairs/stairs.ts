@@ -434,14 +434,14 @@ export function calculateStairs(input: StairInput): StairResult {
   const check = (rules: StairCategoryRules) => {
     const broken: string[] = []
     if (R > rules.maxRise + 0.05) broken.push(`rise ${Math.round(R)} mm is over the ${rules.maxRise} mm maximum`)
-    if (G < rules.minGoing - 0.05) broken.push(`going ${Math.round(G)} mm is under the ${rules.minGoing} mm minimum`)
+    if (G < rules.minGoing - 0.05) broken.push(`run ${Math.round(G)} mm is under the ${rules.minGoing} mm minimum`)
     if (pitchDeg > rules.maxPitchDeg + 0.05)
       broken.push(`pitch ${pitchDeg.toFixed(1)}° is steeper than ${rules.maxPitchDeg}°`)
     return broken
   }
   const twoRBroken: string[] = []
-  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2R + G is ${Math.round(twoRPlusG)} mm, under ${TWO_R_PLUS_G.min} mm`)
-  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2R + G is ${Math.round(twoRPlusG)} mm, over ${TWO_R_PLUS_G.max} mm`)
+  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, under ${TWO_R_PLUS_G.min} mm`)
+  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, over ${TWO_R_PLUS_G.max} mm`)
   const mainBroken = [...check(MAIN_PRIVATE), ...twoRBroken]
   const serviceBroken = [...check(SERVICE), ...twoRBroken]
   const compliance: ComplianceLevel =

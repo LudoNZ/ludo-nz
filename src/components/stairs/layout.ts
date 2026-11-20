@@ -490,11 +490,11 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
       const g = regions[0].going
       if (g < SERVICE.minGoing - 0.5)
         notes.push(
-          `Turn ${fi + 1}: each winder's going is only ${Math.round(g)} mm at the centre of the stair — under even the ${SERVICE.minGoing} mm service minimum. Use fewer winders or a landing.`,
+          `Turn ${fi + 1}: each winder's run is only ${Math.round(g)} mm at the centre of the stair — under even the ${SERVICE.minGoing} mm service minimum. Use fewer winders or a landing.`,
         )
       else if (g < MAIN_PRIVATE.minGoing - 0.5)
         notes.push(
-          `Turn ${fi + 1}: each winder's going is ${Math.round(g)} mm at the centre of the stair — under the ${MAIN_PRIVATE.minGoing} mm main-stair minimum (OK for a service stair).`,
+          `Turn ${fi + 1}: each winder's run is ${Math.round(g)} mm at the centre of the stair — under the ${MAIN_PRIVATE.minGoing} mm main-stair minimum (OK for a service stair).`,
         )
     }
 

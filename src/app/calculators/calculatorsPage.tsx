@@ -64,7 +64,7 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     title: "Stairs",
     description:
       "Deck stairs from the ground up — the fewest code-compliant steps for your height, framed on straight stringers with wedge blocks, and every decking board placed on the treads.",
-    tags: ["Rise & going", "NZBC D1 aware", "Board layout", "Cut list"],
+    tags: ["Rise & run", "NZBC D1 aware", "Board layout", "Cut list"],
     link: "/stairs",
   },
   {
