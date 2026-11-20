@@ -7,7 +7,7 @@ import type { ProfileTotals, WallProfile } from "./postProfile"
 import { BLANK_COMPANY, CompanyDetails, Estimate, EstimateSettings, formatNzd, ProposalDetails } from "./pricing"
 import { PlanPoint, RetainedSide, segmentLabel, totalLength } from "./wallPlan"
 import { OBSTRUCTION_TYPES } from "./obstructions"
-import { buildRenderScene, RenderExtra } from "./wallRender3d"
+import { buildRenderScene, RenderExtra, RenderScene } from "./wallRender3d"
 import styles from "./proposalView.module.scss"
 
 /** the attribute on <html> while a proposal is printing */
@@ -37,8 +37,8 @@ const Field: React.FC<{ value: string; placeholder: string; block?: boolean }> =
     <span className={styles.placeholder}>[{placeholder}]</span>
   )
 
-/** The scope of works, written from the wall itself. */
-function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: PlanPoint[], topCapEnabled: boolean, settings: EstimateSettings, extra: string[] = []): string[] {
+/** A wall's part of the scope of works, written from the wall itself. */
+export function wallScopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: PlanPoint[], topCapEnabled: boolean): string[] {
   const valid = totals.postIndices.map((i) => profile.posts[i])
   const lengthM = totalLength(planPoints)
   const runs = planPoints.length - 1
@@ -52,18 +52,79 @@ function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: Pla
       ? `${Math.round(totals.maxHoleDepthM * 1000)} mm`
       : `${Math.round(totals.minHoleDepthM * 1000)}–${Math.round(totals.maxHoleDepthM * 1000)} mm`
   const boards = totals.boardOrder.reduce((s, o) => s + o.count, 0)
-  const items = [
+  return [
     `Set out and build a timber pole retaining wall ${lengthM.toFixed(1)} m long${runs > 1 ? `, in ${runs} straight runs` : ""}, retaining ${
       Math.abs(maxH - minH) < 0.05 ? `${maxH.toFixed(2)} m` : `${minH.toFixed(2)}–${maxH.toFixed(2)} m`
     } of ground.`,
     `Supply and install ${sizes} H5 treated posts at up to ${spacingMm} mm centres, concreted into ${dias} diameter holes ${depth} deep.`,
     `Supply and fix H4 treated facing boards to the posts (${boards} boards), finished with a top board along the top of the wall${topCapEnabled ? " and a capping board over it" : ""}.`,
   ]
-  if (settings.includeDrainage) items.push("Drainage behind the wall: a drainage coil bedded in free-draining metal, led to an outlet.")
-  items.push(...extra)
-  for (const x of settings.extraLines) if (x.description.trim()) items.push(x.description.trim().replace(/\.?$/, "."))
-  items.push("Clean up the work area on completion.")
-  return items
+}
+
+/** The scope of works finished off: drainage if it's priced, the lines
+ * typed in by hand, and the clean-up. */
+export function finishScope(items: string[], settings: EstimateSettings): string[] {
+  const out = [...items]
+  if (settings.includeDrainage) out.push(`Drainage behind the wall${items.length > 4 ? "s" : ""}: a drainage coil bedded in free-draining metal, led to an outlet.`)
+  for (const x of settings.extraLines) if (x.description.trim()) out.push(x.description.trim().replace(/\.?$/, "."))
+  out.push("Clean up the work area on completion.")
+  return out
+}
+
+/** What the proposal shows of the work itself, from one wall or a site. */
+export interface ProposalContent {
+  /** e.g. "Timber retaining wall" */
+  title: string
+  /** what the standard opening says is being built, e.g. "a timber pole retaining wall" */
+  work: string
+  scene: RenderScene | null
+  caption: string
+  scope: string[]
+  /** walls with services or obstructions to list (name null: the only wall) */
+  obstructions: { wallName: string | null; profile: WallProfile }[]
+}
+
+/** The proposal for one wall (the retaining wall calculator's). */
+const ProposalView: React.FC<
+  Omit<ProposalProps, "content"> & {
+    profile: WallProfile
+    totals: ProfileTotals
+    planPoints: PlanPoint[]
+    retainedSide: RetainedSide
+    calcSettings: CalcSettings
+    topCapEnabled: boolean
+    /** things from other calculators drawn with the wall in the render */
+    extras?: RenderExtra[]
+    /** scope items from other calculators (stairs), after the wall's own */
+    extraScope?: string[]
+  }
+> = ({ profile, totals, planPoints, retainedSide, calcSettings, topCapEnabled, extras, extraScope, ...rest }) => {
+  const scene = useMemo(
+    () => buildRenderScene(profile, planPoints, retainedSide, calcSettings, topCapEnabled, { azimuthDeg: -32, elevationDeg: 24, showFootings: false }, [], extras),
+    [profile, planPoints, retainedSide, calcSettings, topCapEnabled, extras],
+  )
+  const content: ProposalContent = {
+    title: "Timber retaining wall",
+    work: "a timber pole retaining wall",
+    scene,
+    caption: `Proposed wall, ${totalLength(planPoints).toFixed(1)} m long. Illustration only — not to scale for setting out.`,
+    scope: finishScope([...wallScopeItems(profile, totals, planPoints, topCapEnabled), ...(extraScope ?? [])], rest.settings),
+    obstructions: profile.obstructions.length ? [{ wallName: null, profile }] : [],
+  }
+  return <ProposalDocument {...rest} content={content} />
+}
+
+export interface ProposalProps {
+  content: ProposalContent
+  estimate: Estimate
+  settings: EstimateSettings
+  onChange: (next: EstimateSettings) => void
+  company: CompanyDetails
+  onEditCompany: () => void
+  projectName?: string
+  /** called when the proposal is sent to print, for the activity log */
+  onPrinted?: (label: string) => void
+  onClose: () => void
 }
 
 /** A construction proposal for the wall, ready to print or save as a PDF:
@@ -72,35 +133,12 @@ function scopeItems(profile: WallProfile, totals: ProfileTotals, planPoints: Pla
  * acceptance block. The details are edited in the panel beside it and
  * kept with the wall; company details come from the price library, and
  * anything blank prints as a [placeholder]. */
-const ProposalView: React.FC<{
-  profile: WallProfile
-  totals: ProfileTotals
-  estimate: Estimate
-  settings: EstimateSettings
-  onChange: (next: EstimateSettings) => void
-  company: CompanyDetails
-  onEditCompany: () => void
-  planPoints: PlanPoint[]
-  retainedSide: RetainedSide
-  calcSettings: CalcSettings
-  topCapEnabled: boolean
-  projectName?: string
-  /** called when the proposal is sent to print, for the activity log */
-  onPrinted?: (label: string) => void
-  onClose: () => void
-  /** things from other calculators drawn with the wall in the render */
-  extras?: RenderExtra[]
-  /** scope items from other calculators (stairs), after the wall's own */
-  extraScope?: string[]
-}> = ({ profile, totals, estimate, settings, onChange, company, onEditCompany, planPoints, retainedSide, calcSettings, topCapEnabled, projectName, onPrinted, onClose, extras, extraScope }) => {
+export const ProposalDocument: React.FC<ProposalProps> = ({ content, estimate, settings, onChange, company, onEditCompany, projectName, onPrinted, onClose }) => {
   const c = { ...BLANK_COMPANY, ...company }
   const p = settings.proposal
   const setP = (patch: Partial<ProposalDetails>) => onChange({ ...settings, proposal: { ...p, ...patch } })
 
-  const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, calcSettings, topCapEnabled, { azimuthDeg: -32, elevationDeg: 24, showFootings: false }, [], extras),
-    [profile, planPoints, retainedSide, calcSettings, topCapEnabled, extras],
-  )
+  const scene = content.scene
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
@@ -134,7 +172,7 @@ const ProposalView: React.FC<{
   const validUntil = new Date(dated.getTime() + p.validDays * 86_400_000)
   const priced = estimate.lines.filter((l) => l.unitCost !== null)
   const unpriced = estimate.lines.length - priced.length
-  const scope = scopeItems(profile, totals, planPoints, topCapEnabled, settings, extraScope)
+  const scope = content.scope
   const exclusions = p.exclusions.split("\n").map((s) => s.trim()).filter(Boolean)
   const sell = (v: number) => v * estimate.sellFactor
 
@@ -246,7 +284,7 @@ const ProposalView: React.FC<{
           <div className={styles.titleRow}>
             <div>
               <div className={styles.kicker}>Construction proposal</div>
-              <h1 className={styles.title}>Timber retaining wall{projectName ? ` — ${projectName}` : ""}</h1>
+              <h1 className={styles.title}>{content.title}{projectName ? ` — ${projectName}` : ""}</h1>
             </div>
             <dl className={styles.meta}>
               <div>
@@ -283,12 +321,12 @@ const ProposalView: React.FC<{
 
           <p className={styles.intro}>
             {p.intro.trim() ||
-              `Thank you for the opportunity to price this work. Below is our proposal to build a timber pole retaining wall at the site above, with the scope of works, a full price breakdown and what's not included.`}
+              `Thank you for the opportunity to price this work. Below is our proposal to build ${content.work} at the site above, with the scope of works, a full price breakdown and what's not included.`}
           </p>
 
           {scene && (
             <figure className={styles.figure}>
-              <svg viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`} className={styles.render} role="img" aria-label="3D view of the proposed wall">
+              <svg viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`} className={styles.render} role="img" aria-label="3D view of the proposed work">
                 <defs>
                   <linearGradient id="proposalSky" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0" stopColor="#eef3f7" />
@@ -301,9 +339,7 @@ const ProposalView: React.FC<{
                   <polygon key={i} points={poly.points} fill={poly.fill} stroke={poly.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" opacity={poly.opacity} />
                 ))}
               </svg>
-              <figcaption>
-                Proposed wall, {totalLength(planPoints).toFixed(1)} m long. Illustration only — not to scale for setting out.
-              </figcaption>
+              <figcaption>{content.caption}</figcaption>
             </figure>
           )}
 
@@ -316,7 +352,7 @@ const ProposalView: React.FC<{
             </ul>
           </section>
 
-          {profile.obstructions.length > 0 && (
+          {content.obstructions.length > 0 && (
             <section className={styles.section}>
               <h2>Services and obstructions</h2>
               <p className={styles.obstructionNote}>
@@ -343,10 +379,10 @@ const ProposalView: React.FC<{
                   </tr>
                 </thead>
                 <tbody>
-                  {profile.obstructions.map((z) => {
+                  {content.obstructions.flatMap(({ wallName, profile }) => profile.obstructions.map((z) => {
                     const o = z.obstruction
                     const count = profile.segments.length
-                    const wall = count > 1 ? `wall ${segmentLabel(o.segmentIndex)}` : "the wall"
+                    const wall = count > 1 ? `${wallName ? `${wallName}, ` : ""}wall ${segmentLabel(o.segmentIndex)}` : wallName ?? "the wall"
                     const end =
                       o.from === "start"
                         ? o.segmentIndex === 0
@@ -356,7 +392,7 @@ const ProposalView: React.FC<{
                           ? `the end of ${wall}`
                           : `corner ${segmentLabel(o.segmentIndex)}/${segmentLabel(o.segmentIndex + 1)}`
                     return (
-                      <tr key={o.id}>
+                      <tr key={`${wallName ?? ""}-${o.id}`}>
                         <td>
                           {OBSTRUCTION_TYPES[o.type].label}
                           {o.label && <span className={styles.lineDetail}>{o.label}</span>}
@@ -370,7 +406,7 @@ const ProposalView: React.FC<{
                         <td className={styles.num}>{Math.round(z.clearanceM * 1000)} mm</td>
                       </tr>
                     )
-                  })}
+                  }))}
                 </tbody>
               </table>
             </section>

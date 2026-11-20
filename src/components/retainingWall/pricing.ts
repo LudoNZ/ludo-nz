@@ -427,18 +427,10 @@ export interface AddedMaterial {
   priceUnit?: PriceUnit
 }
 
-/** Everything priced, line by line, from the wall's quantities. */
-export function buildEstimate(
-  profile: WallProfile,
-  totals: ProfileTotals,
-  wallLengthM: number,
-  hasGravel: boolean,
-  library: PriceItem[],
-  settings: EstimateSettings,
-  now = Date.now(),
-  added: AddedMaterial[] = [],
-): Estimate {
-  const lines: EstimateLine[] = []
+/** Makes estimate lines priced from the library into `lines`: `pick`
+ * finds a line's item (one picked by hand, else the best match), `add`
+ * prices a quantity with it. */
+function lineMaker(library: PriceItem[], settings: EstimateSettings, now: number, lines: EstimateLine[]) {
   /** the item for a line: one picked by hand, else the best match. With
    * `matches`, only an item it accepts is picked automatically (a post
    * line never quietly takes another size's price); the rest can still
@@ -477,6 +469,22 @@ export function buildEstimate(
       manual: false,
     })
   }
+  return { pick, add }
+}
+
+/** A wall's own lines: posts, boards, cap, concrete, gravel, drainage,
+ * fixings and labour. */
+function wallLines(
+  profile: WallProfile,
+  totals: ProfileTotals,
+  wallLengthM: number,
+  hasGravel: boolean,
+  library: PriceItem[],
+  settings: EstimateSettings,
+  now: number,
+): EstimateLine[] {
+  const lines: EstimateLine[] = []
+  const { pick, add } = lineMaker(library, settings, now, lines)
 
   // posts, by size: by the length when the price is by length (round
   // poles), else per lineal metre as bought
@@ -573,7 +581,13 @@ export function buildEstimate(
   if (settings.includeFixings) add("fixings", "fixings", "Fixings", Number(wallLengthM.toFixed(2)), "m", "allowance per metre of wall")
   add("labour", "labour", "Labour", Number(totals.labor.totalHours.toFixed(1)), "hours", "set out, drill and set posts, board up")
 
-  // from other calculators on the site (stairs)
+  return lines
+}
+
+/** Lines from other calculators on the site (stairs). */
+function addedLines(added: AddedMaterial[], library: PriceItem[], settings: EstimateSettings, now: number): EstimateLine[] {
+  const lines: EstimateLine[] = []
+  const { add } = lineMaker(library, settings, now, lines)
   for (const a of added) {
     const matches: ((i: PriceItem) => boolean)[] = []
     if (a.size) matches.push((i) => normSize(i.sizeLabel ?? "") === normSize(a.size ?? ""))
@@ -581,24 +595,28 @@ export function buildEstimate(
     if (!a.size && !a.priceUnit) matches.push((i) => !i.lengthPrices?.length)
     add(a.key, a.category, a.description, a.quantity, a.unit, a.detail, matches)
   }
+  return lines
+}
 
-  for (const x of settings.extraLines) {
-    lines.push({
-      key: `extra:${x.id}`,
-      choiceKey: `extra:${x.id}`,
-      category: "other",
-      description: x.description || "Extra item",
-      quantity: x.quantity,
-      unit: x.unit,
-      item: null,
-      candidates: [],
-      unitCost: x.unitPrice,
-      cost: x.unitPrice * x.quantity,
-      stale: false,
-      manual: true,
-    })
-  }
+/** The lines typed in by hand. */
+const manualLines = (settings: EstimateSettings): EstimateLine[] =>
+  settings.extraLines.map((x) => ({
+    key: `extra:${x.id}`,
+    choiceKey: `extra:${x.id}`,
+    category: "other",
+    description: x.description || "Extra item",
+    quantity: x.quantity,
+    unit: x.unit,
+    item: null,
+    candidates: [],
+    unitCost: x.unitPrice,
+    cost: x.unitPrice * x.quantity,
+    stale: false,
+    manual: true,
+  }))
 
+/** Markup, contingency and GST on the lines. */
+function totalUp(lines: EstimateLine[], settings: EstimateSettings): Estimate {
   const costSubtotal = lines.reduce((s, l) => s + l.cost, 0)
   const sellFactor = 1 + settings.markupPct / 100
   const markup = costSubtotal * (sellFactor - 1)
@@ -620,6 +638,63 @@ export function buildEstimate(
     sellFactor,
   }
 }
+
+/** Everything priced, line by line, from the wall's quantities. */
+export function buildEstimate(
+  profile: WallProfile,
+  totals: ProfileTotals,
+  wallLengthM: number,
+  hasGravel: boolean,
+  library: PriceItem[],
+  settings: EstimateSettings,
+  now = Date.now(),
+  added: AddedMaterial[] = [],
+): Estimate {
+  return totalUp([...wallLines(profile, totals, wallLengthM, hasGravel, library, settings, now), ...addedLines(added, library, settings, now), ...manualLines(settings)], settings)
+}
+
+/** One wall of several, to price together. */
+export interface EstimateWall {
+  name: string
+  profile: WallProfile
+  lengthM: number
+  hasGravel: boolean
+}
+
+/** Several walls priced as one job: each wall's lines worked out as on
+ * its own, then the same line from every wall added into one (posts of
+ * one size and length, the boards, the concrete, the labour…), with what
+ * each wall gives in its detail. Then the other calculators' lines, and
+ * the lines typed in by hand. The setup labour is counted once a wall —
+ * each is set out on its own. Concrete bought by the bag is whole bags a
+ * wall. */
+export function buildSiteEstimate(walls: EstimateWall[], library: PriceItem[], settings: EstimateSettings, now = Date.now(), added: AddedMaterial[] = []): Estimate {
+  const merged: EstimateLine[] = []
+  const byKey = new Map<string, { line: EstimateLine; parts: string[] }>()
+  for (const w of walls) {
+    for (const l of wallLines(w.profile, w.profile, w.lengthM, w.hasGravel, library, settings, now)) {
+      // posts and boards say what they are; the rest just how much
+      const own = l.category === "posts" || l.category === "boards" || l.category === "topCap" ? l.detail : undefined
+      const part = walls.length > 1 ? `${w.name}: ${own ?? `${qtyText(l.quantity)} ${l.unit}`}` : (l.detail ?? "")
+      const hit = byKey.get(l.key)
+      if (hit && hit.line.unit === l.unit && hit.line.unitCost === l.unitCost) {
+        hit.line.quantity = Number((hit.line.quantity + l.quantity).toFixed(3))
+        hit.line.cost += l.cost
+        hit.parts.push(part)
+        hit.line.detail = hit.parts.filter(Boolean).join(" · ")
+        continue
+      }
+      // a line the same but differently priced (a bigger post's length
+      // on another wall, say) stays on its own
+      const line = { ...l, key: hit ? `${l.key}#${w.name}` : l.key, detail: part || undefined }
+      merged.push(line)
+      if (!hit) byKey.set(l.key, { line, parts: [part] })
+    }
+  }
+  return totalUp([...merged, ...addedLines(added, library, settings, now), ...manualLines(settings)], settings)
+}
+
+const qtyText = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(q < 10 ? 2 : 1))
 
 export const formatNzd = (v: number) =>
   v.toLocaleString("en-NZ", { style: "currency", currency: "NZD", minimumFractionDigits: 2, maximumFractionDigits: 2 })

@@ -19,7 +19,7 @@ import type { Pt } from "../stairs/stairs"
 import { StairMember, stairSolids } from "../stairs/stairRender3d"
 import type { RenderExtra } from "../retainingWall/wallRender3d"
 import type { ElevationExtra } from "../retainingWall/wallProfileDiagram"
-import type { AddedMaterial } from "../retainingWall/pricing"
+import { DEFAULT_ESTIMATE_SETTINGS, estimateSettingsFromData, type AddedMaterial, type EstimateSettings } from "../retainingWall/pricing"
 import { combineOrder, CombinedOrderLine, stairLabourHours, stairOrder, StairOrderLine } from "../stairs/stairMaterials"
 
 export const MIN_STAIR_ANGLE_DEG = 30
@@ -90,9 +90,17 @@ export interface SiteWall {
 export interface SiteProject {
   walls: SiteWall[]
   stairs: SiteStair[]
+  /** pricing for the whole job (markup, extra lines, the proposal's
+   * details); null until it's first changed — see siteEstimateSettings */
+  estimate: EstimateSettings | null
 }
 
-export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [] })
+export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [], estimate: null })
+
+/** The site's pricing, or until it's been set, the first wall's (with
+ * every wall's extra lines). */
+export const siteEstimateSettings = (site: SiteProject): EstimateSettings =>
+  site.estimate ?? (site.walls.length ? { ...site.walls[0].wall.estimate, extraLines: site.walls.flatMap((w) => w.wall.estimate.extraLines) } : DEFAULT_ESTIMATE_SETTINGS)
 
 const randomId = () => Math.random().toString(36).slice(2, 10)
 
@@ -209,7 +217,7 @@ export const siteFromData = (raw: unknown): SiteProject => {
         input: stairInputFromData(s.input),
       }),
     )
-  return { walls, stairs }
+  return { walls, stairs, estimate: typeof d.estimate === "object" && d.estimate !== null ? estimateSettingsFromData(d.estimate) : null }
 }
 
 /** A wall's own plan point → the site plan. */
@@ -541,10 +549,11 @@ export function siteStairEstimate(placements: StairPlacement[]): AddedMaterial[]
 }
 
 /** The stairs in the proposal's scope of works, one item each. */
-export function siteStairScope(placements: StairPlacement[], wallCount: number): string[] {
+export function siteStairScope(placements: StairPlacement[], wallCount: number, wallName?: string): string[] {
   return placements.map((p) => {
     const { input: i, result: r, stair: st } = p
-    const wall = wallCount > 1 ? `wall ${segmentLabel(st.segmentIndex)}` : "the wall"
+    const run = wallCount > 1 ? `wall ${segmentLabel(st.segmentIndex)}` : "the wall"
+    const wall = wallName ? (wallCount > 1 ? `${wallName} (${run})` : wallName) : run
     const turns = p.layout.turns.length
     const framing =
       i.framing === "stacked-frames" ? "stacked timber step frames" : i.framing === "outer-stringers" ? "two outer stringers with riser joists" : "timber stringers with wedge blocks"

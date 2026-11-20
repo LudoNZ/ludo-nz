@@ -30,6 +30,8 @@ import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../ret
 import StairsCard, { StairsPlanOverlay } from "../stairsCard"
 import { stairCalculatorHref } from "../stairLink"
 import { SitePlan, WallsCard } from "../siteView"
+import SiteRenderView from "../siteRenderView"
+import SiteEstimate from "../siteEstimate"
 import styles from "../siteView.module.scss"
 
 const SAVE_DELAY_MS = 1000
@@ -271,6 +273,15 @@ const SiteProjectEditor = () => {
   }
 
   const site = latest.current.site
+  // every stair placed, worked out once per change of the walls or stairs
+  const sitePlacementCache = useRef<{ walls: unknown; stairs: unknown; value: ReturnType<typeof sitePlacements> } | null>(null)
+  const placedOnSite = (s: SiteProject) => {
+    const hit = sitePlacementCache.current
+    if (hit && hit.walls === s.walls && hit.stairs === s.stairs) return hit.value
+    const value = sitePlacements(s)
+    sitePlacementCache.current = { walls: s.walls, stairs: s.stairs, value }
+    return value
+  }
   const wallStairs = site?.stairs.filter((s) => s.wallId === wallParam) ?? []
 
   const addOns: EditorAddOns = {
@@ -380,7 +391,7 @@ const SiteProjectEditor = () => {
   }
 
   // ---- the site ----
-  const placements = sitePlacements(site)
+  const placements = placedOnSite(site)
   const addWall = (wall: WallProject, wallName: string, source: string) => {
     // to the right of whatever's there already, level with its top
     const pts = site.walls.flatMap((w) => w.wall.planPoints.map(toSite(w)))
@@ -440,6 +451,7 @@ const SiteProjectEditor = () => {
         }}
         onOpen={openWall}
       />
+      <SiteRenderView walls={site.walls} placements={placements} />
       {placements.length > 0 && (
         <StairOrderCard
           title="Stair material order — the whole site"
@@ -448,10 +460,9 @@ const SiteProjectEditor = () => {
           note={STAIR_ORDER_NOTE}
         />
       )}
-      <p className={styles.hint}>
-        Each wall&apos;s estimate and proposal (in the wall) includes its own stairs. More kinds of thing to place on the
-        site are on the way.
-      </p>
+      <div id="site-estimate">
+        <SiteEstimate site={site} placements={placements} projectName={name} onChange={(estimate) => commit({ ...site, estimate })} />
+      </div>
     </div>
   )
 }
