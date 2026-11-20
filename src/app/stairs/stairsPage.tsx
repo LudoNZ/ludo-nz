@@ -30,6 +30,7 @@ import LayoutEditor from "./layoutEditor"
 import DraftNumberInput from "./draftNumberInput"
 import StepDetailModal from "./stepDetailModal"
 import styles from "./stairsPage.module.scss"
+import specStyles from "@/components/structures/specCard.module.scss"
 
 const mm = (v: number) => `${Math.round(v)} mm`
 /** the most a stair can rise, or run, in all: 100 m */
@@ -86,6 +87,7 @@ const StairsPage: React.FC<{
 }> = ({ value, onChange, riseNote, header, extraTopTread }) => {
   const [own, setOwn] = useState<StairInput>(DEFAULT_INPUT)
   const [stepDetailOpen, setStepDetailOpen] = useState(false)
+  const [codeInfoOpen, setCodeInfoOpen] = useState(false)
   const input = value ?? own
   const setInput = (next: StairInput | ((s: StairInput) => StairInput)) => {
     const resolved = typeof next === "function" ? next(input) : next
@@ -480,11 +482,43 @@ const StairsPage: React.FC<{
 
         <div className={styles.results}>
           <div className={`${styles.compliance} ${styles[r.compliance]}`}>
-            <strong>
-              {r.risers} risers of {mm(r.rise)} · {r.treads} treads of {mm(r.going)} · {m(r.totalRun)} total run ·{" "}
-              {r.pitchDeg.toFixed(1)}°
-            </strong>
+            <div className={styles.complianceHead}>
+              <strong>
+                {r.risers} risers of {mm(r.rise)} · {r.treads} treads of {mm(r.going)} · {m(r.totalRun)} total run ·{" "}
+                {r.pitchDeg.toFixed(1)}°
+              </strong>
+              <button
+                type="button"
+                className={`${specStyles.infoButton} ${codeInfoOpen ? specStyles.infoOpen : ""}`}
+                aria-expanded={codeInfoOpen}
+                aria-controls="stair-code-info"
+                aria-label={codeInfoOpen ? "Hide when the Building Code applies" : "When does the Building Code apply?"}
+                title={codeInfoOpen ? "Hide" : "When does the Building Code apply?"}
+                onClick={() => setCodeInfoOpen((o) => !o)}
+              >
+                i
+              </button>
+            </div>
             <p>{complianceText}</p>
+            {codeInfoOpen && (
+              <div id="stair-code-info" className={styles.codeInfo}>
+                <p>Whether the Building Code applies depends on what the stair is for:</p>
+                <ul>
+                  <li>
+                    <strong>It&apos;s part of an access route</strong> (the normal way from the house or deck to the yard
+                    or a gate): clause D1 applies. D1/AS1 is the easy way to show it complies, and a stair that fails the
+                    checks above falls outside it.
+                  </li>
+                  <li>
+                    <strong>It&apos;s a garden or landscape step</strong> up a bank or retaining wall, away from the
+                    building: it&apos;s often not treated as an access route. It may also be exempt building work,
+                    although exempt work still has to meet the Code where the Code applies. Landscape steps are often
+                    built with long treads deliberately.
+                  </li>
+                </ul>
+                <p>Your council or building consent authority can confirm which applies on your site.</p>
+              </div>
+            )}
           </div>
 
           {layout ? (

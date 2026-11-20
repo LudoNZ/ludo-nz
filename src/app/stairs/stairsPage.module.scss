@@ -385,6 +385,38 @@
   min-width: 0;
 }
 
+/** the result line, with the "i" for when the Building Code applies */
+.complianceHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.codeInfo {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 0.85rem;
+  line-height: 1.5;
+
+  ul {
+    margin: 0.35rem 0 0.5rem;
+    padding-left: 1.2rem;
+  }
+
+  li + li {
+    margin-top: 0.35rem;
+  }
+
+  // (over .compliance's own strong, which is the result line)
+  li strong {
+    display: inline;
+    font-size: inherit;
+    margin: 0;
+  }
+}
+
 .compliance {
   padding: 0.9rem 1.1rem;
   border: 2px solid var(--color-primary);
