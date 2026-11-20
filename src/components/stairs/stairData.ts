@@ -42,6 +42,7 @@ export const stairInputFromData = (raw: unknown): StairInput => {
     riserBoards: typeof d.riserBoards === "boolean" ? d.riserBoards : D.riserBoards,
     riserBoardGap: Math.max(0, num(d.riserBoardGap, D.riserBoardGap)),
     riserRip: d.riserRip === "bottom" ? "bottom" : "top",
+    leaveOutSlivers: typeof d.leaveOutSlivers === "boolean" ? d.leaveOutSlivers : D.leaveOutSlivers,
     treadBoardSizes: sizesFromData(d.treadBoardSizes),
     riserBoardSizes: sizesFromData(d.riserBoardSizes),
     // one more flight than turns, always

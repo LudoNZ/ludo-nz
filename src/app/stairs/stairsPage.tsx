@@ -886,8 +886,7 @@ const StairsPage: React.FC<{
                   {
                     label: "Per tread",
                     value:
-                      r.treadBoards.map((b) => (b.ripped ? `${mm(b.width)} rip` : `${Math.round(b.width)}`)).join(" + ") +
-                      (r.treadSliver ? ` (${mm(r.treadSliver)} sliver left out)` : ""),
+                      r.treadBoards.map((b) => (b.ripped ? `${mm(b.width)} rip` : `${Math.round(b.width)}`)).join(" + "),
                   },
                   { label: "Nosing", value: mm(r.nosing) },
                   { label: "Tread depth", value: mm(r.treadDepth) },
@@ -896,8 +895,7 @@ const StairsPage: React.FC<{
                         {
                           label: "Per riser",
                           value:
-                            r.riserBoardPieces.map((b) => (b.ripped ? `${mm(b.width)} rip` : `${Math.round(b.width)}`)).join(" + ") +
-                            (r.riserSliver ? ` (${mm(r.riserSliver)} sliver left out)` : ""),
+                            r.riserBoardPieces.map((b) => (b.ripped ? `${mm(b.width)} rip` : `${Math.round(b.width)}`)).join(" + "),
                         },
                       ]
                     : []),

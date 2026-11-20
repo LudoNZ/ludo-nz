@@ -136,6 +136,9 @@ export interface StairInput {
   riserBoardGap: number
   /** where the riser's ripped (narrower) board goes */
   riserRip: RiserRip
+  /** a last ripped board under SLIVER_MAX on a tread or riser isn't cut:
+   * it's left out, the boards before it where they are */
+  leaveOutSlivers: boolean
   /** a tread's boards ripped to a width by hand, front to back (null or
    * missing = full width; the last board is always ripped to fit) */
   treadBoardSizes: (number | null)[]
@@ -164,6 +167,7 @@ export const DEFAULT_INPUT: StairInput = {
   riserBoards: false,
   riserBoardGap: 0,
   riserRip: "top",
+  leaveOutSlivers: true,
   treadBoardSizes: [],
   riserBoardSizes: [],
   flights: [{ treads: null }],
@@ -281,8 +285,8 @@ export interface StairResult {
   nosingAuto: boolean
   treadDepth: number
   treadBoards: BoardPiece[]
-  /** a sliver at the back of each tread too thin to cut, left out (mm; 0
-   * when there isn't one) — see SLIVER_MAX */
+  /** a last rip at the back of each tread under SLIVER_MAX (mm; 0 when
+   * there isn't one) — left out unless input.leaveOutSlivers is off */
   treadSliver: number
   /** whole-board-fit nosing worth suggesting when the current layout has a rip */
   suggestedNosing: number | null
@@ -389,14 +393,16 @@ export function layBoards(depth: number, boardWidth: number, gap: number, sizes:
   return layBoardsLeavingSliver(depth, boardWidth, gap, sizes).pieces
 }
 
-/** layBoards, and how wide a last sliver (under SLIVER_MAX) left out was
- * (0 when nothing was) — never one sized by hand, nor the only board. */
+/** layBoards, and how wide a last rip under SLIVER_MAX is (0 when there
+ * isn't one) — left out when `leaveOut`; never one sized by hand, nor the
+ * only board. */
 export function layBoardsLeavingSliver(
   depth: number,
   boardWidth: number,
   gap: number,
   sizes: (number | null)[] = [],
-): { pieces: BoardPiece[]; leftOut: number } {
+  leaveOut = true,
+): { pieces: BoardPiece[]; sliver: number } {
   const pieces: BoardPiece[] = []
   let pos = 0
   while (depth - pos > 0.5 && pieces.length < 200) {
@@ -408,10 +414,10 @@ export function layBoardsLeavingSliver(
   }
   const last = pieces[pieces.length - 1]
   if (pieces.length > 1 && last.ripped && last.width < SLIVER_MAX && !(sizes[last.index] != null && sizes[last.index]! > 0)) {
-    pieces.pop()
-    return { pieces, leftOut: last.width }
+    if (leaveOut) pieces.pop()
+    return { pieces, sliver: last.width }
   }
-  return { pieces, leftOut: 0 }
+  return { pieces, sliver: 0 }
 }
 
 /** Widths that split `depth` into equal boards no wider than a full one,
@@ -546,7 +552,7 @@ export function calculateStairs(input: StairInput): StairResult {
     nosing = Math.max(0, input.nosing ?? 0)
   }
   const treadDepth = G + riserT + nosing
-  const { pieces: treadBoards, leftOut: treadSliver } = layBoardsLeavingSliver(treadDepth, input.boardWidth, input.boardGap, input.treadBoardSizes)
+  const { pieces: treadBoards, sliver: treadSliver } = layBoardsLeavingSliver(treadDepth, input.boardWidth, input.boardGap, input.treadBoardSizes, input.leaveOutSlivers)
   const hasRip = treadBoards.some((b) => b.ripped)
   const fitNosing = wholeBoardNosing(G, riserT, input.boardWidth, input.boardGap)
   const suggestedNosing = hasRip && fitNosing <= AUTO_NOSING_MAX && Math.abs(fitNosing - nosing) > 0.5 ? fitNosing : null
@@ -555,9 +561,9 @@ export function calculateStairs(input: StairInput): StairResult {
   // tread above (offsets from the bottom), the ripped one at the top or
   // the bottom
   const riserHeight = R - t
-  const riserLay = input.riserBoards ? layBoardsLeavingSliver(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap), input.riserBoardSizes) : { pieces: [], leftOut: 0 }
+  const riserLay = input.riserBoards ? layBoardsLeavingSliver(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap), input.riserBoardSizes, input.leaveOutSlivers) : { pieces: [], sliver: 0 }
   const riserLaid = riserLay.pieces
-  const riserSliver = riserLay.leftOut
+  const riserSliver = riserLay.sliver
   const riserBoardPieces =
     input.riserRip === "bottom" ? riserLaid.map((b) => ({ ...b, offset: riserHeight - b.offset - b.width })).reverse() : riserLaid
   const openRiserGap = input.riserBoards ? 0 : riserHeight

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Modal } from "@/app/elements/Modal/modal"
-import { calculateStairs, evenBoardSizes, RiserRip, StairInput } from "@/components/stairs/stairs"
+import { calculateStairs, evenBoardSizes, RiserRip, SLIVER_MAX, StairInput } from "@/components/stairs/stairs"
 import DraftNumberInput from "./draftNumberInput"
 import pile from "../retaining-walls/pileSetupModal.module.scss"
 import styles from "./stepDetailModal.module.scss"
@@ -179,7 +179,12 @@ const StepDetailModal: React.FC<{
     </div>
   )
   const boardsText = (list: { width: number; ripped: boolean }[], sliver = 0) =>
-    list.map((b) => (b.ripped ? `${mmText(b.width)} rip` : mmText(b.width))).join(" + ") + (sliver ? ` (${mmText(sliver)} sliver left out)` : "")
+    list.map((b) => (b.ripped ? `${mmText(b.width)} rip` : mmText(b.width))).join(" + ") + (sliver && draft.leaveOutSlivers ? ` (${mmText(sliver)} left out)` : "")
+  // a last rip under SLIVER_MAX on the treads or risers, offered to leave out
+  const slivers = [
+    r.treadSliver ? `${mmText(r.treadSliver)} mm at the back of each tread` : null,
+    draft.riserBoards && r.riserSliver ? `${mmText(r.riserSliver)} mm at the ${draft.riserRip === "bottom" ? "bottom" : "top"} of each riser` : null,
+  ].filter(Boolean)
 
   // ---- ripping boards: the picked board's width, or even splits ----
   const sizesKey = (kind: "tread" | "riser") => (kind === "tread" ? "treadBoardSizes" : "riserBoardSizes")
@@ -370,6 +375,16 @@ const StepDetailModal: React.FC<{
                   </label>
                 </div>
               </>
+            )}
+
+            {slivers.length > 0 && (
+              <label className={`${pile.check} ${styles.wide}`}>
+                <input type="checkbox" checked={draft.leaveOutSlivers} onChange={(e) => set("leaveOutSlivers", e.target.checked)} />
+                <span>
+                  Leave out the sliver{slivers.length > 1 ? "s" : ""} under {SLIVER_MAX} mm — {slivers.join(", ")}. The boards before stay
+                  where they are; it&apos;s not cut or ordered.
+                </span>
+              </label>
             )}
 
             <dl className={`${pile.figures} ${styles.wide}`}>

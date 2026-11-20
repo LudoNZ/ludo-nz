@@ -141,6 +141,7 @@ export function boardStrips(
   nosing: number,
   boardWidth: number,
   gap: number,
+  leaveOutSlivers = true,
 ): Strip[] {
   const e = { x: -n.y, y: n.x } // along the board
   const off = (p: Pt) => dot(sub(p, a), n)
@@ -158,7 +159,7 @@ export function boardStrips(
     // slivers right at a winder's point aren't worth a board, nor a last
     // one too thin to cut (left out, as on a straight stair)
     if (length < MIN_PIECE) continue
-    if (s1 >= depth - 0.5 && width < SLIVER_MAX && s0 > -nosing) continue
+    if (leaveOutSlivers && s1 >= depth - 0.5 && width < SLIVER_MAX && s0 > -nosing) continue
     const tapered = polygonArea(poly) < length * width * 0.985
     strips.push({ poly, length, width, ripped: width < boardWidth - 0.5, tapered })
   }
@@ -305,7 +306,7 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
       // tread i's front edge is its riser face (plus a riser board)
       const front = toWorld((i - 1) * G - riserT, 0)
       const region = [front, toWorld(i * G, 0), toWorld(i * G, W), toWorld((i - 1) * G - riserT, W)]
-      const strips = boardStrips(region, front, dir, nosing, input.boardWidth, input.boardGap)
+      const strips = boardStrips(region, front, dir, nosing, input.boardWidth, input.boardGap, input.leaveOutSlivers)
       boards.push(...strips)
       boardPieces.push(...strips.map(() => W))
       if (input.riserBoards) boardPieces.push(...flightCalc.riserBoardPieces.map(() => W))
@@ -398,7 +399,7 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
         frontB = far
         n = mul({ x: -u0.y, y: u0.x }, sgn)
       }
-      const strips = boardStrips(poly, frontA, n, nosing, input.boardWidth, input.boardGap)
+      const strips = boardStrips(poly, frontA, n, nosing, input.boardWidth, input.boardGap, input.leaveOutSlivers)
       boardPieces.push(...strips.map((s) => s.length))
       taperedPieces += strips.filter((s) => s.tapered).length
       const pitchR = W / 2
