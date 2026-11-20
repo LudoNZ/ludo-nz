@@ -327,7 +327,6 @@ const WallPlanView: React.FC<{
     const fontSize = px * 0.028
     const strokeW = px * 0.008
     const handleR = px * 0.02
-    const band = [...points, ...offsetPolyline(points, retainedSide, px * 0.05).reverse()]
     const postSize = (widthM: number) => Math.max(widthM, px * POST_MIN_SCREEN)
     const posts = profile?.posts ?? []
     // how far into each layer of detail: 0 hidden, 1 fully shown — a
@@ -340,6 +339,14 @@ const WallPlanView: React.FC<{
     const ramp = (lo: number, hi: number) => zoomedIn * Math.min(1, Math.max(0, (postScreen - lo) / (hi - lo)))
     const holeShow = ramp(...DETAIL.holes)
     const boardShow = ramp(...DETAIL.boards)
+    // the backfill: from the wall line, or — once the boards are drawn —
+    // from the back of the boards, where the ground actually starts (the
+    // widest post's back face plus a board: one line for the whole wall)
+    const backfillFrom = boardShow * (Math.max(0, ...posts.map((p) => p.widthM)) / 2 + BOARD_THICKNESS_M)
+    const band = [
+      ...offsetPolyline(points, retainedSide, backfillFrom),
+      ...offsetPolyline(points, retainedSide, backfillFrom + px * 0.05).reverse(),
+    ]
     const tagShow = ramp(...DETAIL.tags)
     const lowNormal = (a: PlanPoint, b: PlanPoint) => sideNormal(a, b, lowSide)
     const turn = rotationDeg ? `rotate(${rotationDeg})` : undefined
