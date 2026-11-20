@@ -1,0 +1,107 @@
+@import "/src/styles/config";
+
+.calculatorStatusSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 3rem;
+}
+
+.header {
+  h2 {
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  p {
+    font-size: 0.85rem;
+    opacity: 0.75;
+  }
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+}
+
+.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+
+  th,
+  td {
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+  }
+
+  thead th {
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--color-primary);
+  }
+
+  tbody tr + tr {
+    border-top: 1px solid rgba(127, 127, 127, 0.25);
+  }
+
+  tbody tr:hover {
+    background-color: rgba(27, 177, 47, 0.06);
+  }
+
+  input[type="radio"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+}
+
+.nameCol {
+  text-align: left !important;
+  font-weight: normal;
+  min-width: 9rem;
+}
+
+.label {
+  display: block;
+  font-weight: 600;
+}
+
+.hint {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.status,
+.error {
+  min-height: 1.4em;
+  font-size: 0.85rem;
+}
+
+.status {
+  opacity: 0.8;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+@media (max-width: $MAX_PHONE) {
+  .matrix th,
+  .matrix td {
+    padding: 0.45rem 0.4rem;
+  }
+
+  .matrix thead th {
+    white-space: normal;
+    font-size: 0.75rem;
+  }
+}

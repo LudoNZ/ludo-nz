@@ -1,5 +1,6 @@
+import { getCalculatorStatuses } from "@/lib/calculatorStatus.server"
 import CalculatorsPage from "./calculatorsPage"
 
-export default function Page() {
-  return <CalculatorsPage />
+export default async function Page() {
+  return <CalculatorsPage statuses={await getCalculatorStatuses()} />
 }

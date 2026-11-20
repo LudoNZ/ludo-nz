@@ -9,6 +9,8 @@ import { firestore } from "../../../firebase/client"
 import { collection, getDocs, getCountFromServer, query, orderBy, limit } from "firebase/firestore"
 import MembersSection from "./membersSection"
 import SiteAccessSection from "./siteAccessSection"
+import CalculatorStatusSection from "./calculatorStatusSection"
+import type { CalculatorStatuses } from "@/lib/calculators"
 import WallActivitySection from "./wallActivitySection"
 
 interface SessionSummary {
@@ -39,7 +41,7 @@ function formatDice(config: any): string {
     .join(", ")
 }
 
-export const AdminDashboardPage = () => {
+export const AdminDashboardPage = ({ calculatorStatuses }: { calculatorStatuses: CalculatorStatuses }) => {
   const auth = useAuth()
   const router = useRouter()
   const [sessions, setSessions] = useState<SessionSummary[]>([])
@@ -122,6 +124,8 @@ export const AdminDashboardPage = () => {
       <h1>Admin Dashboard</h1>
 
       <SiteAccessSection />
+
+      <CalculatorStatusSection initial={calculatorStatuses} />
 
       <MembersSection />
 

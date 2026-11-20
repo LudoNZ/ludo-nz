@@ -1,5 +1,6 @@
+import { getCalculatorStatuses } from "@/lib/calculatorStatus.server"
 import { AdminDashboardPage } from "./adminDashboardPage"
 
-export default function Page() {
-  return <AdminDashboardPage />
+export default async function Page() {
+  return <AdminDashboardPage calculatorStatuses={await getCalculatorStatuses()} />
 }

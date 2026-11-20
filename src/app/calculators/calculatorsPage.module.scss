@@ -133,3 +133,21 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+// "in development": a live, clickable card, flagged with a coloured badge
+.devBadge {
+  position: static;
+  align-self: flex-start;
+  background-color: rgba(230, 160, 20, 0.18);
+  color: #b77a00;
+  opacity: 1;
+}
+
+// an admin's view of a coming-soon/hidden card that does have a page
+.linkedPlanned {
+  cursor: pointer;
+
+  &:hover {
+    opacity: 1;
+  }
+}
