@@ -40,7 +40,9 @@ const StairsCard: React.FC<{
   onSelect: (id: string | null) => void
   /** the stairs calculator opened on one of these stairs */
   calculatorHref: (stairId: string) => string
-}> = ({ ctx, stairs, placements, onChange, selectedId, onSelect, calculatorHref }) => {
+  /** the site wall these stairs come off */
+  wallId: string
+}> = ({ ctx, stairs, placements, onChange, selectedId, onSelect, calculatorHref, wallId }) => {
   const { profile, locked, endName } = ctx
   const segments = profile?.segments ?? []
   const update = (id: string, patch: Partial<SiteStair>) => onChange(stairs.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -55,7 +57,7 @@ const StairsCard: React.FC<{
           disabled={locked || segments.length === 0}
           onClick={() => {
             const seg = segments[Math.min(ctx.shownSegment, segments.length - 1)]
-            const s = newSiteStair(seg.index, seg.lengthM)
+            const s = newSiteStair(wallId, seg.index, seg.lengthM)
             onChange([...stairs, s])
             onSelect(s.id)
           }}

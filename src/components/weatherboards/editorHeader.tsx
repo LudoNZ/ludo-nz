@@ -15,10 +15,11 @@ const EditorHeader: React.FC<{
   /** where "← All projects" goes — the weatherboard projects page unless
    * another calculator's editor says otherwise */
   backHref?: string
-}> = ({ name, onRename, badge, status, actions, backHref = "/weatherboards" }) => (
+  backLabel?: string
+}> = ({ name, onRename, badge, status, actions, backHref = "/weatherboards", backLabel = "← All projects" }) => (
   <header className={styles.header}>
     <Link href={backHref} className={styles.back}>
-      ← All projects
+      {backLabel}
     </Link>
     <div className={styles.titleRow}>
       {onRename ? (

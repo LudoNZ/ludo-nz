@@ -12,7 +12,10 @@ import type { ProjectLocation } from "../retainingWall/wallProjectStore"
 export type { ProjectLocation }
 
 export interface SiteSummary {
+  /** every wall added up */
   wall: WallSummary
+  /** how many retaining walls (site walls, not runs) */
+  wallCount: number
   stairs: number
 }
 
@@ -65,7 +68,23 @@ export const loadSiteProject = async (location: ProjectLocation, id: string): Pr
 /** Firestore refuses `undefined` anywhere in a document */
 const plain = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 
-export const summariseSite = (site: SiteProject): SiteSummary => ({ wall: summariseWall(site.wall), stairs: site.stairs.length })
+export const summariseSite = (site: SiteProject): SiteSummary => {
+  const each = site.walls.map((w) => summariseWall(w.wall))
+  const sum = (f: (w: WallSummary) => number, dp = 2) => Math.round(each.reduce((a, w) => a + f(w), 0) * 10 ** dp) / 10 ** dp
+  return {
+    wall: {
+      wallLengthM: sum((w) => w.wallLengthM),
+      walls: sum((w) => w.walls, 0),
+      maxHeightM: Math.max(0, ...each.map((w) => w.maxHeightM)),
+      posts: sum((w) => w.posts, 0),
+      boards: sum((w) => w.boards, 0),
+      concreteM3: sum((w) => w.concreteM3),
+      needsEngineer: each.some((w) => w.needsEngineer),
+    },
+    wallCount: site.walls.length,
+    stairs: site.stairs.length,
+  }
+}
 
 export const saveSiteProject = async (location: ProjectLocation, id: string, name: string, site: SiteProject) => {
   await setDoc(docRef(location, id), {

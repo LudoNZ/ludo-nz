@@ -71,8 +71,8 @@ const LIVE_CALCULATORS: LiveCalculator[] = [
     id: "site-projects",
     title: "Site Projects",
     description:
-      "Put more than one calculator on one site — starting with stairs off a retaining wall: pin the top tread to a point along the wall and the rise comes from the wall's height there.",
-    tags: ["Wall + stairs", "Fixed top tread", "Saved projects"],
+      "Put more than one calculator on one site: import your retaining walls, place them around a site plan, and bring stairs down off them — pin the top tread to a point along a wall and the rise comes from the wall's height there.",
+    tags: ["Walls + stairs", "Site plan", "Saved projects"],
     link: "/site-projects",
   },
 ]

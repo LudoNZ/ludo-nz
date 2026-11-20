@@ -1,15 +1,18 @@
-/** A site project: output from more than one calculator on one site. For
- * now that's a retaining wall with stairs coming down in front of it —
- * each stair's top tread pinned to a point along the wall, its total rise
- * taken from the wall's height there.
+/** A site project: output from more than one calculator on one site. It
+ * starts blank; retaining walls are imported into it (copies of wall
+ * projects) or added blank, each placed on the site plan — moved and
+ * turned — and stairs come down in front of a wall, each one's top tread
+ * pinned to a point along it, its total rise taken from the wall's height
+ * there. More kinds of thing (up to a house) to come.
  *
- * Plan coordinates are the wall plan's: metres, y down (as on screen).
+ * Each wall keeps its own plan coordinates (metres, y down, as on screen),
+ * and its placement says where that sits on the site (see `toSite`).
  * The stairs calculator works in mm with its own origin (see
  * stairs/layout.ts); `placeStair` maps one onto the other. */
 
 import { DEFAULT_INPUT, FlightSpec, FramingType, FRAMING_LABELS, StairInput, StairResult, TurnSpec, calculateStairs } from "../stairs/stairs"
 import { StairLayout, calculateLayout } from "../stairs/layout"
-import { newBlankWall, wallFromData, WallProject } from "../retainingWall/wallProject"
+import { profileForWall, wallFromData, WallProject } from "../retainingWall/wallProject"
 import { WallProfile } from "../retainingWall/postProfile"
 import { PlanPoint, pointAtDistance, RetainedSide, segmentLabel, sideNormal } from "../retainingWall/wallPlan"
 import type { Pt } from "../stairs/stairs"
@@ -41,6 +44,8 @@ export const STAIR_TOP_LABELS: Record<StairTop, string> = {
 
 export interface SiteStair {
   id: string
+  /** the site wall it comes down from */
+  wallId: string
   /** e.g. "Steps to the lawn" */
   label: string
   /** the wall (run) it comes down from */
@@ -68,17 +73,42 @@ export interface SiteStair {
   input: StairInput
 }
 
-export interface SiteProject {
+/** A retaining wall on the site: the whole retaining wall calculator's
+ * project, placed. Its plan is turned `rotationDeg` (clockwise on screen)
+ * about its first point, and that point put at xM, yM on the site. */
+export interface SiteWall {
+  id: string
+  name: string
+  /** where it came from, e.g. the wall project it was copied from */
+  source: string
+  xM: number
+  yM: number
+  rotationDeg: number
   wall: WallProject
+}
+
+export interface SiteProject {
+  walls: SiteWall[]
   stairs: SiteStair[]
 }
 
-export const newBlankSite = (wall: WallProject = newBlankWall()): SiteProject => ({ wall, stairs: [] })
+export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [] })
 
 const randomId = () => Math.random().toString(36).slice(2, 10)
 
-export const newSiteStair = (segmentIndex: number, segLengthM: number): SiteStair => ({
+export const newSiteWall = (wall: WallProject, name: string, source: string, at: { xM: number; yM: number }): SiteWall => ({
   id: randomId(),
+  name,
+  source,
+  xM: at.xM,
+  yM: at.yM,
+  rotationDeg: 0,
+  wall,
+})
+
+export const newSiteStair = (wallId: string, segmentIndex: number, segLengthM: number): SiteStair => ({
+  id: randomId(),
+  wallId,
   label: "",
   segmentIndex,
   from: "start",
@@ -132,13 +162,40 @@ export const stairInputFromData = (raw: unknown): StairInput => {
   }
 }
 
+const wallFromSiteData = (raw: unknown, n: number): SiteWall | null => {
+  if (typeof raw !== "object" || raw === null) return null
+  const w = raw as Record<string, unknown>
+  return {
+    id: typeof w.id === "string" && w.id ? w.id : randomId(),
+    name: typeof w.name === "string" && w.name ? w.name : `Wall ${n + 1}`,
+    source: typeof w.source === "string" ? w.source : "",
+    xM: num(w.xM, 0),
+    yM: num(w.yM, 0),
+    rotationDeg: num(w.rotationDeg, 0),
+    wall: wallFromData(w.wall),
+  }
+}
+
 export const siteFromData = (raw: unknown): SiteProject => {
   const d = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>
+  // the first site projects held one wall, as `wall`: it becomes the
+  // first site wall, where it was
+  const walls: SiteWall[] = Array.isArray(d.walls)
+    ? d.walls.map(wallFromSiteData).filter((w): w is SiteWall => w !== null)
+    : typeof d.wall === "object" && d.wall !== null
+      ? (() => {
+          const wall = wallFromData(d.wall)
+          const p0 = wall.planPoints[0] ?? { xM: 0, yM: 0 }
+          return [{ id: "w1", name: "Wall 1", source: "", xM: p0.xM, yM: p0.yM, rotationDeg: 0, wall }]
+        })()
+      : []
+  const firstWall = walls[0]?.id ?? ""
   const stairs = (Array.isArray(d.stairs) ? d.stairs : [])
     .filter((s) => typeof s === "object" && s !== null)
     .map(
       (s): SiteStair => ({
         id: typeof s.id === "string" && s.id ? s.id : randomId(),
+        wallId: typeof s.wallId === "string" && s.wallId ? s.wallId : firstWall,
         label: typeof s.label === "string" ? s.label : "",
         segmentIndex: typeof s.segmentIndex === "number" && s.segmentIndex >= 0 ? Math.round(s.segmentIndex) : 0,
         from: s.from === "end" ? "end" : "start",
@@ -152,8 +209,37 @@ export const siteFromData = (raw: unknown): SiteProject => {
         input: stairInputFromData(s.input),
       }),
     )
-  return { wall: wallFromData(d.wall), stairs }
+  return { walls, stairs }
 }
+
+/** A wall's own plan point → the site plan. */
+export const toSite = (w: Pick<SiteWall, "xM" | "yM" | "rotationDeg" | "wall">) => {
+  const p0 = w.wall.planPoints[0] ?? { xM: 0, yM: 0 }
+  const a = (w.rotationDeg * Math.PI) / 180
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  return (p: PlanPoint): PlanPoint => {
+    const x = p.xM - p0.xM
+    const y = p.yM - p0.yM
+    return { xM: w.xM + x * c - y * s, yM: w.yM + x * s + y * c }
+  }
+}
+
+// a wall's profile, worked out once per version of the wall
+const profiles = new WeakMap<WallProject, WallProfile | null>()
+export const siteWallProfile = (wall: WallProject): WallProfile | null => {
+  if (!profiles.has(wall)) profiles.set(wall, profileForWall(wall))
+  return profiles.get(wall) ?? null
+}
+
+/** Every stair placed on its wall (in the wall's own plan), with the wall. */
+export const sitePlacements = (site: SiteProject): { wall: SiteWall; placement: StairPlacement }[] =>
+  site.stairs.flatMap((st) => {
+    const wall = site.walls.find((w) => w.id === st.wallId)
+    if (!wall) return []
+    const placement = placeStair(st, wall.wall.planPoints, wall.wall.retainedSide, siteWallProfile(wall.wall))
+    return placement ? [{ wall, placement }] : []
+  })
 
 /** The wall's levels at a point along it (m), straight-line between the
  * posts either side. */

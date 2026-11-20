@@ -1,0 +1,166 @@
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.planWrap {
+  position: relative;
+  margin: 1rem 0 1.5rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+.plan {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  touch-action: none;
+  user-select: none;
+}
+
+.wall {
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  text-align: center;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.card {
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h2 {
+    font-size: 1.15rem;
+    margin-bottom: 0.6rem;
+    color: var(--color-primary);
+  }
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+
+  select {
+    flex: 1 1 16rem;
+    min-width: 0;
+    padding: 0.45rem;
+    font-size: max(1rem, 16px);
+  }
+}
+
+.hint {
+  margin: 0.6rem 0 0.4rem;
+  font-size: 0.82rem;
+  opacity: 0.7;
+  line-height: 1.45;
+}
+
+.item,
+.itemPicked {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-left: 4px solid #7a5a3a;
+  border-radius: var(--borderRadius);
+  cursor: pointer;
+}
+
+.itemPicked {
+  border-left-color: #1e6b3a;
+  cursor: default;
+  background: color-mix(in srgb, #1e6b3a 6%, transparent);
+}
+
+.itemHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
+.meta {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.itemActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.link {
+  font: inherit;
+  font-size: 0.85rem;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  label {
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  input {
+    padding: 0.4rem;
+    font-size: max(1rem, 16px);
+    min-width: 0;
+  }
+}
+
+.rotate {
+  display: flex;
+  gap: 0.35rem;
+
+  input {
+    flex: 1;
+    width: 0;
+  }
+
+  button {
+    font-size: 1.1rem;
+    padding: 0 0.6rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--borderRadius);
+    background: transparent;
+    color: var(--color-primary);
+    cursor: pointer;
+  }
+}
