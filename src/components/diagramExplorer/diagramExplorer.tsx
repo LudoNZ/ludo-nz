@@ -35,11 +35,16 @@ const FIT: View = { s: 1, tx: 0, ty: 0 }
  * with getScreenCTM (e.g. the wall plan's draggable corners) still lines
  * up. Elements marked data-explore-skip keep their own drags. */
 const DiagramExplorer: React.FC<{
-  /** the drawing — or a function of the zoom (1 = fitted, and out of
-   * explore mode), for a drawing that keeps its line weights and text the
-   * same size on screen and shows things at their true size as it's
-   * zoomed in */
-  children: ReactNode | ((zoom: number) => ReactNode)
+  /** the drawing — or a function of how it's being explored: `zoom` (1 =
+   * fitted, and out of explore mode), for a drawing that keeps its line
+   * weights and text the same size on screen and shows things at their
+   * true size as it's zoomed in; `locked`, true while full-screen with
+   * editing off (see `editable`) */
+  children: ReactNode | ((view: { zoom: number; locked: boolean }) => ReactNode)
+  /** a drawing that can be edited (dragged corners and the like): full
+   * screen it opens locked, so a drag always pans, with an Edit switch
+   * beside Done to turn editing back on */
+  editable?: boolean
   /** what the drawing is, for the button's label and the full-screen title */
   label: string
   /** a 3D view: one-finger / mouse drag turns it, by this many pixels */
@@ -48,8 +53,10 @@ const DiagramExplorer: React.FC<{
   toolbar?: ReactNode
   /** fill the parent's height (a fixed-height pane) */
   fill?: boolean
-}> = ({ children, label, onOrbit, toolbar, fill = false }) => {
+}> = ({ children, label, onOrbit, toolbar, fill = false, editable = false }) => {
   const [exploring, setExploring] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const locked = exploring && editable && !editing
   const [mode, setMode] = useState<Mode>(onOrbit ? "rotate" : "pan")
   const [view, setView] = useState<View>(FIT)
   const viewRef = useRef(view)
@@ -205,6 +212,7 @@ const DiagramExplorer: React.FC<{
 
   const enter = () => {
     setView(FIT)
+    setEditing(false)
     setExploring(true)
   }
   const leave = () => {
@@ -220,6 +228,7 @@ const DiagramExplorer: React.FC<{
       ? "Drag to turn · pinch or scroll to zoom · two fingers or right-drag to pan"
       : "Drag to pan · pinch or scroll to zoom"
     : "Drag to pan · pinch or scroll to zoom · double-click to zoom in"
+  const lockHint = editable ? (editing ? " · Edit is on: drag corners to move them" : " · Editing locked — turn on Edit to change it") : ""
 
   return (
     <div
@@ -239,6 +248,20 @@ const DiagramExplorer: React.FC<{
                 </button>
               ))}
             </div>
+          )}
+          {editable && (
+            <button
+              type="button"
+              className={`${styles.editToggle} ${editing ? styles.editOn : ""}`}
+              aria-pressed={editing}
+              onClick={() => setEditing((v) => !v)}
+              title={editing ? "Lock editing: drags only pan" : "Turn on editing: drag corners and handles"}
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                {editing ? <path d="M6 9V6.5a4 4 0 0 1 7.6-1.7M4.5 9h11v8h-11z" /> : <path d="M6 9V6.5a4 4 0 0 1 8 0V9M4.5 9h11v8h-11z" />}
+              </svg>
+              Edit
+            </button>
           )}
           <button type="button" className={styles.done} onClick={leave}>
             Done
@@ -265,7 +288,7 @@ const DiagramExplorer: React.FC<{
         }
       >
         <div className={styles.content} style={exploring ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
-          {typeof children === "function" ? children(exploring ? view.s : 1) : children}
+          {typeof children === "function" ? children({ zoom: exploring ? view.s : 1, locked }) : children}
         </div>
         {exploring && (
           <div className={styles.zoomButtons} data-explore-skip>
@@ -291,7 +314,10 @@ const DiagramExplorer: React.FC<{
       {exploring ? (
         <>
           <div className={styles.bottomBar}>
-            <p className={styles.hint}>{hint}</p>
+            <p className={styles.hint}>
+              {hint}
+              {lockHint}
+            </p>
             {toolbar}
           </div>
         </>

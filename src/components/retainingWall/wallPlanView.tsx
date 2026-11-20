@@ -273,7 +273,9 @@ const WallPlanView: React.FC<{
    * and boards are real things, drawn at least big enough to see and at
    * their true size once the zoom shows it — with more detail coming in
    * the closer it gets. */
-  const drawPlan = (zoom: number) => {
+  const drawPlan = ({ zoom, locked }: { zoom: number; locked: boolean }) => {
+    // full-screen with editing off: looked at, not changed — a drag pans
+    const fixed = readOnly || locked
     const px = scale / zoom
     const fontSize = px * 0.028
     const strokeW = px * 0.008
@@ -532,7 +534,7 @@ const WallPlanView: React.FC<{
           })}
 
           {/* "+" on each run: adds a corner there, ready to drag out */}
-          {(readOnly ? [] : points.slice(0, -1)).map((a, i) => {
+          {(fixed ? [] : points.slice(0, -1)).map((a, i) => {
             const b = points[i + 1]
             const cx = (a.xM + b.xM) / 2
             const cy = (a.yM + b.yM) / 2
@@ -564,13 +566,13 @@ const WallPlanView: React.FC<{
           {points.map((p, i) => (
             <g
               key={`vertex-${i}`}
-              className={styles.vertex}
+              className={fixed ? styles.vertexFixed : styles.vertex}
               // its own drag, not the explorer's pan
-              data-explore-skip
-              onPointerDown={handlePointerDown(i)}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
+              data-explore-skip={fixed ? undefined : true}
+              onPointerDown={fixed ? undefined : handlePointerDown(i)}
+              onPointerMove={fixed ? undefined : handlePointerMove}
+              onPointerUp={fixed ? undefined : handlePointerUp}
+              onPointerCancel={fixed ? undefined : handlePointerUp}
             >
               <circle cx={p.xM} cy={p.yM} r={handleR * 2.4} className={styles.handleHit} />
               <circle cx={p.xM} cy={p.yM} r={handleR * 1.15} className={styles.vertexDot} strokeWidth={strokeW * 0.6} />
@@ -578,7 +580,7 @@ const WallPlanView: React.FC<{
           ))}
           {/* the picked obstruction's handles: drag the middle one along
               the wall, the round one at its end to turn it */}
-          {!readOnly &&
+          {!fixed &&
             onObstructionChange &&
             obstructionDraw
               .filter(({ o }) => o.id === selectedObstructionId)
@@ -632,7 +634,9 @@ const WallPlanView: React.FC<{
 
   return (
     <div className={styles.planRoot}>
-      <DiagramExplorer label="Wall plan">{drawPlan}</DiagramExplorer>
+      <DiagramExplorer label="Wall plan" editable={!readOnly}>
+        {drawPlan}
+      </DiagramExplorer>
 
       <div className={styles.legend}>
         <span>

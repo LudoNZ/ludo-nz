@@ -85,6 +85,10 @@
   stroke: transparent;
   stroke-linecap: round;
   cursor: pointer;
+  // Chrome paints a focused SVG line's default outline as a solid black
+  // blob of the whole stroke — e.g. after a pan lets go over a wall. The
+  // keyboard focus look is the tint below instead.
+  outline: none;
 
   &:hover,
   &:focus-visible {
@@ -134,6 +138,10 @@
   &:active {
     cursor: grabbing;
   }
+}
+
+.vertexFixed {
+  pointer-events: none;
 }
 
 .vertexDot {
