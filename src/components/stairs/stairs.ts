@@ -456,8 +456,8 @@ export function calculateStairs(input: StairInput): StairResult {
     return broken
   }
   const twoRBroken: string[] = []
-  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, under the ${TWO_R_PLUS_G.min} mm minimum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1)`)
-  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, over the ${TWO_R_PLUS_G.max} mm maximum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1)`)
+  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, under the ${TWO_R_PLUS_G.min} mm minimum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1) — with this rise, a run of at least ${Math.ceil(TWO_R_PLUS_G.min - 2 * R)} mm`)
+  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, over the ${TWO_R_PLUS_G.max} mm maximum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1) — with this rise, a run of ${Math.floor(TWO_R_PLUS_G.max - 2 * R)} mm or less`)
   const mainBroken = [...check(MAIN_PRIVATE), ...twoRBroken]
   const serviceBroken = [...check(SERVICE), ...twoRBroken]
   const compliance: ComplianceLevel =
