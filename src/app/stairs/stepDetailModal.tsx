@@ -20,30 +20,41 @@ const mmText = (v: number) => `${Math.round(v)}`
  * front of the tread for the nosing, or the next riser for the run, or
  * type the numbers: board size and gap, and boards on the risers (their
  * gap, and whether the ripped one goes at the top or the bottom).
- * Nothing changes on the stair until Apply, as in the retaining wall's
- * pile setup. The rise isn't set here: it's the total rise over the
+ * Every change goes straight onto the stair, and saves with it; Undo
+ * changes puts it back as it was when this was opened. The rise isn't set here: it's the total rise over the
  * risers. */
 const StepDetailModal: React.FC<{
   isOpen: boolean
   onClose: () => void
   value: StairInput
-  onApply: (next: StairInput) => void
+  /** every change, as it's made: the stair saves as usual */
+  onChange: (next: StairInput) => void
   /** the most a step's run can be (so the stair stays within its cap) */
   maxRun: number
-}> = ({ isOpen, onClose, value, onApply, maxRun }) => {
-  const [draft, setDraft] = useState<StairInput>(value)
+}> = ({ isOpen, onClose, value, onChange, maxRun }) => {
+  const draft = value
   const [dragging, setDragging] = useState<Handle | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
-  // start from the stair as it is each time it's opened
+  // the stair as it was when this was opened, to undo back to
   const valueRef = useRef(value)
   valueRef.current = value
+  const [opened, setOpened] = useState<StairInput | null>(null)
   useEffect(() => {
-    if (isOpen) setDraft(valueRef.current)
+    if (isOpen) setOpened(valueRef.current)
   }, [isOpen])
+  // the latest stair, so a fast drag builds on the last change, not the
+  // stair as it was at this render
+  const live = useRef(value)
+  live.current = value
 
   const r = useMemo(() => calculateStairs(draft), [draft])
-  const set = <K extends keyof StairInput>(key: K, v: StairInput[K]) => setDraft((d) => ({ ...d, [key]: v }))
+  const set = <K extends keyof StairInput>(key: K, v: StairInput[K]) => {
+    if (live.current[key] === v) return
+    live.current = { ...live.current, [key]: v }
+    onChange(live.current)
+  }
+  const changed = opened !== null && JSON.stringify(opened) !== JSON.stringify(value)
 
   const R = r.rise
   const G = r.going
@@ -174,7 +185,7 @@ const StepDetailModal: React.FC<{
         </div>
         <p className={pile.note}>
           One step in cross-section, to scale. Drag the blue handles — the front of the tread for the nosing, the next
-          riser for the run — or type the numbers. Every step of the stair is built the same.
+          riser for the run — or type the numbers. Changes go straight onto the stair; every step is built the same.
         </p>
 
         <div className={styles.layout}>
@@ -285,18 +296,11 @@ const StepDetailModal: React.FC<{
         </div>
 
         <div className={pile.footer}>
-          <button type="button" className={pile.cancel} onClick={onClose}>
-            Cancel
+          <button type="button" className={pile.cancel} onClick={() => opened && onChange(opened)} disabled={!changed}>
+            Undo changes
           </button>
-          <button
-            type="button"
-            className={pile.apply}
-            onClick={() => {
-              onApply(draft)
-              onClose()
-            }}
-          >
-            Apply
+          <button type="button" className={pile.apply} onClick={onClose}>
+            Done
           </button>
         </div>
       </div>

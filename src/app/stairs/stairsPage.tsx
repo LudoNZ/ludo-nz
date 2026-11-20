@@ -448,12 +448,12 @@ const StairsPage: React.FC<{
                   : "How far the front board overhangs the riser"}
               </span>
               <div className={styles.numberUnit}>
+                {/* typing a nosing sets it by hand (Auto goes off) */}
                 <DraftNumberInput
                   id="nosing"
                   min={0}
                   max={60}
                   value={Math.round(r.nosing)}
-                  disabled={input.nosing === null}
                   onValue={(v) => set("nosing", Math.max(0, v))}
                 />
                 <span>mm</span>
@@ -476,7 +476,7 @@ const StairsPage: React.FC<{
           isOpen={stepDetailOpen}
           onClose={() => setStepDetailOpen(false)}
           value={input}
-          onApply={(next) => setInput(next)}
+          onChange={(next) => setInput(next)}
           maxRun={Math.max(150, maxGoing)}
         />
 
