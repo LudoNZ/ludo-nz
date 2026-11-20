@@ -23,6 +23,7 @@ import {
   POST_EMBED,
   Pt,
   SERVICE,
+  STAIR_RULES_REF,
   STRINGER_SPANS,
   StairInput,
   StairResult,
@@ -482,7 +483,7 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
     // checks
     if (spec.kind === "landing") {
       if (length < MIN_LANDING_LENGTH - 0.5)
-        notes.push(`Turn ${fi + 1}: the landing is ${Math.round(length)} mm long — landings want to be at least ${MIN_LANDING_LENGTH} mm.`)
+        notes.push(`Turn ${fi + 1}: the landing is ${Math.round(length)} mm long — landings must be at least ${MIN_LANDING_LENGTH} mm long (NZBC D1/AS1).`)
       maxRiseBetweenLandings = Math.max(maxRiseBetweenLandings, (sinceLanding + 1) * R)
       sinceLanding = 0
     } else {
@@ -490,11 +491,11 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
       const g = regions[0].going
       if (g < SERVICE.minGoing - 0.5)
         notes.push(
-          `Turn ${fi + 1}: each winder's run is only ${Math.round(g)} mm at the centre of the stair — under even the ${SERVICE.minGoing} mm service minimum. Use fewer winders or a landing.`,
+          `Turn ${fi + 1}: each winder's run is only ${Math.round(g)} mm at the centre of the stair — under even the ${SERVICE.minGoing} mm minimum for a service stair (${STAIR_RULES_REF}). Use fewer winders or a landing.`,
         )
       else if (g < MAIN_PRIVATE.minGoing - 0.5)
         notes.push(
-          `Turn ${fi + 1}: each winder's run is ${Math.round(g)} mm at the centre of the stair — under the ${MAIN_PRIVATE.minGoing} mm main-stair minimum (OK for a service stair).`,
+          `Turn ${fi + 1}: each winder's run is ${Math.round(g)} mm at the centre of the stair — under the ${MAIN_PRIVATE.minGoing} mm minimum for a main private stair (${STAIR_RULES_REF}); OK for a service stair.`,
         )
     }
 
@@ -507,7 +508,7 @@ export function calculateLayout(input: StairInput, whole: StairResult): StairLay
   maxRiseBetweenLandings = Math.max(maxRiseBetweenLandings, (sinceLanding + 1) * R)
   if (input.turns.length > 0 && maxRiseBetweenLandings > MAX_RISE_BETWEEN_LANDINGS)
     notes.push(
-      `There's a ${(maxRiseBetweenLandings / 1000).toFixed(2)} m climb with no landing — private stairs want one at least every ${MAX_RISE_BETWEEN_LANDINGS / 1000} m.`,
+      `There's a ${(maxRiseBetweenLandings / 1000).toFixed(2)} m climb with no landing — a private stair needs a landing at least every ${MAX_RISE_BETWEEN_LANDINGS / 1000} m of height (${STAIR_RULES_REF}).`,
     )
 
   // does the stair run into itself? (e.g. two left turns on short runs)

@@ -25,7 +25,11 @@ import styles from "../retaining-walls/obstructionsCard.module.scss"
 export const STAIR_COLOR = "#4f6378"
 
 const complianceText = (p: StairPlacement) =>
-  p.result.compliance === "main" ? MAIN_PRIVATE.label : p.result.compliance === "service" ? `${SERVICE.label} only` : "⚠ Doesn't meet D1"
+  p.result.compliance === "main"
+    ? MAIN_PRIVATE.label
+    : p.result.compliance === "service"
+      ? `${SERVICE.label} only — ${p.result.serviceNotes.join("; ")}`
+      : `⚠ Doesn't meet the Building Code: ${p.result.failures.join("; ")}`
 
 /** Stairs coming down off the wall: each one's top tread pinned to a
  * point along it, and the stairs calculator under it, its rise from the

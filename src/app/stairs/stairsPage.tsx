@@ -133,7 +133,7 @@ const StairsPage: React.FC<{
     )
   if (!input.riserBoards && r.treads > 0 && r.openRiserGap > OPEN_RISER_MAX_GAP)
     notes.push(
-      `Open risers leave a ${mm(r.openRiserGap)} gap. Where young children could use the stair, NZBC F4 wants gaps a 100 mm sphere can't pass — add riser boards or a batten.`,
+      `Open risers leave a ${mm(r.openRiserGap)} gap. Where young children could use the stair, openings must stop a 100 mm sphere passing through (NZBC clause F4, Safety from falling) — add riser boards or a batten.`,
     )
   if (r.wedges.needsWiderBoard)
     notes.push(

@@ -88,6 +88,9 @@ export const SERVICE: StairCategoryRules = {
 
 export const TWO_R_PLUS_G = { min: 550, max: 700 }
 
+/** where the rise, run and pitch limits come from, for the warnings */
+export const STAIR_RULES_REF = "NZBC D1/AS1 Table 7"
+
 /** Gap at an open riser (or between balusters) a 100 mm sphere mustn't fit
  * through where young children could be about — NZBC F4. */
 export const OPEN_RISER_MAX_GAP = 100
@@ -443,15 +446,18 @@ export function calculateStairs(input: StairInput): StairResult {
   // ---- compliance --------------------------------------------------------
   const check = (rules: StairCategoryRules) => {
     const broken: string[] = []
-    if (R > rules.maxRise + 0.05) broken.push(`rise ${Math.round(R)} mm is over the ${rules.maxRise} mm maximum`)
-    if (G < rules.minGoing - 0.05) broken.push(`run ${Math.round(G)} mm is under the ${rules.minGoing} mm minimum`)
+    const what = rules.label.toLowerCase()
+    if (R > rules.maxRise + 0.05)
+      broken.push(`rise ${Math.round(R)} mm is over the ${rules.maxRise} mm maximum for a ${what} (${STAIR_RULES_REF})`)
+    if (G < rules.minGoing - 0.05)
+      broken.push(`run ${Math.round(G)} mm is under the ${rules.minGoing} mm minimum for a ${what} (${STAIR_RULES_REF})`)
     if (pitchDeg > rules.maxPitchDeg + 0.05)
-      broken.push(`pitch ${pitchDeg.toFixed(1)}° is steeper than ${rules.maxPitchDeg}°`)
+      broken.push(`pitch ${pitchDeg.toFixed(1)}° is steeper than the ${rules.maxPitchDeg}° maximum for a ${what} (${STAIR_RULES_REF})`)
     return broken
   }
   const twoRBroken: string[] = []
-  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, under ${TWO_R_PLUS_G.min} mm`)
-  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, over ${TWO_R_PLUS_G.max} mm`)
+  if (twoRPlusG < TWO_R_PLUS_G.min) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, under the ${TWO_R_PLUS_G.min} mm minimum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1)`)
+  if (twoRPlusG > TWO_R_PLUS_G.max) twoRBroken.push(`2 × rise + run is ${Math.round(twoRPlusG)} mm, over the ${TWO_R_PLUS_G.max} mm maximum (it must be ${TWO_R_PLUS_G.min}–${TWO_R_PLUS_G.max} mm, NZBC D1/AS1)`)
   const mainBroken = [...check(MAIN_PRIVATE), ...twoRBroken]
   const serviceBroken = [...check(SERVICE), ...twoRBroken]
   const compliance: ComplianceLevel =
