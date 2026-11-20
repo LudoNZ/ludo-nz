@@ -104,6 +104,42 @@ export const StairElevation: React.FC<{
 
     // each step: its number, and (closer in) how high its tread is and how
     // far its nosing is from the first step's, both from the bottom
+    // the nosings' running measurement: a dimension line on the stair's
+    // angle, just above the step labels, ticked at each nosing with its
+    // distance along the slope from the first
+    const slope = Math.hypot(G, R)
+    const pitchTags = []
+    if (runShow > 0 && treads > 1) {
+      // perpendicular, up and back (screen y is down)
+      const nx = -R / slope
+      const ny = -G / slope
+      // far enough out that the line clears the ↑ / → labels over each nosing
+      const off = (tagFont * 2.9 * G) / slope
+      const at = (i: number) => ({ x: (i - 1) * G + front + nx * off, y: -(i * R) + ny * off })
+      const a0 = at(1)
+      const a1 = at(treads)
+      const angle = (Math.atan2(-R, G) * 180) / Math.PI
+      const tick = tagFont * 0.4
+      pitchTags.push(
+        <line key="pitch" x1={a0.x} y1={a0.y} x2={a1.x} y2={a1.y} strokeWidth={stroke} />,
+      )
+      for (let i = 1; i <= treads; i++) {
+        const p = at(i)
+        const tx = p.x + nx * tagFont * 0.35 + (G / slope) * tagFont * 0.25
+        const ty = p.y + ny * tagFont * 0.35 + (-R / slope) * tagFont * 0.25
+        pitchTags.push(
+          <g key={`pt${i}`}>
+            <line x1={p.x - nx * tick} y1={p.y - ny * tick} x2={p.x + nx * tick} y2={p.y + ny * tick} strokeWidth={stroke} />
+            {/* faint, from the nosing out to its tick */}
+            <line x1={p.x - nx * off} y1={p.y - ny * off} x2={p.x - nx * tick} y2={p.y - ny * tick} strokeWidth={stroke * 0.6} strokeDasharray={`${tagFont * 0.25} ${tagFont * 0.25}`} opacity={0.6} />
+            <text x={tx} y={ty} fontSize={tagFont * 0.9} transform={`rotate(${angle} ${tx} ${ty})`} className={styles.stepRunning}>
+              {mm((i - 1) * slope)}
+            </text>
+          </g>,
+        )
+      }
+    }
+
     const stepTags = []
     if (stepShow > 0)
       for (let i = 1; i <= treads; i++) {
@@ -113,7 +149,7 @@ export const StairElevation: React.FC<{
           <g key={`st${i}`} className={styles.stepTag}>
             {runShow > 0 && (
               <>
-                <line x1={x} y1={-(i * R)} x2={x} y2={-(i * R) - tagFont * 3.2 * runShow} strokeWidth={stroke} opacity={runShow} />
+                <line x1={x} y1={-(i * R)} x2={x} y2={-(i * R) - tagFont * 2.5 * runShow} strokeWidth={stroke} opacity={runShow} />
                 <text x={x + tagFont * 0.3} y={y - tagFont * 1.15} fontSize={tagFont} opacity={runShow} className={styles.stepRunning}>
                   ↑ {mm(i * R)}
                 </text>
@@ -295,6 +331,11 @@ export const StairElevation: React.FC<{
           {treadRects}
           {boardTags}
           {stepTags}
+          {pitchTags.length > 0 && (
+            <g className={styles.stepTag} opacity={runShow}>
+              {pitchTags}
+            </g>
+          )}
 
           {/* total rise, in front of the bottom step */}
           <g className={styles.dim}>
