@@ -251,18 +251,13 @@
 }
 
 // zoomed in: post centres measured from the start of each wall
-.runningDim {
+.postLabel {
   pointer-events: none;
+}
 
-  line {
-    stroke: var(--foreground);
-    stroke-opacity: 0.5;
-  }
-
-  text {
-    fill: #8b5a2b;
-    font-weight: 600;
-  }
+.runningDim {
+  fill: #8b5a2b;
+  font-weight: 600;
 }
 
 // Measure

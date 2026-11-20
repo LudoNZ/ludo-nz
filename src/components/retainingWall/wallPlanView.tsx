@@ -353,23 +353,28 @@ const WallPlanView: React.FC<{
       const i = seg?.index ?? 0
       return { a: points[i], b: points[i + 1] ?? points[i] }
     }
-    /** a post's tag ("7 · □150") — level on screen, so how far it reaches
-     * out from its middle along the plan direction `n` depends on how the
-     * plan's turned: half its width across a wall that runs up the screen,
-     * half its height across one that runs along it */
-    const tagText = (post: { index: number; sizeLabel: string }) => `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`
-    const tagReach = (text: string, n: PlanPoint) => {
-      const ns = rotatePoint(n, shownDeg)
-      const tagFont = fontSize * 0.7
-      // the site font's monospace: about 0.6 of the size per character
-      return (Math.abs(ns.xM) * text.length * 0.6 * tagFont) / 2 + (Math.abs(ns.yM) * tagFont) / 2
+    /** a post's label, close in: its number and size ("7 · □150"), and
+     * under it how far it is from the start of its wall — at a corner,
+     * where it ends one wall and starts the next, both ("2000 · E 0") */
+    const postLabel = (post: ProfilePost) => {
+      const runs = (profile?.segments ?? []).filter((g) => post.index >= g.startPostIndex && post.index <= g.endPostIndex)
+      const running = runs
+        .map((g) => (post.index === g.startPostIndex ? `${segmentLabel(g.index)} 0` : `${Math.round((post.xM - g.startXM) * 1000)}`))
+        .join(" · ")
+      return { tag: `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`, running }
     }
-    /** how far out from a post's centre its tag sits, and its running
-     * measurement past that */
-    const tagOffset = (post: ProfilePost, n: PlanPoint) =>
-      Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.25 + tagReach(tagText(post), n)
-    const runningOffset = (post: ProfilePost, n: PlanPoint) =>
-      tagOffset(post, n) + tagReach(tagText(post), n) + fontSize * 0.75
+    const labelFont = fontSize * 0.7
+    const labelLine = labelFont * 1.2
+    /** how far the two-line label reaches out from its middle along the
+     * plan direction `n` — it's level on screen, so that's half its width
+     * across a wall running up the screen, half its height across one
+     * running along it */
+    const labelReach = (lines: string[], n: PlanPoint) => {
+      const ns = rotatePoint(n, shownDeg)
+      // the site font's monospace: about 0.6 of the size per character
+      const width = Math.max(...lines.map((l) => l.length)) * 0.6 * labelFont
+      return (Math.abs(ns.xM) * width) / 2 + (Math.abs(ns.yM) * labelLine * lines.length) / 2
+    }
     /** the run a bay's on — for a bay starting at a corner post, the run
      * it starts, not the one the corner post ends */
     const runOfBay = (left: number, right: number) => {
@@ -560,46 +565,6 @@ const WallPlanView: React.FC<{
             )
           })}
 
-          {/* close in: running measurements along each wall from its
-              start, post centre by post centre, out past the post tags */}
-          {tagShow > 0 &&
-            profile?.segments.flatMap((seg) => {
-              const a = points[seg.index]
-              const b = points[seg.index + 1]
-              if (!a || !b) return []
-              const n = lowNormal(a, b)
-              let deg = normalizeDeg((Math.atan2(b.yM - a.yM, b.xM - a.xM) * 180) / Math.PI + shownDeg)
-              if (deg > 90) deg -= 180
-              if (deg <= -90) deg += 180
-              return posts.slice(seg.startPostIndex, seg.endPostIndex + 1).map((post) => {
-                const at = pointAtDistance(points, post.xM)
-                const off = runningOffset(post, n)
-                const spot = { xM: at.xM + n.xM * off, yM: at.yM + n.yM * off }
-                const tick = fontSize * 0.45
-                return (
-                  <g key={`run-${seg.index}-${post.index}`} opacity={tagShow} className={styles.runningDim}>
-                    <line
-                      x1={at.xM + n.xM * (off - tick * 1.6)}
-                      y1={at.yM + n.yM * (off - tick * 1.6)}
-                      x2={at.xM + n.xM * (off - tick * 0.6)}
-                      y2={at.yM + n.yM * (off - tick * 0.6)}
-                      strokeWidth={strokeW * 0.25}
-                    />
-                    <text
-                      x={spot.xM}
-                      y={spot.yM}
-                      fontSize={fontSize * 0.7}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      transform={`rotate(${deg - shownDeg} ${spot.xM} ${spot.yM})`}
-                    >
-                      {post.index === seg.startPostIndex ? `${segmentLabel(seg.index)} 0` : Math.round((post.xM - seg.startXM) * 1000)}
-                    </text>
-                  </g>
-                )
-              })
-            })}
-
           {/* measured: a line between the two picked posts, and how far */}
           {measuring &&
             measured &&
@@ -657,21 +622,39 @@ const WallPlanView: React.FC<{
               const at = pointAtDistance(points, post.xM)
               const { a, b } = runOf(post.index)
               const n = lowNormal(a, b)
-              const off = tagOffset(post, n)
+              const { tag, running } = postLabel(post)
+              const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.25 + labelReach([tag, running], n)
+              const mid = { xM: at.xM + n.xM * off, yM: at.yM + n.yM * off }
+              // the tag half a line up the screen, the running measurement
+              // half a line down
+              const line = (k: number) => ({ xM: mid.xM + up.xM * labelLine * k, yM: mid.yM + up.yM * labelLine * k })
+              const top = line(0.5)
+              const bottom = line(-0.5)
               return (
-                <text
-                  key={`tag-${post.index}`}
-                  x={at.xM + n.xM * off}
-                  y={at.yM + n.yM * off}
-                  fontSize={fontSize * 0.7}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className={post.index === selectedPostIndex ? styles.postTagSelected : styles.postTag}
-                  opacity={tagShow}
-                  transform={upright({ xM: at.xM + n.xM * off, yM: at.yM + n.yM * off })}
-                >
-                  {tagText(post)}
-                </text>
+                <g key={`tag-${post.index}`} opacity={tagShow} className={styles.postLabel}>
+                  <text
+                    x={top.xM}
+                    y={top.yM}
+                    fontSize={labelFont}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className={post.index === selectedPostIndex ? styles.postTagSelected : styles.postTag}
+                    transform={upright(top)}
+                  >
+                    {tag}
+                  </text>
+                  <text
+                    x={bottom.xM}
+                    y={bottom.yM}
+                    fontSize={labelFont}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className={styles.runningDim}
+                    transform={upright(bottom)}
+                  >
+                    {running}
+                  </text>
+                </g>
               )
             })}
           {tagShow > 0 &&
