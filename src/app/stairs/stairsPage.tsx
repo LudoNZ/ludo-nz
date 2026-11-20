@@ -29,6 +29,8 @@ import StairOrderCard from "@/components/stairs/stairOrderCard"
 import LayoutEditor from "./layoutEditor"
 import DraftNumberInput from "./draftNumberInput"
 import StepDetailModal from "./stepDetailModal"
+import SectionRail, { RailSection } from "../retaining-walls/sectionRail"
+import { ElevationIcon, MaterialsIcon, OrderIcon, PlanViewIcon, Render3DIcon, SlidersIcon, TopIcon } from "@/components/icons/icons"
 import styles from "./stairsPage.module.scss"
 import specStyles from "@/components/structures/specCard.module.scss"
 
@@ -156,8 +158,21 @@ const StairsPage: React.FC<{
       `${r.treads} stacked frames is a lot of timber and weight — past ${STACKED_FRAMES_SUGGESTED_MAX} steps the stringer and wedge blocks are usually the better build.`,
     )
 
+  // the side panel for getting round the page, as the retaining wall
+  // calculator has (not when it's inside a wall's page, which has its own)
+  const railSections: RailSection[] = [
+    { id: "st-top", label: "Top", icon: <TopIcon /> },
+    { id: "st-inputs", label: "Stair & boards", icon: <SlidersIcon /> },
+    { id: "st-plan", label: "From above", icon: <PlanViewIcon /> },
+    { id: "st-side", label: "Side view", icon: <ElevationIcon /> },
+    { id: "st-3d", label: "3D view", icon: <Render3DIcon /> },
+    { id: "st-materials", label: "Materials", icon: <MaterialsIcon /> },
+    { id: "st-order", label: "Order", icon: <OrderIcon /> },
+  ]
+
   return (
-    <div className={embedded ? styles.embedded : styles.stairsPage}>
+    <div className={embedded ? styles.embedded : styles.stairsPage} id={embedded ? undefined : "st-top"}>
+      {!embedded && <SectionRail sections={railSections} />}
       {header}
       {!embedded && header === undefined && (
         <>
@@ -171,7 +186,7 @@ const StairsPage: React.FC<{
       )}
 
       <div className={styles.layout}>
-        <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
+        <form className={styles.form} onSubmit={(e) => e.preventDefault()} id={embedded ? undefined : "st-inputs"}>
           <fieldset>
             <legend>Stair</legend>
             <div className={styles.pair}>
@@ -528,7 +543,7 @@ const StairsPage: React.FC<{
                   ✕ {e}
                 </p>
               ))}
-              <div className={styles.diagramCard}>
+              <div className={styles.diagramCard} id={embedded ? undefined : "st-plan"}>
                 <h2>From above</h2>
                 <TurnedPlan input={input} layout={layout} />
                 <DiagramLegend
@@ -546,7 +561,7 @@ const StairsPage: React.FC<{
                   const next = layout.turns[f.index]
                   const top = next ? (next.spec.kind === "landing" ? "Landing" : "Winder") : "Deck"
                   return (
-                    <div key={f.index} className={styles.diagramCard}>
+                    <div key={f.index} className={styles.diagramCard} id={!embedded && f.index === 0 ? "st-side" : undefined}>
                       <h2>
                         Run {f.index + 1} side view: {f.baseHeight > 0 ? `+${Math.round(f.baseHeight)}` : "ground"} up to{" "}
                         {top.toLowerCase()} at +{Math.round(f.topHeight)}
@@ -560,12 +575,12 @@ const StairsPage: React.FC<{
             <p className={styles.note}>That&apos;s a single step — no stair framing needed.</p>
           ) : (
             <>
-              <div className={styles.diagramCard}>
+              <div className={styles.diagramCard} id={embedded ? undefined : "st-side"}>
                 <h2>Side view</h2>
                 <StairElevation input={input} result={r} />
                 <DiagramLegend riserBoards={input.riserBoards} hasRip={hasRip || !!riserRip} stacked={stacked} outer={outer} posts={r.stringer.posts.length > 0} />
               </div>
-              <div className={styles.diagramCard}>
+              <div className={styles.diagramCard} id={embedded ? undefined : "st-plan"}>
                 <h2>From above</h2>
                 <StairPlan input={input} result={r} />
               </div>
@@ -573,7 +588,7 @@ const StairsPage: React.FC<{
           )}
 
           {r.treads > 0 && (
-            <div className={styles.diagramCard}>
+            <div className={styles.diagramCard} id={embedded ? undefined : "st-3d"}>
               <h2>3D view</h2>
               <StairRenderView
                 input={input}
@@ -602,7 +617,7 @@ const StairsPage: React.FC<{
           ))}
 
           {layout && (
-            <div className={styles.resultsGrid}>
+            <div className={styles.resultsGrid} id={embedded ? undefined : "st-materials"}>
               <SpecCard
                 title="Steps"
                 rows={[
@@ -694,7 +709,7 @@ const StairsPage: React.FC<{
           )}
 
           {!layout && r.treads > 0 && (
-            <div className={styles.resultsGrid}>
+            <div className={styles.resultsGrid} id={embedded ? undefined : "st-materials"}>
               <SpecCard
                 title="Steps"
                 rows={[
@@ -903,6 +918,7 @@ const StairsPage: React.FC<{
         </div>
       </div>
 
+      <div id={embedded ? undefined : "st-order"} />
       <StairOrderCard
         lines={order}
         intro="Everything above as stock lengths to order: framing in SG8 H3.2, posts H5, decking at the board size set."
