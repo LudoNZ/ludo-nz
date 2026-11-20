@@ -1,0 +1,130 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  max-height: 75vh;
+  display: block;
+}
+
+// literal material colours — shouldn't theme-swap with light/dark mode
+.outline {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-dasharray: 30 20;
+  opacity: 0.45;
+}
+
+.joist {
+  fill: #c9924f;
+  stroke: #8b5a2b;
+}
+
+.rim {
+  fill: #b9823f;
+  stroke: #7a4c22;
+}
+
+.ledger {
+  fill: #7d8a99;
+  stroke: #4a5563;
+}
+
+.bearer {
+  fill: #9c7a46;
+  stroke: #5e4524;
+  opacity: 0.9;
+}
+
+.pile {
+  fill: #6d5a3a;
+  stroke: #3d311e;
+}
+
+.blocking {
+  fill: #c9924f;
+  stroke: #8b5a2b;
+  opacity: 0.85;
+}
+
+.nog {
+  fill: #d8a866;
+  stroke: #8b5a2b;
+  opacity: 0.85;
+}
+
+.wall {
+  fill: #b8b8b8;
+  stroke: #777;
+}
+
+.hanger {
+  fill: #4a2f14;
+}
+
+// translucent so the framing underneath still reads through
+.sheet {
+  fill: #f0e2bd;
+  fill-opacity: 0.45;
+  stroke: #2a78d6;
+}
+
+.sheetCut {
+  fill: #e9cf93;
+  fill-opacity: 0.55;
+  stroke: #2a78d6;
+}
+
+.dim {
+  fill: var(--foreground);
+  opacity: 0.7;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.8rem;
+}
+
+.layer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.sw_sheets {
+  background-color: #f0e2bd;
+  border: 1px solid #2a78d6;
+}
+
+.sw_piles {
+  background-color: #6d5a3a;
+}
+
+.sw_bearers {
+  background-color: #9c7a46;
+}
+
+.sw_joists {
+  background-color: #c9924f;
+  border: 1px solid #8b5a2b;
+}
+
+.sw_blocking {
+  background-color: #d8a866;
+  border: 1px solid #8b5a2b;
+}

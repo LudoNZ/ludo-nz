@@ -8,12 +8,13 @@ import styles from "./stairOrderCard.module.scss"
 
 const KIND_LABELS: Record<StairOrderKind, string> = {
   timber: "Framing timber",
-  posts: "Posts",
+  posts: "Posts and piles",
   decking: "Decking",
+  sheets: "Flooring sheets",
   concrete: "Concrete",
   screws: "Fixings",
 }
-const KIND_ORDER: StairOrderKind[] = ["timber", "posts", "decking", "concrete", "screws"]
+const KIND_ORDER: StairOrderKind[] = ["timber", "posts", "decking", "sheets", "concrete", "screws"]
 
 /** what the supplier can actually give: per material (`kind|material`),
  * how many of each length (keyed by String(lengthM)) — 0 for none */

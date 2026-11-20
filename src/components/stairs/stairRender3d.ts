@@ -503,10 +503,16 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   // square-on is standing in front of the bottom step, looking up it
   const d0 = layout.flights[0]?.dir ?? { x: 1, y: 0 }
   const baseAz = Math.atan2(d0.y, -d0.x) // world direction of −dir: (−d.x, +d.y)
-  const az = baseAz + (options.azimuthDeg * Math.PI) / 180
-  const el = (options.elevationDeg * Math.PI) / 180
+  return sceneFromSolids(solids, baseAz + (options.azimuthDeg * Math.PI) / 180, (options.elevationDeg * Math.PI) / 180, options.camera)
+}
+
+/** Any set of solids drawn the way the stair is: a camera at this
+ * azimuth and elevation (radians), lit from over its shoulder, a lawn
+ * round them at z = 0, and every face sorted back to front. */
+export function sceneFromSolids(solids: Solid[], az: number, el: number, camera?: CameraState): StairRenderScene | null {
+  if (!solids.length) return null
   const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
-  const cam = makeCamera(allPts, az, el, options.camera ?? FIT_CAMERA)
+  const cam = makeCamera(allPts, az, el, camera ?? FIT_CAMERA)
   const lightAz = az + (35 * Math.PI) / 180
   const lightEl = (50 * Math.PI) / 180
   const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
@@ -557,6 +563,20 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
     viewBox: cam.viewBox,
     strokeW: cam.span * 0.0012,
     // (only flown in is there anything to turn round but the middle)
-    frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
+    frame: { ...cam.frame, pivot: camera && camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
   }
+}
+
+/** An axis-aligned box, in world mm (x east, y north, z up). */
+export const worldBox = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, color: string, topColor = color): Solid | null => {
+  if (x1 - x0 < 0.1 || y1 - y0 < 0.1 || z1 - z0 < 0.1) return null
+  const c = (x: number, y: number, z: number): V3 => [x, y, z]
+  return makeSolid([
+    { pts: [c(x0, y0, z0), c(x1, y0, z0), c(x1, y1, z0), c(x0, y1, z0)], color },
+    { pts: [c(x0, y0, z1), c(x1, y0, z1), c(x1, y1, z1), c(x0, y1, z1)], color: topColor },
+    { pts: [c(x0, y0, z0), c(x1, y0, z0), c(x1, y0, z1), c(x0, y0, z1)], color },
+    { pts: [c(x1, y0, z0), c(x1, y1, z0), c(x1, y1, z1), c(x1, y0, z1)], color },
+    { pts: [c(x1, y1, z0), c(x0, y1, z0), c(x0, y1, z1), c(x1, y1, z1)], color },
+    { pts: [c(x0, y1, z0), c(x0, y0, z0), c(x0, y0, z1), c(x0, y1, z1)], color },
+  ])
 }

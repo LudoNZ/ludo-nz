@@ -409,6 +409,42 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.token.admin == true;
     }
 
+    // Saved floors: the floor framing calculator's inputs. Same private /
+    // public split as stairs. `floor` is the whole floor; `summary` is what
+    // the floors list shows.
+    match /users/{userId}/floorProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'floor', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.floor is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+      // an admin can change anyone's (see projectOwner.ts)
+      allow update: if request.auth != null && request.auth.token.admin == true
+        && request.resource.data.keys().hasOnly(['name', 'floor', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.floor is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /publicFloorProjects/{projectId} {
+      allow get, list: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'floor', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.floor is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
     match /{path=**}/retainingWallProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }
@@ -420,6 +456,10 @@ service cloud.firestore {
     }
 
     match /{path=**}/stairProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    match /{path=**}/floorProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }
 

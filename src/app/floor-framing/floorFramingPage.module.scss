@@ -1,4 +1,4 @@
-.midFloorFramingPage {
+.floorFramingPage {
   max-width: 900px;
   margin: 0 auto;
   padding: 2rem 1rem 4rem;
@@ -14,17 +14,6 @@
   max-width: 42rem;
   opacity: 0.8;
   margin-bottom: 1.5rem;
-}
-
-.form {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
 }
 
 .field {
@@ -95,17 +84,10 @@
   margin-bottom: 1.25rem;
 }
 
-.disclaimer,
-.hint {
+.disclaimer {
   font-size: 0.85rem;
   opacity: 0.65;
-}
-
-.hint {
-  padding: 1.5rem;
-  text-align: center;
-  border: 1px dashed rgba(27, 177, 47, 0.4);
-  border-radius: var(--borderRadius);
+  margin-top: 1.25rem;
 }
 
 .engineerWarning {
@@ -123,4 +105,18 @@
   p {
     line-height: 1.5;
   }
+}
+
+.warnings {
+  list-style: none;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid #d99a1e;
+  border-radius: var(--borderRadius);
+  background-color: rgba(217, 154, 30, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }

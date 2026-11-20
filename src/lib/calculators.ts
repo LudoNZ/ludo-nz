@@ -35,8 +35,8 @@ export const CALCULATORS: readonly Calculator[] = [
     id: "decking",
     title: "Decking",
     description:
-      "Plan a full deck's board layout from your actual stock on hand — joist grid, staggered joins, a real cutting plan, and a shopping list, not just a square-metre estimate.",
-    tags: ["Board layout", "Cutting plan", "Stock tracking"],
+      "Plan a full deck from the piles up: bearers, joists and ledger on the same framing engine as Floor Framing, then the board layout from your actual stock on hand — staggered joins, a real cutting plan, a 3D view and the order.",
+    tags: ["Framing", "Board layout", "Cutting plan", "Stock tracking"],
     href: "/decking",
     defaultStatus: "ready",
   },
@@ -50,12 +50,13 @@ export const CALCULATORS: readonly Calculator[] = [
     defaultStatus: "ready",
   },
   {
+    // (the id predates the rename — it's stored in Firestore, so it stays)
     id: "mid-floor-framing",
-    title: "Mid-Floor Framing",
+    title: "Floor Framing",
     description:
-      "Joist size and spacing off a rule-of-thumb NZS 3604-style span table, hangers or skew-nail fixings, blocking, and a flooring sheet count — all with a labour estimate and a to-scale plan.",
-    tags: ["Joist spans", "Hangers", "Blocking", "Flooring"],
-    href: "/mid-floor-framing",
+      "A timber floor under ply or particleboard — between two walls, on bearers and piles, or off a ledger on the house. Joist and bearer sizes, piles, blocking and nogs, every sheet laid, a 3D view and a live material order.",
+    tags: ["Joists & bearers", "Piles", "Sheet layout", "Material order"],
+    href: "/floor-framing",
     defaultStatus: "ready",
   },
   {
@@ -104,13 +105,6 @@ export const CALCULATORS: readonly Calculator[] = [
     description:
       "Pad and strip footing size and depth from bearing load and ground conditions, NZS 3604 style — plus a concrete volume and bag-count materials list.",
     tags: ["Footing size", "Depth", "Concrete volume"],
-    defaultStatus: "soon",
-  },
-  {
-    id: "piles",
-    title: "Piles",
-    description: "Timber pile size and spacing under a floor, from bearer spans and pile height — with a full pile and bearer materials list.",
-    tags: ["Pile spacing", "Pile size", "Bearers"],
     defaultStatus: "soon",
   },
   {

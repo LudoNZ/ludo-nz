@@ -7,7 +7,7 @@
 import { POST_EMBED, POST_SIZE, NOG_DEPTH, StairInput, StairResult, planMixedStock, planStock, ripBlanks } from "./stairs"
 import type { StairLayout } from "./layout"
 
-export type StairOrderKind = "timber" | "decking" | "posts" | "concrete" | "screws"
+export type StairOrderKind = "timber" | "posts" | "decking" | "sheets" | "concrete" | "screws"
 
 export interface StairOrderLine {
   kind: StairOrderKind
@@ -224,7 +224,7 @@ export interface CombinedOrderLine {
   pieces?: number[]
 }
 
-const KIND_ORDER: StairOrderKind[] = ["timber", "posts", "decking", "concrete", "screws"]
+const KIND_ORDER: StairOrderKind[] = ["timber", "posts", "decking", "sheets", "concrete", "screws"]
 
 /** Lines from several stairs added up: the same material at the same
  * length becomes one line. Biggest timber first within each kind. */

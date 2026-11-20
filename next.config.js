@@ -14,6 +14,10 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/interview-prep": ["./src/content/interview-prep/**/*", "./interview-prep/db/seed.sql"],
   },
+  // the mid-floor calculator became Floor Framing
+  async redirects() {
+    return [{ source: "/mid-floor-framing", destination: "/floor-framing", permanent: true }]
+  },
   images: {
     remotePatterns: [
       {
