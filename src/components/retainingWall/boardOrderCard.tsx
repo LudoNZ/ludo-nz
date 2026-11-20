@@ -224,8 +224,8 @@ const BoardOrderCard: React.FC<{
       </div>
       <p className={styles.intro}>
         Facing boards and the top board together. Type a number against a length to set how many of it you&apos;re
-        getting (0 if the supplier has none) — the other lengths adjust to cover the rest. Clear a box to let it work
-        itself out again.
+        getting, or tap Not in stock if the supplier has none — the other lengths adjust to cover the rest. Clear a box
+        to let it work itself out again.
       </p>
 
       {isPartial && (
@@ -332,10 +332,20 @@ const BoardOrderCard: React.FC<{
                   />
                   {line.fixed ? (
                     <button type="button" className={styles.clear} onClick={() => setCount(line.lengthM, "")}>
-                      Clear
+                      {activeFixed[String(line.lengthM)] === 0 ? "Back in stock" : "Clear"}
                     </button>
                   ) : (
-                    <span className={styles.auto}>auto</span>
+                    <>
+                      <span className={styles.auto}>auto</span>
+                      <button
+                        type="button"
+                        className={styles.clear}
+                        title="The supplier has none of this length: order 0 and make it up from the others"
+                        onClick={() => setCount(line.lengthM, "0")}
+                      >
+                        Not in stock
+                      </button>
+                    </>
                   )}
                   {spare > 0 && <span className={styles.spare}>{spare} spare</span>}
                 </td>
