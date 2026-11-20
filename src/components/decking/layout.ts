@@ -1,6 +1,7 @@
 import { DeckConfig, lengthAt, LockedRow, StockItem, widthAt } from "./types"
 import { defaultExclusionCells, exclusionBounds, exclusionSetFromCells, isExcluded } from "./joinRules"
 import { polygonBounds, polygonSpanAtX, polygonSpanAtY } from "./polygon"
+import { deckFrameLayout } from "./deckFrame"
 
 export interface BoardSegment {
   /** stable id (row index + position within the row) for tracking completion,
@@ -541,9 +542,12 @@ export function computeDeckLayout(config: DeckConfig): DeckLayout {
   const joistAxisMax = isPolygon ? (intoRake ? bounds!.maxX - bounds!.minX : bounds!.maxY - bounds!.minY) : intoRake ? maxLen : width
   const rowCount = Math.max(1, Math.ceil(rowAxisExtent / pitch))
 
-  // the first bay (off the ledger/bearer) can differ from the rest of the run
-  const joistPositions: number[] = [runAxisOrigin]
-  if (firstBaySpacing > 0) {
+  // a framed deck's boards go on the frame's own joists (one on each edge,
+  // the rest evenly at or under the spacing); otherwise a plain grid where
+  // the first bay (off the ledger/bearer) can differ from the rest
+  const frame = deckFrameLayout(config)
+  const joistPositions: number[] = frame ? [...frame.joistPositions] : [runAxisOrigin]
+  if (!frame && firstBaySpacing > 0) {
     for (let x = runAxisOrigin + firstBaySpacing; x <= runAxisOrigin + joistAxisMax + 1e-6; x += joistSpacing) {
       joistPositions.push(Math.round(x))
     }

@@ -1,3 +1,4 @@
+import { DEFAULT_DECK_FRAME, frameInputFromData } from "../floorFraming/frame"
 import {
   collection,
   CollectionReference,
@@ -77,6 +78,8 @@ export const subscribeToDecks = (
           projectId: data.projectId as string | undefined,
           projectOrder: data.projectOrder ?? 0,
           edgeExtraBoards: (data.edgeExtraBoards ?? {}) as Record<string, number>,
+          // absent for every deck that's never had its framing worked out
+          frame: data.frame ? frameInputFromData(data.frame, DEFAULT_DECK_FRAME) : undefined,
           joistSpacing: data.joistSpacing,
           firstBaySpacing: data.firstBaySpacing || data.joistSpacing,
           boardWidth: data.boardWidth,

@@ -9,6 +9,7 @@ export type BoardDirection = "intoRake" | "alongRake"
 
 import { defaultExclusionCells, JoinExclusionCell } from "./joinRules"
 import { DeckPoint } from "./polygon"
+import type { FrameInput } from "../floorFraming/frame"
 
 /** A length of board you have on hand and how many of it. */
 export interface StockItem {
@@ -121,6 +122,14 @@ export interface DeckConfig {
    * real cut-planner don't know this exists, so an all-empty map (every
    * deck before this field existed) is completely unaffected. */
   edgeExtraBoards: Record<string, number>
+  /** The frame under the boards — bearers, piles, ledger, joists — on
+   * the shared floor framing engine (floorFraming/frame.ts). Absent means
+   * the deck has no frame worked out, and the boards go on a plain joist
+   * grid from joistSpacing/firstBaySpacing as they always have. Once set,
+   * the frame's own joists (one on each edge, the rest evenly at or under
+   * joistSpacing) are what the boards are laid on. joistSpacing and
+   * firstBaySpacing stay the one place spacing is set. */
+  frame?: FrameInput
   /** mm, joist centres for every bay after the first */
   joistSpacing: number
   /** mm, centres for the first bay only (e.g. off a ledger/bearer) — defaults

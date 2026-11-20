@@ -12,6 +12,7 @@ import StockShareSummary from "@/components/decking/stockShareSummary"
 import CutList from "@/components/decking/cutList"
 import CutTimeline from "@/components/decking/cutTimeline"
 import StockSummary from "@/components/decking/stockSummary"
+import DeckFramingSection from "@/components/decking/deckFramingSection"
 import JoinScroller, { JoinScrollerHandle } from "@/components/decking/joinScroller"
 import { deleteDeck, saveDeck, setCompletedSegments, StoredDeck, subscribeToDecks } from "@/components/decking/data"
 import { computeLockedRows } from "@/components/decking/layout"
@@ -298,6 +299,25 @@ const DeckDetailPage = () => {
                 activeRowIndex={activeJoinRow}
               />
             </div>
+          </section>
+
+          <section id="framing">
+            <h2>Framing</h2>
+            <DeckFramingSection
+              config={effectiveConfig}
+              layout={layout}
+              onFrameChange={(frame) => {
+                // deleting the field (null in Firestore would still be a "frame")
+                if (frame) void saveDeckWith({ frame })
+                else {
+                  const { location, ...deckOnly } = deck
+                  const rest: Partial<DeckConfig> = { ...deckOnly }
+                  delete rest.updatedAt
+                  delete rest.frame
+                  void saveDeck(location, rest as Omit<DeckConfig, "updatedAt">)
+                }
+              }}
+            />
           </section>
 
           <section>

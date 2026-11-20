@@ -452,7 +452,9 @@ export function buildFrame(outline: DeckPoint[], joistAxis: "x" | "y", input: Fr
     }
   })
   if (cantilever > settings.maxCantileverMm)
-    warnings.push(`Some joists run ${Math.round(cantilever)} mm past their last bearer — more than ${settings.maxCantileverMm} mm. Move a bearer out under them (an angled edge often wants one along it).`)
+    warnings.push(
+      `Some joists run ${Math.round(cantilever)} mm past their last bearer — more than ${settings.maxCantileverMm} mm. An angled edge wants a bearer along it, which this tool doesn't lay out yet: allow for one (and its piles) on top of this order.`,
+    )
   const joists = members.filter((m) => m.kind === "joist")
   if (joists.some((j) => j.pieces.some((p) => p > maxStock + 0.5)))
     warnings.push(`A joist is longer than ${maxStock / 1000} m — that's a special order length, not off the shelf.`)
