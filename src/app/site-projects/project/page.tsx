@@ -449,6 +449,7 @@ const SiteProjectEditor = () => {
         onSelect={setSelectedWall}
         onChange={(walls: SiteWall[]) => commit({ ...site, walls })}
         onAdd={addWall}
+        onAddStair={(stair) => commit({ ...site, stairs: [...site.stairs, stair] })}
         onRemove={(id) => {
           commit({ ...site, walls: site.walls.filter((w) => w.id !== id), stairs: site.stairs.filter((s) => s.wallId !== id) })
           if (selectedWall === id) setSelectedWall(null)

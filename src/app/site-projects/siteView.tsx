@@ -5,7 +5,8 @@ import Button from "@/components/button/button"
 import { PlanPoint, sideNormal, totalLength } from "@/components/retainingWall/wallPlan"
 import { newBlankWall, WallProject } from "@/components/retainingWall/wallProject"
 import { StoredWallProject, subscribeToProjects } from "@/components/retainingWall/wallProjectStore"
-import { SiteStair, SiteWall, StairPlacement, toSite } from "@/components/site/siteProject"
+import { newSiteStair, SiteStair, SiteWall, StairPlacement, toSite } from "@/components/site/siteProject"
+import { StoredStairProject, subscribeToStairProjects } from "@/components/stairs/stairProjectStore"
 import { UnitField } from "../retaining-walls/obstructionsCard"
 import { STAIR_COLOR } from "./stairsCard"
 import styles from "./siteView.module.scss"
@@ -231,67 +232,150 @@ export const WallsCard: React.FC<{
   onSelect: (id: string | null) => void
   onChange: (walls: SiteWall[]) => void
   onAdd: (wall: WallProject, name: string, source: string) => void
+  /** a stair copied in from a stair project, on one of the site's walls */
+  onAddStair: (stair: SiteStair) => void
   onRemove: (id: string) => void
   onOpen: (id: string) => void
-}> = ({ walls, stairs, uid, selectedId, onSelect, onChange, onAdd, onRemove, onOpen }) => {
+}> = ({ walls, stairs, uid, selectedId, onSelect, onChange, onAdd, onAddStair, onRemove, onOpen }) => {
+  const [kind, setKind] = useState<"wall" | "stair">("wall")
   const [projects, setProjects] = useState<{ public: StoredWallProject[]; private: StoredWallProject[] }>({ public: [], private: [] })
+  const [stairProjects, setStairProjects] = useState<{ public: StoredStairProject[]; private: StoredStairProject[] }>({ public: [], private: [] })
   const [pick, setPick] = useState("")
+  const [stairPick, setStairPick] = useState("")
+  const [stairWall, setStairWall] = useState("")
   useEffect(() => subscribeToProjects({ kind: "public" }, (data) => setProjects((p) => ({ ...p, public: data }))), [])
+  useEffect(() => subscribeToStairProjects({ kind: "public" }, (data) => setStairProjects((p) => ({ ...p, public: data }))), [])
   useEffect(() => {
     if (!uid) {
       setProjects((p) => ({ ...p, private: [] }))
+      setStairProjects((p) => ({ ...p, private: [] }))
       return
     }
-    return subscribeToProjects({ kind: "private", uid }, (data) => setProjects((p) => ({ ...p, private: data })))
+    const offWalls = subscribeToProjects({ kind: "private", uid }, (data) => setProjects((p) => ({ ...p, private: data })))
+    const offStairs = subscribeToStairProjects({ kind: "private", uid }, (data) => setStairProjects((p) => ({ ...p, private: data })))
+    return () => {
+      offWalls()
+      offStairs()
+    }
   }, [uid])
 
   const update = (id: string, patch: Partial<SiteWall>) => onChange(walls.map((w) => (w.id === id ? { ...w, ...patch } : w)))
   const chosen = [...projects.private, ...projects.public].find((w) => `${w.location.kind}:${w.id}` === pick)
+  const chosenStair = [...stairProjects.private, ...stairProjects.public].find((s) => `${s.location.kind}:${s.id}` === stairPick)
+  // the wall an imported stair comes off: the one picked here, else the
+  // one picked on the plan, else the first
+  const stairOn = walls.find((w) => w.id === stairWall) ?? walls.find((w) => w.id === selectedId) ?? walls[0] ?? null
+
+  const importStair = () => {
+    if (!chosenStair || !stairOn) return
+    const pts = stairOn.wall.planPoints
+    const firstRunM = pts.length > 1 ? Math.hypot(pts[1].xM - pts[0].xM, pts[1].yM - pts[0].yM) : 1
+    const s = newSiteStair(stairOn.id, 0, firstRunM)
+    onAddStair({ ...s, label: chosenStair.name, input: { ...chosenStair.stair } })
+    onSelect(stairOn.id)
+    setStairPick("")
+  }
 
   return (
     <section className={styles.card}>
       <h2>Retaining walls</h2>
-      <div className={styles.addRow}>
-        <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Wall project to import">
-          <option value="">Pick a wall project to import…</option>
-          {projects.private.length > 0 && (
-            <optgroup label="Your wall projects">
-              {projects.private.map((w) => (
-                <option key={w.id} value={`private:${w.id}`}>
-                  {w.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {projects.public.length > 0 && (
-            <optgroup label="Public wall projects">
-              {projects.public.map((w) => (
-                <option key={w.id} value={`public:${w.id}`}>
-                  {w.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        <Button
-          size="small"
-          disabled={!chosen}
-          onClick={() => {
-            if (!chosen) return
-            onAdd(chosen.wall, chosen.name, `Copied from the wall project "${chosen.name}"`)
-            setPick("")
-          }}
-        >
-          Import
-        </Button>
-        <Button size="small" variant="secondary" onClick={() => onAdd(newBlankWall(), `Wall ${walls.length + 1}`, "")}>
-          Add a blank wall
-        </Button>
+      <div className={styles.kindSwitch} role="group" aria-label="What to import">
+        <span>Import</span>
+        <button type="button" className={kind === "wall" ? styles.kindOn : styles.kind} aria-pressed={kind === "wall"} onClick={() => setKind("wall")}>
+          A wall
+        </button>
+        <button type="button" className={kind === "stair" ? styles.kindOn : styles.kind} aria-pressed={kind === "stair"} onClick={() => setKind("stair")}>
+          A stair
+        </button>
       </div>
-      <p className={styles.hint}>
-        An imported wall is a copy: changes here don&apos;t change the wall project it came from. Drag a wall on the plan to
-        move it — its ends snap to other walls&apos; ends — or set where its first post goes and how far it&apos;s turned.
-      </p>
+      {kind === "stair" ? (
+        <>
+          <div className={styles.addRow}>
+            <select value={stairPick} onChange={(e) => setStairPick(e.target.value)} aria-label="Stair project to import">
+              <option value="">Pick a stair project to import…</option>
+              {stairProjects.private.length > 0 && (
+                <optgroup label="Your stair projects">
+                  {stairProjects.private.map((s) => (
+                    <option key={s.id} value={`private:${s.id}`}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {stairProjects.public.length > 0 && (
+                <optgroup label="Public stair projects">
+                  {stairProjects.public.map((s) => (
+                    <option key={s.id} value={`public:${s.id}`}>
+                      {s.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            {walls.length > 1 && (
+              <select value={stairOn?.id ?? ""} onChange={(e) => setStairWall(e.target.value)} aria-label="Wall the stair comes off">
+                {walls.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    Off {w.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button size="small" disabled={!chosenStair || !stairOn} onClick={importStair}>
+              Import
+            </Button>
+          </div>
+          <p className={styles.hint}>
+            {walls.length === 0
+              ? "A stair comes down off a wall — import or add a wall first."
+              : `An imported stair is a copy, placed halfway along the first run of ${stairOn?.name ?? "the wall"}. Its rise comes from the wall there; move or change it in Edit wall & stairs.`}
+          </p>
+        </>
+      ) : (
+        <>
+          <div className={styles.addRow}>
+            <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Wall project to import">
+              <option value="">Pick a wall project to import…</option>
+              {projects.private.length > 0 && (
+                <optgroup label="Your wall projects">
+                  {projects.private.map((w) => (
+                    <option key={w.id} value={`private:${w.id}`}>
+                      {w.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {projects.public.length > 0 && (
+                <optgroup label="Public wall projects">
+                  {projects.public.map((w) => (
+                    <option key={w.id} value={`public:${w.id}`}>
+                      {w.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <Button
+              size="small"
+              disabled={!chosen}
+              onClick={() => {
+                if (!chosen) return
+                onAdd(chosen.wall, chosen.name, `Copied from the wall project "${chosen.name}"`)
+                setPick("")
+              }}
+            >
+              Import
+            </Button>
+            <Button size="small" variant="secondary" onClick={() => onAdd(newBlankWall(), `Wall ${walls.length + 1}`, "")}>
+              Add a blank wall
+            </Button>
+          </div>
+          <p className={styles.hint}>
+            An imported wall is a copy: changes here don&apos;t change the wall project it came from. Drag a wall on the plan to
+            move it — its ends snap to other walls&apos; ends — or set where its first post goes and how far it&apos;s turned.
+          </p>
+        </>
+      )}
 
       {walls.map((w) => {
         const picked = w.id === selectedId
