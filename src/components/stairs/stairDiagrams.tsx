@@ -109,7 +109,9 @@ export const StairElevation: React.FC<{
     // distance along the slope from the first
     const slope = Math.hypot(G, R)
     const pitchTags = []
-    if (runShow > 0 && treads > 1) {
+    // up past the top step to the deck's edge, its last "nosing"
+    const tips = treads + 1
+    if (runShow > 0 && treads > 0) {
       // perpendicular, up and back (screen y is down)
       const nx = -R / slope
       const ny = -G / slope
@@ -117,13 +119,13 @@ export const StairElevation: React.FC<{
       const off = (tagFont * 2.9 * G) / slope
       const at = (i: number) => ({ x: (i - 1) * G + front + nx * off, y: -(i * R) + ny * off })
       const a0 = at(1)
-      const a1 = at(treads)
+      const a1 = at(tips)
       const angle = (Math.atan2(-R, G) * 180) / Math.PI
       const tick = tagFont * 0.4
       pitchTags.push(
         <line key="pitch" x1={a0.x} y1={a0.y} x2={a1.x} y2={a1.y} strokeWidth={stroke} />,
       )
-      for (let i = 1; i <= treads; i++) {
+      for (let i = 1; i <= tips; i++) {
         const p = at(i)
         const tx = p.x + nx * tagFont * 0.35 + (G / slope) * tagFont * 0.25
         const ty = p.y + ny * tagFont * 0.35 + (-R / slope) * tagFont * 0.25
