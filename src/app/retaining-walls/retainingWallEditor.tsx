@@ -55,6 +55,9 @@ import UndoToast from "./undoToast"
 import { changedFields, describeWallChange, HISTORY_BURST_MS, HISTORY_LIMIT, onlyLockChanged, WallActivity, WallHistoryEntry } from "@/components/retainingWall/wallHistory"
 import styles from "./retainingWallEditor.module.scss"
 
+/** the tallest a wall can be made, ground to top, m */
+const MAX_WALL_HEIGHT_M = 10
+
 const SOIL_TYPES = Object.keys(SOIL_LABELS) as SoilType[]
 /** common hire/contractor auger diameters, offered as suggestions — any
  * size can still be typed */
@@ -222,7 +225,7 @@ const RetainingWallEditor: React.FC<{
 
 
   const segmentLengthsM = segmentLengths(planPoints)
-  const retainedHeightM = parseFloat(retainedHeight)
+  const retainedHeightM = Math.min(MAX_WALL_HEIGHT_M, parseFloat(retainedHeight))
   const rlDatumM = parseFloat(rlDatum) || 0
   const augerDiameterParsed = parseFloat(augerDiameter)
   const augerDiameterMm = augerDiameterParsed > 0 ? augerDiameterParsed : null
@@ -691,11 +694,13 @@ const RetainingWallEditor: React.FC<{
   const handleSaveControlPoint = () => {
     if (selectedIndex === null || !groundInputRef.current || !topInputRef.current) return
     const groundAbs = parseFloat(groundInputRef.current.value)
-    const topAbs = parseFloat(topInputRef.current.value)
+    // no higher than MAX_WALL_HEIGHT_M above the ground
+    const capTop = (top: number) => Math.min(top, groundAbs + MAX_WALL_HEIGHT_M)
+    const topAbs = capTop(parseFloat(topInputRef.current.value))
     if (isNaN(groundAbs) || isNaN(topAbs)) return
     const post = profile?.posts[selectedIndex]
     // a corner can have a different top for the wall on each side of it
-    const afterAbs = post?.isCorner && topAfterInputRef.current ? parseFloat(topAfterInputRef.current.value) : NaN
+    const afterAbs = post?.isCorner && topAfterInputRef.current ? capTop(parseFloat(topAfterInputRef.current.value)) : NaN
     const topAfterM = isNaN(afterAbs) ? null : afterAbs - rlDatumM
     const split = topAfterM !== null && Math.abs(topAfterM - (topAbs - rlDatumM)) > 0.0005
     // only a level that was actually changed makes this a hand-set post

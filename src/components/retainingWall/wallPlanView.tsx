@@ -8,6 +8,7 @@ import { WallProfile } from "./postProfile"
 import { MAX_ANGLE_DEG, MIN_ANGLE_DEG, Obstruction, OBSTRUCTION_TYPES } from "./obstructions"
 import {
   appendSegment,
+  MAX_SEGMENT_M,
   prependSegment,
   insertCorner,
   offsetPolyline,
@@ -164,6 +165,11 @@ const WallPlanView: React.FC<{
       (n) => n && Math.hypot(n.xM - next.xM, n.yM - next.yM) < MIN_SEGMENT_M
     )
     if (tooClose) return
+    // nor stretch a run past the longest a run can be
+    const tooFar = [points[d.index - 1], points[d.index + 1]].some(
+      (n) => n && Math.hypot(n.xM - next.xM, n.yM - next.yM) > MAX_SEGMENT_M
+    )
+    if (tooFar) return
     onChange(points.map((p, i) => (i === d.index ? next : p)))
   }
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -542,6 +548,7 @@ const WallPlanView: React.FC<{
                 <NumField
                   value={Number(lengthM.toFixed(3))}
                   min={MIN_SEGMENT_M}
+                  max={MAX_SEGMENT_M}
                   step={1}
                   snapToStep
                   onChange={(v) => onChange(setSegmentLength(points, i, v))}

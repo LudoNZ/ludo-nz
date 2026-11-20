@@ -10,6 +10,9 @@ const NumField: React.FC<{
   onChange: (v: number) => void
   id?: string
   min?: number
+  /** anything typed over it is applied as `max` (the box keeps what was
+   * typed until it's left) */
+  max?: number
   step?: number
   className?: string
   ariaLabel?: string
@@ -18,12 +21,14 @@ const NumField: React.FC<{
    * off a 0.1 minimum). `min` is still enforced on what's typed, and any
    * value can still be typed by hand. */
   snapToStep?: boolean
-}> = ({ value, onChange, id, min, step = 1, className, ariaLabel, disabled, snapToStep }) => {
+}> = ({ value, onChange, id, min, max, step = 1, className, ariaLabel, disabled, snapToStep }) => {
   const [text, setText] = useState(String(value))
 
   useEffect(() => {
-    setText((t) => (Number(t) === value && t.trim() !== "" ? t : String(value)))
-  }, [value])
+    // what's typed stays while it's what's in use (a number over `max`
+    // is in use as `max`)
+    setText((t) => (t.trim() !== "" && (max !== undefined ? Math.min(max, Number(t)) : Number(t)) === value ? t : String(value)))
+  }, [value, max])
 
   return (
     <input
@@ -40,7 +45,7 @@ const NumField: React.FC<{
       onChange={(e) => {
         setText(e.target.value)
         const n = Number(e.target.value)
-        if (e.target.value.trim() !== "" && Number.isFinite(n) && (min === undefined || n >= min)) onChange(n)
+        if (e.target.value.trim() !== "" && Number.isFinite(n) && (min === undefined || n >= min)) onChange(max !== undefined ? Math.min(max, n) : n)
       }}
       onBlur={() => setText(String(value))}
     />

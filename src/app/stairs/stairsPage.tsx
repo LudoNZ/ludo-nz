@@ -31,6 +31,8 @@ import DraftNumberInput from "./draftNumberInput"
 import styles from "./stairsPage.module.scss"
 
 const mm = (v: number) => `${Math.round(v)} mm`
+/** the most a stair can rise, or run, in all: 100 m */
+const MAX_TOTAL_MM = 100_000
 const m = (v: number) => `${(v / 1000).toFixed(2)} m`
 
 /** ok / service-only / fail for one dimension against the main and
@@ -93,6 +95,8 @@ const StairsPage: React.FC<{
 
   const r = useMemo(() => calculateStairs(input), [input])
   const turned = input.turns.length > 0
+  // each step's run, so the whole stair runs no more than MAX_TOTAL_MM
+  const maxGoing = Math.floor(MAX_TOTAL_MM / Math.max(1, r.treads))
   const layout = useMemo(() => (turned ? calculateLayout(input, r) : null), [turned, input, r])
   // the 3D view works off the plan layout for straight stairs too
   const renderLayout = useMemo(() => layout ?? calculateLayout(input, r), [layout, input, r])
@@ -180,9 +184,9 @@ const StairsPage: React.FC<{
                 hint="Ground to the top of the deck boards"
                 value={input.totalRise}
                 min={100}
-                max={4000}
+                max={MAX_TOTAL_MM}
                 step={10}
-                onChange={(v) => set("totalRise", Math.max(100, v))}
+                onChange={(v) => set("totalRise", Math.min(MAX_TOTAL_MM, Math.max(100, v)))}
               />
             )}
             {!layout && r.treads > 0 && (
@@ -194,9 +198,9 @@ const StairsPage: React.FC<{
                 hint={`Across ${r.treads} tread${r.treads === 1 ? "" : "s"}; sets each step's run`}
                 value={r.totalRun}
                 min={100 * r.treads}
-                max={450 * r.treads}
+                max={MAX_TOTAL_MM}
                 step={10}
-                onChange={(v) => set("going", Math.max(100, Math.round(v / r.treads)))}
+                onChange={(v) => set("going", Math.max(100, Math.floor(Math.min(MAX_TOTAL_MM, v) / r.treads)))}
               />
             )}
             </div>
@@ -267,9 +271,9 @@ const StairsPage: React.FC<{
               hint={`Front to back of each step, nosing to nosing — min ${MAIN_PRIVATE.minGoing} (${SERVICE.minGoing} service)`}
               value={input.going}
               min={150}
-              max={450}
+              max={maxGoing}
               step={5}
-              onChange={(v) => set("going", Math.max(100, v))}
+              onChange={(v) => set("going", Math.min(maxGoing, Math.max(100, v)))}
             />
             <NumberField
               id="width"

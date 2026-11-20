@@ -54,7 +54,11 @@ export const turnDeg = (points: PlanPoint[], vertexIndex: number): number => {
 /** Sets one run's length, keeping its direction — everything after it
  * shifts along with its end point, so later runs keep their own lengths
  * and angles. */
+/** the longest one run of wall can be, m */
+export const MAX_SEGMENT_M = 100
+
 export const setSegmentLength = (points: PlanPoint[], segmentIndex: number, lengthM: number): PlanPoint[] => {
+  lengthM = Math.min(MAX_SEGMENT_M, lengthM)
   const a = points[segmentIndex]
   const b = points[segmentIndex + 1]
   const current = Math.hypot(b.xM - a.xM, b.yM - a.yM)

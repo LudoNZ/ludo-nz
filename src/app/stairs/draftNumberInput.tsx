@@ -3,10 +3,11 @@
 import { InputHTMLAttributes, useState } from "react"
 
 /** A number input that can be cleared and typed over: what's typed is
- * kept as typed while it's being edited, and passed on only once it's a
- * number within min–max (so typing "2" on the way to "250" doesn't snap
- * the stair to the minimum). Leaving it empty or out of range puts back
- * the last good value. */
+ * kept as typed while it's being edited, and passed on once it's a number
+ * at or over `min` (so typing "2" on the way to "250" doesn't snap the
+ * stair to the minimum) — anything over `max` is passed on as `max`.
+ * Leaving it shows the value in use: the last good one if it was left
+ * empty or under the minimum, `max` if it was over. */
 const DraftNumberInput: React.FC<
   Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type" | "min" | "max"> & {
     value: number
@@ -28,7 +29,7 @@ const DraftNumberInput: React.FC<
         const text = e.target.value
         setDraft(text)
         const n = Number(text)
-        if (text.trim() !== "" && Number.isFinite(n) && (min === undefined || n >= min) && (max === undefined || n <= max)) onValue(n)
+        if (text.trim() !== "" && Number.isFinite(n) && (min === undefined || n >= min)) onValue(max !== undefined ? Math.min(max, n) : n)
       }}
       onBlur={(e) => {
         setDraft(null)
