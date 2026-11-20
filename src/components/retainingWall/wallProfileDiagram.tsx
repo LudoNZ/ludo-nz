@@ -1,6 +1,6 @@
 "use client"
 
-import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
+import DiagramExplorer, { ExploreState, screenPx } from "@/components/diagramExplorer/diagramExplorer"
 import { useId, useMemo } from "react"
 import { bayCourseLayout, BoardHighlight, WallProfile } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
@@ -48,6 +48,20 @@ export interface ElevationExtra {
 const EXTRA_COLOR = "#4f6378"
 const FILL_COLOR = "#a0805a"
 const EMPTY_EXTRAS: ElevationExtra[] = []
+
+/** Zoomed in (full screen), more is drawn: how wide the narrowest bay
+ * shows on screen, in px, decides what's worth adding. Each layer fades
+ * in between its two widths. */
+const DETAIL: Record<"tags" | "levels" | "courses", [number, number]> = {
+  // each post's number, and how far it is from the start of its wall
+  tags: [70, 100],
+  // each post's top and ground level, and its hole's depth
+  levels: [130, 170],
+  // each bay's courses
+  courses: [240, 300],
+}
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
+const mm = (m: number) => `${Math.round(m * 1000)}`
 
 /** about the font size the drawing will use, before its extent is known */
 const fontGuess = (posts: { xM: number }[]) => Math.max(posts[posts.length - 1].xM - posts[0].xM, 1) * 0.045
@@ -121,7 +135,7 @@ const WallProfileDiagram: React.FC<{
   }, [profile, settings.boardCourseHeightM, topCapEnabled, fromIndex, toIndex, mirrored, extras, segmentIndex])
   const extrasHere = extras.filter((e) => segmentIndex === null || e.segmentIndex === segmentIndex)
 
-  const { fontSize, strokeW, viewBox, maxTop } = geometry
+  const { fontSize: baseFont, strokeW: baseStroke, viewBox, maxTop } = geometry
   const obstructionsHere = profile.obstructions.filter(
     (z) => z.onWall && z.centreXM >= profile.posts[fromIndex].xM - 1e-6 && z.centreXM <= profile.posts[toIndex].xM + 1e-6
   )
@@ -151,425 +165,523 @@ const WallProfileDiagram: React.FC<{
     return pts.join(" ")
   })()
 
-  return (
-    <div className={styles.diagramRoot}>
-      <DiagramExplorer label="Wall elevation">
-        <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Wall elevation profile, to scale">
-          {/* bay board fill: level courses stacked from the ground, same as a
-              real build — only the top course actually follows the rake */}
-          {bays.map((bay) => {
-            const a = allPosts[bay.leftIndex]
-            const b = allPosts[bay.rightIndex]
-            const ax = X(a.xM)
-            const bx = X(b.xM)
-            if (bay.needsEngineer) {
-              const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topBeforeM)} ${ax},${y(a.topAfterM)}`
-              return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
-            }
-            const ch = settings.boardCourseHeightM
-            // a stepped bay is whole level courses to a flat top; any other
-            // bay follows the rake (cut to it, or with a raked top board)
-            const layout =
-              bay.stepTopM !== null
-                ? {
-                    baseLevelM: Math.min(a.groundLevelM, b.groundLevelM),
-                    courseCount: bay.levelCourseCount,
-                    undersideAM: bay.stepTopM,
-                    undersideBM: bay.stepTopM,
-                  }
-                : bayCourseLayout(a, b, ch, profile.rakedTopBoard)
-            const { baseLevelM, undersideAM, undersideBM } = layout
-            const capTopAM = bay.stepTopM ?? a.topAfterM
-            const capTopBM = bay.stepTopM ?? b.topBeforeM
-            // purely a schematic sliver on top of the top board — real
-            // thickness isn't tracked (no calc setting for it), just enough
-            // to read as a distinct capping layer at any wall scale
-            const capThicknessM = ch * 0.25
-            const bayClip = `${clipId}-bay-${bay.leftIndex}`
-            return (
-              <g key={`bay-${bay.leftIndex}`}>
-                {/* level courses, each drawn full height and then clipped to
-                    the top board's underside — so with a raked top board
-                    the courses it crosses show cut down to suit */}
-                <clipPath id={bayClip}>
-                  <polygon points={`${ax},${y(baseLevelM)} ${bx},${y(baseLevelM)} ${bx},${y(undersideBM)} ${ax},${y(undersideAM)}`} />
-                </clipPath>
-                <g clipPath={`url(#${bayClip})`}>
-                  {Array.from({ length: layout.courseCount }, (_, k) => (
-                    <rect
-                      key={k}
-                      x={Math.min(ax, bx)}
-                      y={y(baseLevelM + (k + 1) * ch)}
-                      width={Math.abs(bx - ax)}
-                      height={ch}
-                      className={styles.bayFill}
-                      strokeWidth={strokeW * 0.4}
-                    />
-                  ))}
-                  {/* tint over the boards picked out from the order */}
-                  {Array.from({ length: layout.courseCount }, (_, k) => (
-                    <rect
-                      key={`hl-${k}`}
-                      x={Math.min(ax, bx)}
-                      y={y(baseLevelM + (k + 1) * ch)}
-                      width={Math.abs(bx - ax)}
-                      height={ch}
-                      className={styles.boardHighlight}
-                      visibility={
-                        highlight.some((h) => h.layer === "course" && h.courseRow === k && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost)
-                          ? "visible"
-                          : "hidden"
-                      }
-                    />
-                  ))}
-                </g>
-                {/* top/perimeter board — the piece that follows the rake:
-                    cut to it on top only, or (raked) a full board on the slope */}
-                <polygon
-                  points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
-                  className={styles.topBoardFill}
-                  strokeWidth={strokeW * 0.4}
-                />
-                {highlight.some((h) => h.layer === "topBoard" && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost) && (
-                  <polygon
-                    points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
-                    className={styles.boardHighlight}
-                  />
-                )}
-                {topCapEnabled && (
-                  <polygon
-                    points={`${ax},${y(capTopAM)} ${bx},${y(capTopBM)} ${bx},${y(capTopBM + capThicknessM)} ${ax},${y(capTopAM + capThicknessM)}`}
-                    className={styles.topCapFill}
-                    strokeWidth={strokeW * 0.3}
-                  />
-                )}
-              </g>
-            )
-          })}
+  // full screen, zoomed in: text and lines stay the same size on screen
+  // (and readable on a phone), and more detail comes in the closer it gets
+  const [, , vbW, vbH] = viewBox.split(" ").map(Number)
+  const minBayM = Math.min(...bays.map((bay) => bay.widthM), 100)
+  /** a post's number (and size, when they're mixed), and how far it is
+   * from the start of its wall — at a corner, both walls', a line each
+   * (where it ends the one wall, then "B 0" for the one it starts) */
+  const postTag = (p: (typeof posts)[number]) => {
+    const runs = profile.segments.filter((g) => p.index >= g.startPostIndex && p.index <= g.endPostIndex)
+    const running = runs.map((g) => (p.index === g.startPostIndex ? `${segmentLabel(g.index)} 0` : mm(p.xM - g.startXM)))
+    return { name: mixedSizes ? `${p.index + 1} · ${shortSize(p.sizeLabel)}` : `${p.index + 1}`, running }
+  }
+  /** lines in the tallest post tag (number, then running distances) */
+  const tagLines = Math.max(1, ...posts.map((p) => postTag(p).running.length)) + 1
 
-          {/* obstructions in the ground: the clearance zone dashed round it,
-              the thing itself (stretched along the wall when it crosses at
-              an angle), and for the one picked out, how far it is from the
-              end it's measured from */}
-          {obstructionsHere.map((z) => {
-            const o = z.obstruction
-            const type = OBSTRUCTION_TYPES[o.type]
-            const cx = X(z.centreXM)
-            const g = z.groundLevelM
-            const picked = o.id === selectedObstructionId
-            const seg = profile.segments[o.segmentIndex]
-            const endX = o.from === "start" ? seg.startXM : seg.endXM
-            const dimY = y(g - z.zoneBottomDepthM) + fontSize * 0.7
-            const label = o.label || type.label
-            return (
-              <g
-                key={`ob-${o.id}`}
-                className={styles.obstruction}
-                onClick={() => onSelectObstruction?.(o.id)}
-                role={onSelectObstruction ? "button" : undefined}
-                aria-label={`${label}, ${o.distanceM.toFixed(2)} m along — tap to pick it out`}
-              >
-                <rect
-                  x={cx - z.zoneHalfM}
-                  y={y(g - z.zoneTopDepthM)}
-                  width={z.zoneHalfM * 2}
-                  height={z.zoneBottomDepthM - z.zoneTopDepthM}
-                  fill={type.color}
-                  fillOpacity={picked ? 0.22 : 0.12}
-                  stroke={type.color}
-                  strokeWidth={strokeW * (picked ? 0.8 : 0.5)}
-                  strokeDasharray={`${strokeW * 2} ${strokeW * 1.5}`}
-                />
-                {type.shape === "round" ? (
-                  <ellipse cx={cx} cy={y(g - o.depthM - o.sizeM / 2)} rx={z.coreHalfM} ry={o.sizeM / 2} fill={type.color} />
-                ) : (
-                  <rect x={cx - z.coreHalfM} y={y(g - o.depthM)} width={z.coreHalfM * 2} height={o.sizeM} fill={type.color} />
-                )}
-                {picked ? (
-                  <g>
-                    <line x1={X(endX)} x2={cx} y1={dimY} y2={dimY} stroke={type.color} strokeWidth={strokeW * 0.5} />
-                    <line x1={X(endX)} x2={X(endX)} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
-                    <line x1={cx} x2={cx} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
-                    <text x={(X(endX) + cx) / 2} y={dimY + fontSize * 0.9} fontSize={fontSize * 0.6} textAnchor="middle" fill={type.color}>
-                      {label} · {Math.round(o.distanceM * 1000)}
-                    </text>
-                  </g>
-                ) : (
-                  <text x={cx} y={dimY + fontSize * 0.2} fontSize={fontSize * 0.5} textAnchor="middle" fill={type.color}>
-                    {label}
-                  </text>
-                )}
-              </g>
-            )
-          })}
-
-          {/* holes, drawn before posts so each post sits in front of its own fill */}
-          {posts.map((p) => (
-            <rect
-              key={`hole-${p.index}`}
-              x={X(p.xM) - p.holeDiameterM / 2}
-              y={y(p.groundLevelM)}
-              width={p.holeDiameterM}
-              height={p.embedmentM}
-              rx={p.holeDiameterM * 0.15}
-              className={p.clashesWith.length ? styles.holeClash : styles.hole}
-            />
-          ))}
-
-          {/* posts: above and embedded portions, stopping short of the hole
-              floor by the gravel base pad and any stand-off under the post */}
-          {posts.map((p) => {
-            const postDepthM = p.postDepthM
-            const cls = p.needsEngineer ? styles.postBlocked : styles.postAbove
-            const px = X(p.xM)
-            return (
-              <g key={`post-${p.index}`}>
-                <rect x={px - p.widthM / 2} y={y(p.topLevelM)} width={p.widthM} height={p.retainedHeightM} className={cls} />
-                <rect
-                  x={px - p.widthM / 2}
-                  y={y(p.groundLevelM)}
-                  width={p.widthM}
-                  height={postDepthM}
-                  className={p.needsEngineer ? styles.postBlocked : styles.postBelow}
-                  strokeWidth={strokeW * 0.5}
-                />
-                {p.isControlPoint && (
-                  <circle cx={px} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
-                )}
-                {p.depthSet && (
-                  <circle
-                    cx={px}
-                    cy={y(p.groundLevelM - p.embedmentM)}
-                    r={strokeW * 3}
-                    strokeWidth={strokeW * 0.5}
-                    className={p.depthSet === "rake" ? styles.depthDotRake : styles.depthDotLone}
-                  />
-                )}
-                {/* pinned at a set distance: a pin head over the post */}
-                {p.fixed && (
-                  <path
-                    d={`M ${px} ${y(p.groundLevelM) + fontSize * 0.05} l ${-fontSize * 0.25} ${fontSize * 0.45} h ${fontSize * 0.5} z`}
-                    className={styles.fixedMark}
+  const draw = (view: ExploreState) => {
+    const { zoom } = view
+    const toPx = screenPx(view, vbW, vbH)
+    const zoomedIn = clamp01((zoom - 1) / 0.4)
+    const fontSize = Math.max(baseFont / zoom, toPx(17) * zoomedIn)
+    const strokeW = baseStroke / zoom
+    const tagFont = Math.max(fontSize * 0.7, toPx(16))
+    // the narrowest bay's width on screen, in px
+    const bayPx = toPx(1) ? minBayM / toPx(1) : 0
+    const ramp = ([lo, hi]: [number, number]) => zoomedIn * clamp01((bayPx - lo) / (hi - lo))
+    const tagShow = ramp(DETAIL.tags)
+    const levelShow = ramp(DETAIL.levels)
+    const courseShow = ramp(DETAIL.courses)
+    return (
+      <svg viewBox={viewBox} className={styles.svg} role="img" aria-label="Wall elevation profile, to scale">
+        {/* bay board fill: level courses stacked from the ground, same as a
+            real build — only the top course actually follows the rake */}
+        {bays.map((bay) => {
+          const a = allPosts[bay.leftIndex]
+          const b = allPosts[bay.rightIndex]
+          const ax = X(a.xM)
+          const bx = X(b.xM)
+          if (bay.needsEngineer) {
+            const points = `${ax},${y(a.groundLevelM)} ${bx},${y(b.groundLevelM)} ${bx},${y(b.topBeforeM)} ${ax},${y(a.topAfterM)}`
+            return <polygon key={`bay-${bay.leftIndex}`} points={points} className={styles.bayBlocked} strokeWidth={strokeW} />
+          }
+          const ch = settings.boardCourseHeightM
+          // a stepped bay is whole level courses to a flat top; any other
+          // bay follows the rake (cut to it, or with a raked top board)
+          const layout =
+            bay.stepTopM !== null
+              ? {
+                  baseLevelM: Math.min(a.groundLevelM, b.groundLevelM),
+                  courseCount: bay.levelCourseCount,
+                  undersideAM: bay.stepTopM,
+                  undersideBM: bay.stepTopM,
+                }
+              : bayCourseLayout(a, b, ch, profile.rakedTopBoard)
+          const { baseLevelM, undersideAM, undersideBM } = layout
+          const capTopAM = bay.stepTopM ?? a.topAfterM
+          const capTopBM = bay.stepTopM ?? b.topBeforeM
+          // purely a schematic sliver on top of the top board — real
+          // thickness isn't tracked (no calc setting for it), just enough
+          // to read as a distinct capping layer at any wall scale
+          const capThicknessM = ch * 0.25
+          const bayClip = `${clipId}-bay-${bay.leftIndex}`
+          return (
+            <g key={`bay-${bay.leftIndex}`}>
+              {/* level courses, each drawn full height and then clipped to
+                  the top board's underside — so with a raked top board
+                  the courses it crosses show cut down to suit */}
+              <clipPath id={bayClip}>
+                <polygon points={`${ax},${y(baseLevelM)} ${bx},${y(baseLevelM)} ${bx},${y(undersideBM)} ${ax},${y(undersideAM)}`} />
+              </clipPath>
+              <g clipPath={`url(#${bayClip})`}>
+                {Array.from({ length: layout.courseCount }, (_, k) => (
+                  <rect
+                    key={k}
+                    x={Math.min(ax, bx)}
+                    y={y(baseLevelM + (k + 1) * ch)}
+                    width={Math.abs(bx - ax)}
+                    height={ch}
+                    className={styles.bayFill}
                     strokeWidth={strokeW * 0.4}
                   />
-                )}
-                {p.isCorner && (
+                ))}
+                {/* tint over the boards picked out from the order */}
+                {Array.from({ length: layout.courseCount }, (_, k) => (
                   <rect
-                    x={px - strokeW * 3}
-                    y={y(p.groundLevelM) - strokeW * 3}
-                    width={strokeW * 6}
-                    height={strokeW * 6}
-                    transform={`rotate(45 ${px} ${y(p.groundLevelM)})`}
-                    strokeWidth={strokeW * 0.5}
-                    className={styles.cornerMark}
-                  />
-                )}
-                {(p.index === selectedIndex || selectedIndices.includes(p.index)) && (
-                  <rect
-                    x={px - p.widthM}
-                    y={y(p.topLevelM) - fontSize * 0.6}
-                    width={p.widthM * 2}
-                    height={p.retainedHeightM + p.embedmentM + fontSize * 0.6}
-                    className={styles.selectedRing}
-                    strokeWidth={strokeW}
-                  />
-                )}
-                {/* generous invisible tap target — the post itself is often
-                    too thin to reliably hit on a phone */}
-                <rect
-                  x={px - Math.max(p.widthM, fontSize) / 1.3}
-                  y={y(p.topLevelM)}
-                  width={Math.max(p.widthM, fontSize) * 1.6}
-                  height={p.retainedHeightM + p.embedmentM}
-                  className={styles.hitArea}
-                  onClick={(e) => onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)}
-                  role="button"
-                  aria-label={`Post ${p.index + 1} — ground ${formatLevel(p.groundLevelM, rlDatumM)}, top ${formatLevel(p.topLevelM, rlDatumM)}${p.needsEngineer ? " — needs engineer design" : ""} — tap to edit`}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)
+                    key={`hl-${k}`}
+                    x={Math.min(ax, bx)}
+                    y={y(baseLevelM + (k + 1) * ch)}
+                    width={Math.abs(bx - ax)}
+                    height={ch}
+                    className={styles.boardHighlight}
+                    visibility={
+                      highlight.some((h) => h.layer === "course" && h.courseRow === k && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost)
+                        ? "visible"
+                        : "hidden"
                     }
-                  }}
-                />
+                  />
+                ))}
               </g>
-            )
-          })}
-
-          {/* board joints — every piece runs bay-to-bay, so a joint always
-              lands exactly on a post; these just mark where. Course joints
-              are kept subtle since there can be many, stacked one per row;
-              top board/cap joints are bolder since there's at most one per
-              post and they matter more structurally */}
-          {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].filter((j) => inView(j.postIndex)).map((j, idx) => {
-            const p = allPosts[j.postIndex]
-            const px = X(p.xM)
-            const ch = settings.boardCourseHeightM
-            // a vertical line on the post, the height of the board that's
-            // cut there: a course is centred on its level, the top board
-            // hangs down from the top of the wall, the cap sits above it
-            const [fromM, toM] =
-              j.layer === "course"
-                ? [j.levelM - ch / 2, j.levelM + ch / 2]
-                : j.layer === "topBoard"
-                  ? [j.levelM - ch, j.levelM]
-                  : [j.levelM - ch * 0.25, j.levelM]
-            const cls = j.layer === "course" ? styles.jointMarkCourse : j.layer === "topBoard" ? styles.jointMarkTopBoard : styles.jointMarkTopCap
-            return (
-              <line
-                key={`joint-${j.layer}-${j.postIndex}-${idx}`}
-                x1={px}
-                x2={px}
-                y1={y(fromM)}
-                y2={y(toM)}
-                className={cls}
-                strokeWidth={strokeW * (j.layer === "course" ? 0.6 : 0.8)}
+              {/* top/perimeter board — the piece that follows the rake:
+                  cut to it on top only, or (raked) a full board on the slope */}
+              <polygon
+                points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
+                className={styles.topBoardFill}
+                strokeWidth={strokeW * 0.4}
               />
+              {highlight.some((h) => h.layer === "topBoard" && h.startPost <= bay.leftIndex && bay.leftIndex < h.endPost) && (
+                <polygon
+                  points={`${ax},${y(undersideAM)} ${bx},${y(undersideBM)} ${bx},${y(capTopBM)} ${ax},${y(capTopAM)}`}
+                  className={styles.boardHighlight}
+                />
+              )}
+              {topCapEnabled && (
+                <polygon
+                  points={`${ax},${y(capTopAM)} ${bx},${y(capTopBM)} ${bx},${y(capTopBM + capThicknessM)} ${ax},${y(capTopAM + capThicknessM)}`}
+                  className={styles.topCapFill}
+                  strokeWidth={strokeW * 0.3}
+                />
+              )}
+            </g>
+          )
+        })}
+
+        {/* obstructions in the ground: the clearance zone dashed round it,
+            the thing itself (stretched along the wall when it crosses at
+            an angle), and for the one picked out, how far it is from the
+            end it's measured from */}
+        {obstructionsHere.map((z) => {
+          const o = z.obstruction
+          const type = OBSTRUCTION_TYPES[o.type]
+          const cx = X(z.centreXM)
+          const g = z.groundLevelM
+          const picked = o.id === selectedObstructionId
+          const seg = profile.segments[o.segmentIndex]
+          const endX = o.from === "start" ? seg.startXM : seg.endXM
+          const dimY = y(g - z.zoneBottomDepthM) + fontSize * 0.7
+          const label = o.label || type.label
+          return (
+            <g
+              key={`ob-${o.id}`}
+              className={styles.obstruction}
+              onClick={() => onSelectObstruction?.(o.id)}
+              role={onSelectObstruction ? "button" : undefined}
+              aria-label={`${label}, ${o.distanceM.toFixed(2)} m along — tap to pick it out`}
+            >
+              <rect
+                x={cx - z.zoneHalfM}
+                y={y(g - z.zoneTopDepthM)}
+                width={z.zoneHalfM * 2}
+                height={z.zoneBottomDepthM - z.zoneTopDepthM}
+                fill={type.color}
+                fillOpacity={picked ? 0.22 : 0.12}
+                stroke={type.color}
+                strokeWidth={strokeW * (picked ? 0.8 : 0.5)}
+                strokeDasharray={`${strokeW * 2} ${strokeW * 1.5}`}
+              />
+              {type.shape === "round" ? (
+                <ellipse cx={cx} cy={y(g - o.depthM - o.sizeM / 2)} rx={z.coreHalfM} ry={o.sizeM / 2} fill={type.color} />
+              ) : (
+                <rect x={cx - z.coreHalfM} y={y(g - o.depthM)} width={z.coreHalfM * 2} height={o.sizeM} fill={type.color} />
+              )}
+              {picked ? (
+                <g>
+                  <line x1={X(endX)} x2={cx} y1={dimY} y2={dimY} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                  <line x1={X(endX)} x2={X(endX)} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                  <line x1={cx} x2={cx} y1={dimY - fontSize * 0.3} y2={dimY + fontSize * 0.3} stroke={type.color} strokeWidth={strokeW * 0.5} />
+                  <text x={(X(endX) + cx) / 2} y={dimY + fontSize * 0.9} fontSize={fontSize * 0.6} textAnchor="middle" fill={type.color}>
+                    {label} · {Math.round(o.distanceM * 1000)}
+                  </text>
+                </g>
+              ) : (
+                <text x={cx} y={dimY + fontSize * 0.2} fontSize={fontSize * 0.5} textAnchor="middle" fill={type.color}>
+                  {label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+
+        {/* holes, drawn before posts so each post sits in front of its own fill */}
+        {posts.map((p) => (
+          <rect
+            key={`hole-${p.index}`}
+            x={X(p.xM) - p.holeDiameterM / 2}
+            y={y(p.groundLevelM)}
+            width={p.holeDiameterM}
+            height={p.embedmentM}
+            rx={p.holeDiameterM * 0.15}
+            className={p.clashesWith.length ? styles.holeClash : styles.hole}
+          />
+        ))}
+
+        {/* posts: above and embedded portions, stopping short of the hole
+            floor by the gravel base pad and any stand-off under the post */}
+        {posts.map((p) => {
+          const postDepthM = p.postDepthM
+          const cls = p.needsEngineer ? styles.postBlocked : styles.postAbove
+          const px = X(p.xM)
+          return (
+            <g key={`post-${p.index}`}>
+              <rect x={px - p.widthM / 2} y={y(p.topLevelM)} width={p.widthM} height={p.retainedHeightM} className={cls} />
+              <rect
+                x={px - p.widthM / 2}
+                y={y(p.groundLevelM)}
+                width={p.widthM}
+                height={postDepthM}
+                className={p.needsEngineer ? styles.postBlocked : styles.postBelow}
+                strokeWidth={strokeW * 0.5}
+              />
+              {p.isControlPoint && (
+                <circle cx={px} cy={y(p.topLevelM)} r={strokeW * 3} strokeWidth={strokeW * 0.5} className={styles.controlDot} />
+              )}
+              {p.depthSet && (
+                <circle
+                  cx={px}
+                  cy={y(p.groundLevelM - p.embedmentM)}
+                  r={strokeW * 3}
+                  strokeWidth={strokeW * 0.5}
+                  className={p.depthSet === "rake" ? styles.depthDotRake : styles.depthDotLone}
+                />
+              )}
+              {/* pinned at a set distance: a pin head over the post */}
+              {p.fixed && (
+                <path
+                  d={`M ${px} ${y(p.groundLevelM) + fontSize * 0.05} l ${-fontSize * 0.25} ${fontSize * 0.45} h ${fontSize * 0.5} z`}
+                  className={styles.fixedMark}
+                  strokeWidth={strokeW * 0.4}
+                />
+              )}
+              {p.isCorner && (
+                <rect
+                  x={px - strokeW * 3}
+                  y={y(p.groundLevelM) - strokeW * 3}
+                  width={strokeW * 6}
+                  height={strokeW * 6}
+                  transform={`rotate(45 ${px} ${y(p.groundLevelM)})`}
+                  strokeWidth={strokeW * 0.5}
+                  className={styles.cornerMark}
+                />
+              )}
+              {(p.index === selectedIndex || selectedIndices.includes(p.index)) && (
+                <rect
+                  x={px - p.widthM}
+                  y={y(p.topLevelM) - fontSize * 0.6}
+                  width={p.widthM * 2}
+                  height={p.retainedHeightM + p.embedmentM + fontSize * 0.6}
+                  className={styles.selectedRing}
+                  strokeWidth={strokeW}
+                />
+              )}
+              {/* generous invisible tap target — the post itself is often
+                  too thin to reliably hit on a phone */}
+              <rect
+                x={px - Math.max(p.widthM, fontSize) / 1.3}
+                y={y(p.topLevelM)}
+                width={Math.max(p.widthM, fontSize) * 1.6}
+                height={p.retainedHeightM + p.embedmentM}
+                className={styles.hitArea}
+                onClick={(e) => onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)}
+                role="button"
+                aria-label={`Post ${p.index + 1} — ground ${formatLevel(p.groundLevelM, rlDatumM)}, top ${formatLevel(p.topLevelM, rlDatumM)}${p.needsEngineer ? " — needs engineer design" : ""} — tap to edit`}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onSelectPost(p.index, e.shiftKey || e.ctrlKey || e.metaKey)
+                  }
+                }}
+              />
+            </g>
+          )
+        })}
+
+        {/* board joints — every piece runs bay-to-bay, so a joint always
+            lands exactly on a post; these just mark where. Course joints
+            are kept subtle since there can be many, stacked one per row;
+            top board/cap joints are bolder since there's at most one per
+            post and they matter more structurally */}
+        {[...profile.boards.joints, ...profile.topBoard.joints, ...(profile.topCap?.joints ?? [])].filter((j) => inView(j.postIndex)).map((j, idx) => {
+          const p = allPosts[j.postIndex]
+          const px = X(p.xM)
+          const ch = settings.boardCourseHeightM
+          // a vertical line on the post, the height of the board that's
+          // cut there: a course is centred on its level, the top board
+          // hangs down from the top of the wall, the cap sits above it
+          const [fromM, toM] =
+            j.layer === "course"
+              ? [j.levelM - ch / 2, j.levelM + ch / 2]
+              : j.layer === "topBoard"
+                ? [j.levelM - ch, j.levelM]
+                : [j.levelM - ch * 0.25, j.levelM]
+          const cls = j.layer === "course" ? styles.jointMarkCourse : j.layer === "topBoard" ? styles.jointMarkTopBoard : styles.jointMarkTopCap
+          return (
+            <line
+              key={`joint-${j.layer}-${j.postIndex}-${idx}`}
+              x1={px}
+              x2={px}
+              y1={y(fromM)}
+              y2={y(toM)}
+              className={cls}
+              strokeWidth={strokeW * (j.layer === "course" ? 0.6 : 0.8)}
+            />
+          )
+        })}
+
+        {/* ground and top-of-wall lines, following the actual rake */}
+        <polyline
+          points={posts.map((p) => `${X(p.xM)},${y(p.groundLevelM)}`).join(" ")}
+          className={styles.groundLine}
+          strokeWidth={strokeW}
+        />
+        <polyline
+          points={topLinePoints}
+          className={styles.topLine}
+          strokeWidth={strokeW * 0.7}
+        />
+        {/* with posts of more than one size on the wall, each post's size
+            over its top — underlined where it was picked for that post */}
+        {mixedSizes &&
+          posts.map((p, k) => {
+            const label = shortSize(p.sizeLabel)
+            // no wider than the gap to the nearer neighbouring post
+            const gapM = Math.min(...[posts[k - 1], posts[k + 1]].filter(Boolean).map((q) => Math.abs(q.xM - p.xM)))
+            const size = Math.min(fontSize * 0.6, (gapM * 0.9) / (label.length * 0.62))
+            return (
+              <text
+                key={`size-${p.index}`}
+                x={X(p.xM)}
+                y={y(p.topLevelM) - fontSize * (topCapEnabled ? 0.9 : 0.5)}
+                fontSize={size}
+                textAnchor="middle"
+                className={p.sizeSet ? styles.sizeLabelSet : styles.sizeLabel}
+                opacity={1 - tagShow}
+              >
+                {label}
+              </text>
             )
           })}
+        {/* how far each step goes up (+) or down (−), in courses, over its post */}
+        {posts.map((p) => {
+          const before = bays.find((bay) => bay.rightIndex === p.index)
+          const after = bays.find((bay) => bay.leftIndex === p.index)
+          if (!before || !after || before.stepTopM === null || after.stepTopM === null) return null
+          const delta = after.levelCourseCount - before.levelCourseCount
+          if (delta === 0) return null
+          return (
+            <text
+              key={`step-${p.index}`}
+              x={X(p.xM)}
+              y={y(Math.max(before.stepTopM, after.stepTopM)) - fontSize * 0.55}
+              fontSize={fontSize * 0.8}
+              textAnchor="middle"
+              className={styles.stepLabel}
+            >
+              {delta > 0 ? `+${delta}` : `−${-delta}`}
+            </text>
+          )
+        })}
 
-          {/* ground and top-of-wall lines, following the actual rake */}
-          <polyline
-            points={posts.map((p) => `${X(p.xM)},${y(p.groundLevelM)}`).join(" ")}
-            className={styles.groundLine}
-            strokeWidth={strokeW}
-          />
-          <polyline
-            points={topLinePoints}
-            className={styles.topLine}
-            strokeWidth={strokeW * 0.7}
-          />
-          {/* with posts of more than one size on the wall, each post's size
-              over its top — underlined where it was picked for that post */}
-          {mixedSizes &&
-            posts.map((p, k) => {
-              const label = shortSize(p.sizeLabel)
-              // no wider than the gap to the nearer neighbouring post
-              const gapM = Math.min(...[posts[k - 1], posts[k + 1]].filter(Boolean).map((q) => Math.abs(q.xM - p.xM)))
-              const size = Math.min(fontSize * 0.6, (gapM * 0.9) / (label.length * 0.62))
+        {/* post centres, dimensioned under the deepest hole: a tick at
+            every post and each bay's spacing in mm. The text shrinks to
+            fit its own bay, so a long wall's dimensions stay apart. */}
+        {(() => {
+          const dimY = y(geometry.minBottom) + fontSize * 0.9
+          const tick = fontSize * 0.35
+          return (
+            <g className={styles.spacingDim}>
+              <line x1={X(posts[0].xM)} x2={X(posts[posts.length - 1].xM)} y1={dimY} y2={dimY} strokeWidth={strokeW * 0.5} />
+              {posts.map((p) => (
+                <line key={`dim-tick-${p.index}`} x1={X(p.xM)} x2={X(p.xM)} y1={dimY - tick} y2={dimY + tick} strokeWidth={strokeW * 0.5} />
+              ))}
+              {bays.map((bay) => {
+                const label = `${Math.round(bay.widthM * 1000)}`
+                const size = Math.min(fontSize * 0.8, bay.widthM / (label.length * 0.68))
+                return (
+                  <text
+                    key={`dim-${bay.leftIndex}`}
+                    x={X((allPosts[bay.leftIndex].xM + allPosts[bay.rightIndex].xM) / 2)}
+                    y={dimY + tick + size}
+                    fontSize={size}
+                    textAnchor="middle"
+                  >
+                    {label}
+                  </text>
+                )
+              })}
+            </g>
+          )
+        })()}
+
+        {/* stairs and the like, in front of the wall: the fill under a
+            raised bottom, the stair's outline and a line at every tread,
+            the point it's pinned to marked at the top */}
+        {extrasHere.map((e) => {
+          const x0 = Math.min(X(e.fromXM), X(e.toXM))
+          const x1 = Math.max(X(e.fromXM), X(e.toXM))
+          const picked = e.id === selectedExtraId
+          return (
+            <g
+              key={`extra-${e.id}`}
+              onClick={() => onSelectExtra?.(e.id)}
+              style={onSelectExtra ? { cursor: "pointer" } : undefined}
+              role={onSelectExtra ? "button" : undefined}
+              aria-label={`${e.label} — tap to pick it out`}
+            >
+              {e.bottomM - e.groundM > 0.003 && (
+                <rect x={x0 - 0.3} y={y(e.bottomM)} width={x1 - x0 + 0.6} height={e.bottomM - e.groundM} fill={FILL_COLOR} fillOpacity={0.8} />
+              )}
+              <rect
+                x={x0}
+                y={y(e.topM)}
+                width={x1 - x0}
+                height={e.topM - e.bottomM}
+                fill={EXTRA_COLOR}
+                fillOpacity={picked ? 0.95 : 0.85}
+                stroke={EXTRA_COLOR}
+                strokeWidth={strokeW * (picked ? 1 : 0.7)}
+              />
+              {e.treadLevelsM.map((lv, k) => (
+                <line key={k} x1={x0} x2={x1} y1={y(lv)} y2={y(lv)} stroke="#f3e3c8" strokeWidth={strokeW * 0.6} />
+              ))}
+              <circle cx={X(e.fixedXM)} cy={y(e.topM)} r={strokeW * 1.6} fill="#fff" stroke={EXTRA_COLOR} strokeWidth={strokeW * 0.5} />
+              <text x={(x0 + x1) / 2} y={y(e.topM) - fontSize * 0.55} fontSize={fontSize * 0.55} textAnchor="middle" fill={EXTRA_COLOR} fontWeight={600}>
+                {e.label}
+              </text>
+            </g>
+          )
+        })}
+
+        {/* whole-wall view of a wall with corners: name each run above it,
+            matching the plan's labels */}
+        {!segment &&
+          profile.segments.length > 1 &&
+          profile.segments.map((seg) => (
+            <text
+              key={`seg-${seg.index}`}
+              x={X((seg.startXM + seg.endXM) / 2)}
+              y={y(maxTop) - fontSize * 1.1 - tagShow * tagFont * 1.15 * (tagLines + 0.3)}
+              fontSize={fontSize}
+              textAnchor="middle"
+              className={styles.segmentLabel}
+            >
+              {segmentLabel(seg.index)}
+            </text>
+          ))}
+
+        {/* zoomed in: each bay's courses, then each post's number and
+            how far along its wall it is, then its levels and hole depth */}
+        {courseShow > 0 &&
+          bays
+            .filter((bay) => !bay.needsEngineer)
+            .map((bay) => {
+              const a = allPosts[bay.leftIndex]
+              const b = allPosts[bay.rightIndex]
+              const count = bay.stepTopM !== null ? bay.levelCourseCount : bayCourseLayout(a, b, settings.boardCourseHeightM, profile.rakedTopBoard).courseCount
               return (
                 <text
-                  key={`size-${p.index}`}
-                  x={X(p.xM)}
-                  y={y(p.topLevelM) - fontSize * (topCapEnabled ? 0.9 : 0.5)}
-                  fontSize={size}
+                  key={`courses-${bay.leftIndex}`}
+                  x={X((a.xM + b.xM) / 2)}
+                  // half way up the bay, clear of the levels at its ends
+                  y={y((Math.max(a.groundLevelM, b.groundLevelM) + Math.min(a.topAfterM, b.topBeforeM)) / 2)}
+                  dominantBaseline="central"
+                  fontSize={tagFont * 0.9}
                   textAnchor="middle"
-                  className={p.sizeSet ? styles.sizeLabelSet : styles.sizeLabel}
+                  className={styles.detailLabel}
+                  strokeWidth={tagFont * 0.2}
+                  opacity={courseShow}
                 >
-                  {label}
+                  {count} × {mm(settings.boardCourseHeightM)} + top
                 </text>
               )
             })}
-          {/* how far each step goes up (+) or down (−), in courses, over its post */}
-          {posts.map((p) => {
+        {tagShow > 0 &&
+          posts.map((p) => {
+            const tag = postTag(p)
+            const px = X(p.xM)
             const before = bays.find((bay) => bay.rightIndex === p.index)
             const after = bays.find((bay) => bay.leftIndex === p.index)
-            if (!before || !after || before.stepTopM === null || after.stepTopM === null) return null
-            const delta = after.levelCourseCount - before.levelCourseCount
-            if (delta === 0) return null
+            const stepped = !!before && !!after && before.stepTopM !== null && after.stepTopM !== null && before.levelCourseCount !== after.levelCourseCount
+            const top = Math.max(p.topLevelM, p.topBeforeM, p.topAfterM, before?.stepTopM ?? -Infinity, after?.stepTopM ?? -Infinity)
+            const base = y(top) - (topCapEnabled ? settings.boardCourseHeightM * 0.25 : 0) - tagFont * 0.5 - (stepped ? fontSize * 1.1 : 0)
             return (
-              <text
-                key={`step-${p.index}`}
-                x={X(p.xM)}
-                y={y(Math.max(before.stepTopM, after.stepTopM)) - fontSize * 0.55}
-                fontSize={fontSize * 0.8}
-                textAnchor="middle"
-                className={styles.stepLabel}
-              >
-                {delta > 0 ? `+${delta}` : `−${-delta}`}
-              </text>
-            )
-          })}
-
-          {/* post centres, dimensioned under the deepest hole: a tick at
-              every post and each bay's spacing in mm. The text shrinks to
-              fit its own bay, so a long wall's dimensions stay apart. */}
-          {(() => {
-            const dimY = y(geometry.minBottom) + fontSize * 0.9
-            const tick = fontSize * 0.35
-            return (
-              <g className={styles.spacingDim}>
-                <line x1={X(posts[0].xM)} x2={X(posts[posts.length - 1].xM)} y1={dimY} y2={dimY} strokeWidth={strokeW * 0.5} />
-                {posts.map((p) => (
-                  <line key={`dim-tick-${p.index}`} x1={X(p.xM)} x2={X(p.xM)} y1={dimY - tick} y2={dimY + tick} strokeWidth={strokeW * 0.5} />
-                ))}
-                {bays.map((bay) => {
-                  const label = `${Math.round(bay.widthM * 1000)}`
-                  const size = Math.min(fontSize * 0.8, bay.widthM / (label.length * 0.68))
-                  return (
-                    <text
-                      key={`dim-${bay.leftIndex}`}
-                      x={X((allPosts[bay.leftIndex].xM + allPosts[bay.rightIndex].xM) / 2)}
-                      y={dimY + tick + size}
-                      fontSize={size}
-                      textAnchor="middle"
-                    >
-                      {label}
-                    </text>
-                  )
-                })}
-              </g>
-            )
-          })()}
-
-          {/* stairs and the like, in front of the wall: the fill under a
-              raised bottom, the stair's outline and a line at every tread,
-              the point it's pinned to marked at the top */}
-          {extrasHere.map((e) => {
-            const x0 = Math.min(X(e.fromXM), X(e.toXM))
-            const x1 = Math.max(X(e.fromXM), X(e.toXM))
-            const picked = e.id === selectedExtraId
-            return (
-              <g
-                key={`extra-${e.id}`}
-                onClick={() => onSelectExtra?.(e.id)}
-                style={onSelectExtra ? { cursor: "pointer" } : undefined}
-                role={onSelectExtra ? "button" : undefined}
-                aria-label={`${e.label} — tap to pick it out`}
-              >
-                {e.bottomM - e.groundM > 0.003 && (
-                  <rect x={x0 - 0.3} y={y(e.bottomM)} width={x1 - x0 + 0.6} height={e.bottomM - e.groundM} fill={FILL_COLOR} fillOpacity={0.8} />
-                )}
-                <rect
-                  x={x0}
-                  y={y(e.topM)}
-                  width={x1 - x0}
-                  height={e.topM - e.bottomM}
-                  fill={EXTRA_COLOR}
-                  fillOpacity={picked ? 0.95 : 0.85}
-                  stroke={EXTRA_COLOR}
-                  strokeWidth={strokeW * (picked ? 1 : 0.7)}
-                />
-                {e.treadLevelsM.map((lv, k) => (
-                  <line key={k} x1={x0} x2={x1} y1={y(lv)} y2={y(lv)} stroke="#f3e3c8" strokeWidth={strokeW * 0.6} />
-                ))}
-                <circle cx={X(e.fixedXM)} cy={y(e.topM)} r={strokeW * 1.6} fill="#fff" stroke={EXTRA_COLOR} strokeWidth={strokeW * 0.5} />
-                <text x={(x0 + x1) / 2} y={y(e.topM) - fontSize * 0.55} fontSize={fontSize * 0.55} textAnchor="middle" fill={EXTRA_COLOR} fontWeight={600}>
-                  {e.label}
+              <g key={`tag-${p.index}`} opacity={tagShow} className={styles.postTag}>
+                <text x={px} y={base - tagFont * 1.1 * tag.running.length} fontSize={tagFont} textAnchor="middle" fontWeight={700} strokeWidth={tagFont * 0.2}>
+                  {tag.name}
                 </text>
+                {tag.running.map((line, k) => (
+                  <text key={k} x={px} y={base - tagFont * 1.1 * (tag.running.length - 1 - k)} fontSize={tagFont * 0.9} textAnchor="middle" strokeWidth={tagFont * 0.2}>
+                    {line}
+                  </text>
+                ))}
               </g>
             )
           })}
-
-          {/* whole-wall view of a wall with corners: name each run above it,
-              matching the plan's labels */}
-          {!segment &&
-            profile.segments.length > 1 &&
-            profile.segments.map((seg) => (
-              <text
-                key={`seg-${seg.index}`}
-                x={X((seg.startXM + seg.endXM) / 2)}
-                y={y(maxTop) - fontSize * 1.1}
-                fontSize={fontSize}
-                textAnchor="middle"
-                className={styles.segmentLabel}
-              >
-                {segmentLabel(seg.index)}
+        {levelShow > 0 &&
+          posts.map((p) => {
+            const x = X(p.xM) + (mirrored ? -1 : 1) * (p.widthM / 2 + tagFont * 0.3)
+            const anchor = mirrored ? "end" : "start"
+            const label = (at: number, text: string, key: string) => (
+              <text key={key} x={x} y={at} fontSize={tagFont * 0.85} textAnchor={anchor} className={styles.detailLabel} strokeWidth={tagFont * 0.2}>
+                {text}
               </text>
-            ))}
-        </svg>
-      </DiagramExplorer>
+            )
+            return (
+              <g key={`levels-${p.index}`} opacity={levelShow}>
+                {label(y(p.topLevelM) + tagFont * 1.1, `top ${formatLevel(p.topLevelM, rlDatumM)}`, "top")}
+                {label(y(p.groundLevelM) - tagFont * 0.4, `ground ${formatLevel(p.groundLevelM, rlDatumM)}`, "ground")}
+                {label(y(p.groundLevelM - p.embedmentM) - tagFont * 0.4, `hole ${mm(p.embedmentM)} deep`, "hole")}
+              </g>
+            )
+          })}
+      </svg>
+    )
+  }
+
+  return (
+    <div className={styles.diagramRoot}>
+      <DiagramExplorer label="Wall elevation">{draw}</DiagramExplorer>
 
       {belowDrawing}
 

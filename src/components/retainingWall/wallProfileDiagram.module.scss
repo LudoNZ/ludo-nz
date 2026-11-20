@@ -336,3 +336,22 @@
   background-color: rgba(79, 99, 120, 0.85);
   flex-shrink: 0;
 }
+
+// zoomed in: post numbers and running distances, levels, courses — each
+// with a halo of the page colour so it reads over boards and ground
+.postTag text,
+.detailLabel {
+  font-family: inherit;
+  paint-order: stroke;
+  stroke: var(--background);
+  stroke-linejoin: round;
+  font-variant-numeric: tabular-nums;
+}
+
+.postTag text {
+  fill: var(--color-primary);
+}
+
+.detailLabel {
+  fill: var(--foreground);
+}
