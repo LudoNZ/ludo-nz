@@ -97,6 +97,10 @@ export const OPEN_RISER_MAX_GAP = 100
 
 /** Below this a ripped board is too thin to fix without it splitting. */
 export const MIN_RIP = 30
+/** A last ripped board narrower than this isn't cut at all: it's left
+ * out (a sliver that small isn't worth a board, and does nothing), and
+ * the boards before it stay where they are. */
+export const SLIVER_MAX = 20
 
 /** Auto nosing only picks a whole-board fit when the overhang it gives is
  * within this range — otherwise falls back to DEFAULT_NOSING plus a rip. */
@@ -277,10 +281,15 @@ export interface StairResult {
   nosingAuto: boolean
   treadDepth: number
   treadBoards: BoardPiece[]
+  /** a sliver at the back of each tread too thin to cut, left out (mm; 0
+   * when there isn't one) — see SLIVER_MAX */
+  treadSliver: number
   /** whole-board-fit nosing worth suggesting when the current layout has a rip */
   suggestedNosing: number | null
   riserHeight: number
   riserBoardPieces: BoardPiece[]
+  /** as treadSliver, on each riser */
+  riserSliver: number
   openRiserGap: number
 
   /** what carries the tread boards: stringers, or the frames' joists */
@@ -371,6 +380,17 @@ export const fewestRisers = (totalRise: number, maxRise: number) => Math.max(1, 
  * the width a board's been ripped to by hand, `sizes[i]`, never wider
  * than a full board), the last one ripped to whatever's left. */
 export function layBoards(depth: number, boardWidth: number, gap: number, sizes: (number | null)[] = []): BoardPiece[] {
+  return layBoardsLeavingSliver(depth, boardWidth, gap, sizes).pieces
+}
+
+/** layBoards, and how wide a last sliver (under SLIVER_MAX) left out was
+ * (0 when nothing was) — never one sized by hand, nor the only board. */
+export function layBoardsLeavingSliver(
+  depth: number,
+  boardWidth: number,
+  gap: number,
+  sizes: (number | null)[] = [],
+): { pieces: BoardPiece[]; leftOut: number } {
   const pieces: BoardPiece[] = []
   let pos = 0
   while (depth - pos > 0.5 && pieces.length < 200) {
@@ -380,7 +400,12 @@ export function layBoards(depth: number, boardWidth: number, gap: number, sizes:
     pieces.push({ offset: pos, width: w, ripped: w < boardWidth - 0.5, index: pieces.length })
     pos += w + gap
   }
-  return pieces
+  const last = pieces[pieces.length - 1]
+  if (pieces.length > 1 && last.ripped && last.width < SLIVER_MAX && !(sizes[last.index] != null && sizes[last.index]! > 0)) {
+    pieces.pop()
+    return { pieces, leftOut: last.width }
+  }
+  return { pieces, leftOut: 0 }
 }
 
 /** Widths that split `depth` into equal boards no wider than a full one,
@@ -498,7 +523,7 @@ export function calculateStairs(input: StairInput): StairResult {
     nosing = Math.max(0, input.nosing ?? 0)
   }
   const treadDepth = G + riserT + nosing
-  const treadBoards = layBoards(treadDepth, input.boardWidth, input.boardGap, input.treadBoardSizes)
+  const { pieces: treadBoards, leftOut: treadSliver } = layBoardsLeavingSliver(treadDepth, input.boardWidth, input.boardGap, input.treadBoardSizes)
   const hasRip = treadBoards.some((b) => b.ripped)
   const fitNosing = wholeBoardNosing(G, riserT, input.boardWidth, input.boardGap)
   const suggestedNosing = hasRip && fitNosing <= AUTO_NOSING_MAX && Math.abs(fitNosing - nosing) > 0.5 ? fitNosing : null
@@ -507,7 +532,9 @@ export function calculateStairs(input: StairInput): StairResult {
   // tread above (offsets from the bottom), the ripped one at the top or
   // the bottom
   const riserHeight = R - t
-  const riserLaid = input.riserBoards ? layBoards(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap), input.riserBoardSizes) : []
+  const riserLay = input.riserBoards ? layBoardsLeavingSliver(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap), input.riserBoardSizes) : { pieces: [], leftOut: 0 }
+  const riserLaid = riserLay.pieces
+  const riserSliver = riserLay.leftOut
   const riserBoardPieces =
     input.riserRip === "bottom" ? riserLaid.map((b) => ({ ...b, offset: riserHeight - b.offset - b.width })).reverse() : riserLaid
   const openRiserGap = input.riserBoards ? 0 : riserHeight
@@ -688,9 +715,11 @@ export function calculateStairs(input: StairInput): StairResult {
     nosingAuto,
     treadDepth,
     treadBoards,
+    treadSliver,
     suggestedNosing,
     riserHeight,
     riserBoardPieces,
+    riserSliver,
     openRiserGap,
     supports: { count: supportCount, spacing, positions },
     timberDepth: D,

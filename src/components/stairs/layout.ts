@@ -23,6 +23,7 @@ import {
   POST_EMBED,
   Pt,
   SERVICE,
+  SLIVER_MAX,
   STAIR_RULES_REF,
   STRINGER_SPANS,
   StairInput,
@@ -154,8 +155,10 @@ export function boardStrips(
     const along = poly.map((p) => dot(sub(p, a), e))
     const length = Math.max(...along) - Math.min(...along)
     const width = s1 - s0
-    // slivers right at a winder's point aren't worth a board
+    // slivers right at a winder's point aren't worth a board, nor a last
+    // one too thin to cut (left out, as on a straight stair)
     if (length < MIN_PIECE) continue
+    if (s1 >= depth - 0.5 && width < SLIVER_MAX && s0 > -nosing) continue
     const tapered = polygonArea(poly) < length * width * 0.985
     strips.push({ poly, length, width, ripped: width < boardWidth - 0.5, tapered })
   }

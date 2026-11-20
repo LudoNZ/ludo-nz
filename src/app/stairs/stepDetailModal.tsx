@@ -178,7 +178,8 @@ const StepDetailModal: React.FC<{
       {hint && <span className={pile.rowHint}>{hint}</span>}
     </div>
   )
-  const boardsText = (list: { width: number; ripped: boolean }[]) => list.map((b) => (b.ripped ? `${mmText(b.width)} rip` : mmText(b.width))).join(" + ")
+  const boardsText = (list: { width: number; ripped: boolean }[], sliver = 0) =>
+    list.map((b) => (b.ripped ? `${mmText(b.width)} rip` : mmText(b.width))).join(" + ") + (sliver ? ` (${mmText(sliver)} sliver left out)` : "")
 
   // ---- ripping boards: the picked board's width, or even splits ----
   const sizesKey = (kind: "tread" | "riser") => (kind === "tread" ? "treadBoardSizes" : "riserBoardSizes")
@@ -378,12 +379,12 @@ const StepDetailModal: React.FC<{
               </div>
               <div>
                 <dt>Per tread</dt>
-                <dd>{boardsText(r.treadBoards)}</dd>
+                <dd>{boardsText(r.treadBoards, r.treadSliver)}</dd>
               </div>
               {draft.riserBoards && (
                 <div>
                   <dt>Per riser</dt>
-                  <dd>{boardsText(r.riserBoardPieces)}</dd>
+                  <dd>{boardsText(r.riserBoardPieces, r.riserSliver)}</dd>
                 </div>
               )}
             </dl>
