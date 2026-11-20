@@ -157,14 +157,16 @@ export const rotatePoint = (p: PlanPoint, deg: number): PlanPoint => {
 }
 
 /** The plan turn that lays wall `segmentIndex` level on screen, its
- * retained side at the top — the way the elevations look at it */
-export const levelRotationFor = (points: PlanPoint[], segmentIndex: number, side: RetainedSide): number => {
+ * retained side at the top — the way the elevations look at it — or,
+ * `upright`, stands it straight up the screen, its retained side on the
+ * right (a quarter turn on from level) */
+export const levelRotationFor = (points: PlanPoint[], segmentIndex: number, side: RetainedSide, upright = false): number => {
   const a = points[segmentIndex]
   const b = points[segmentIndex + 1]
   if (!a || !b) return 0
   const angle = (Math.atan2(b.yM - a.yM, b.xM - a.xM) * 180) / Math.PI
   // walking a → b pointing right on screen puts its left side at the top
-  return normalizeDeg(side === "left" ? -angle : 180 - angle)
+  return normalizeDeg((side === "left" ? -angle : 180 - angle) + (upright ? 90 : 0))
 }
 
 /** Plan position of the point `distanceM` along the unfolded wall. */

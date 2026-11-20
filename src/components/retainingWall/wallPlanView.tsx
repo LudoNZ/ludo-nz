@@ -28,6 +28,7 @@ import {
 } from "./wallPlan"
 import { placeLabels } from "./planLabels"
 import { BOARD_THICKNESS_M, isRoundPost, shortPostSize } from "./calcSettings"
+import PlanTurnModal from "./planTurnModal"
 import styles from "./wallPlanView.module.scss"
 
 /** dragged corners land on a 100mm grid… */
@@ -38,6 +39,8 @@ const ALIGN_SNAP_M = 0.15
 const MIN_SEGMENT_M = 0.1
 const NEW_SEGMENT_M = 2
 const DRAG_THRESHOLD_PX = 4
+/** ms the "Wall … level" button is held to open every turn option */
+const HOLD_MS = 450
 /** a post's never drawn smaller than this share of the view, so it shows
  * on a long wall — zoomed in, its true size takes over */
 const POST_MIN_SCREEN = 0.022
@@ -684,6 +687,48 @@ const WallPlanView: React.FC<{
   }
 
   const levelSegment = selectedSegment ?? 0
+  // holding the level button opens every turn option — under the plan
+  // ("page") or full screen ("explore"), each with its own copy
+  const [turnModal, setTurnModal] = useState<"page" | "explore" | null>(null)
+  const [holding, setHolding] = useState<"page" | "explore" | null>(null)
+  const hold = useRef<{ timer: number | null; fired: boolean }>({ timer: null, fired: false })
+  const endHold = () => {
+    if (hold.current.timer !== null) window.clearTimeout(hold.current.timer)
+    hold.current.timer = null
+    setHolding(null)
+  }
+  const holdHandlers = (where: "page" | "explore", onTap: () => void) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return
+      endHold()
+      hold.current.fired = false
+      setHolding(where)
+      hold.current.timer = window.setTimeout(() => {
+        hold.current.fired = true
+        hold.current.timer = null
+        setHolding(null)
+        setTurnModal(where)
+      }, HOLD_MS)
+    },
+    onPointerUp: endHold,
+    onPointerLeave: endHold,
+    onPointerCancel: endHold,
+    // a long press on a phone, or a right-click: the options straight away
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault()
+      endHold()
+      hold.current.fired = true
+      setTurnModal(where)
+    },
+    onClick: () => {
+      // the press that opened the options isn't also a tap
+      if (hold.current.fired) {
+        hold.current.fired = false
+        return
+      }
+      onTap()
+    },
+  })
   /** the turn controls: under the plan they turn it and save it with the
    * wall; full screen (`ex`) they only turn the view, like a twist does */
   const turnControls = (ex?: ExploreState) => {
@@ -707,9 +752,10 @@ const WallPlanView: React.FC<{
         </button>
         <button
           type="button"
-          className={styles.turnText}
-          onClick={() => turnTo(levelRotationFor(points, levelSegment, retainedSide))}
-          title="Turn the plan so this wall lies level, its retained side at the top"
+          className={`${styles.turnText} ${styles.holdable} ${holding === (ex ? "explore" : "page") ? styles.holding : ""}`}
+          {...holdHandlers(ex ? "explore" : "page", () => turnTo(levelRotationFor(points, levelSegment, retainedSide)))}
+          title="Tap: lay this wall level, its retained side at the top. Hold: every way to turn the plan"
+          aria-haspopup="dialog"
         >
           Wall {segmentLabel(levelSegment)} level
         </button>
@@ -719,6 +765,23 @@ const WallPlanView: React.FC<{
             {ex ? "Back to saved" : "Reset"}
           </button>
         )}
+        <PlanTurnModal
+          isOpen={turnModal === (ex ? "explore" : "page")}
+          onClose={() => setTurnModal(null)}
+          points={points}
+          retainedSide={retainedSide}
+          shownDeg={shown}
+          savedDeg={rotationDeg}
+          onTurnTo={turnTo}
+          onSaveDefault={
+            ex
+              ? () => {
+                  onRotationChange(Math.round(shown))
+                  ex.setTurn(0)
+                }
+              : undefined
+          }
+        />
       </div>
     )
   }
