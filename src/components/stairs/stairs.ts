@@ -366,6 +366,12 @@ export interface StairResult {
   boards: {
     treadPieces: number
     riserPieces: number
+    /** of those, the full-width ones */
+    fullPieces: number
+    /** every ripped piece's width (they share boards — see ripBlanks) */
+    ripWidths: number[]
+    /** full-width pieces to cut, the rips sharing boards: what's ordered */
+    blanks: number
     pieceLength: number
     stock: StockPlan | null
     linealM: number
@@ -424,6 +430,23 @@ function wholeBoardNosing(going: number, extra: number, boardWidth: number, gap:
     if (nosing >= 0) return nosing
   }
   return DEFAULT_NOSING
+}
+
+/** the saw cut lost ripping a board down its length */
+export const RIP_KERF = 2
+
+/** How many full-width boards it takes to rip these widths from, sharing
+ * a board wherever they fit side by side — each taking its width plus a
+ * saw cut — packed widest first into whichever board has room (first fit). */
+export function ripBlanks(widths: number[], boardWidth: number): number {
+  const room: number[] = []
+  for (const w of [...widths].sort((a, b) => b - a)) {
+    const need = w + RIP_KERF
+    const i = room.findIndex((r) => r >= w - 1e-6)
+    if (i >= 0) room[i] -= need
+    else room.push(boardWidth - need)
+  }
+  return room.length
 }
 
 /** Cheapest standard length to cut equal pieces from. */
@@ -691,8 +714,14 @@ export function calculateStairs(input: StairInput): StairResult {
   // top riser (deck edge) gets boards too
   const riserPieces = input.riserBoards ? risers * riserBoardPieces.length : 0
   const pieceLength = input.width
-  const boardStock = planStock(pieceLength, treadPieces + riserPieces)
-  const linealM = ((treadPieces + riserPieces) * pieceLength) / 1000
+  // a ripped piece's offcut can be another rip: they share boards
+  const each = (n: number, list: BoardPiece[]) => Array.from({ length: n }, () => list).flat()
+  const laid = [...each(treads, treadBoards), ...(input.riserBoards ? each(risers, riserBoardPieces) : [])]
+  const fullPieces = laid.filter((b) => !b.ripped).length
+  const ripWidths = laid.filter((b) => b.ripped).map((b) => b.width)
+  const blanks = fullPieces + ripBlanks(ripWidths, input.boardWidth)
+  const boardStock = planStock(pieceLength, blanks)
+  const linealM = (blanks * pieceLength) / 1000
 
   // two screws per board per stringer / joist; riser boards screw into the
   // wedge or frame faces
@@ -772,7 +801,7 @@ export function calculateStairs(input: StairInput): StairResult {
       nogStock: planMixedStock(nogPieces),
       nogLinealM: nogPieces.reduce((a, p) => a + p, 0) / 1000,
     },
-    boards: { treadPieces, riserPieces, pieceLength, stock: boardStock, linealM },
+    boards: { treadPieces, riserPieces, fullPieces, ripWidths, blanks, pieceLength, stock: boardStock, linealM },
     screws,
   }
 }

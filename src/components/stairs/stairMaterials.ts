@@ -4,7 +4,7 @@
  * it's for, so the lines from several stairs can be added up into one
  * order (see `combineOrder`). Pure — no React. */
 
-import { POST_EMBED, POST_SIZE, NOG_DEPTH, StairInput, StairResult, planMixedStock, planStock } from "./stairs"
+import { POST_EMBED, POST_SIZE, NOG_DEPTH, StairInput, StairResult, planMixedStock, planStock, ripBlanks } from "./stairs"
 import type { StairLayout } from "./layout"
 
 export type StairOrderKind = "timber" | "decking" | "posts" | "concrete" | "screws"
@@ -110,6 +110,9 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
   const t = input.stringerThickness
   const turned = layout !== null && layout.turns.length > 0
   const boardPieces: number[] = []
+  /** the stair's-width boards laid whole, and the widths of those ripped */
+  let fullBoards = 0
+  const ripWidths: number[] = []
   let screws = 0
 
   if (turned) {
@@ -154,7 +157,8 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
   } else {
     lines.push(...runLines(r, input, ""))
     screws += r.screws
-    for (let i = 0; i < r.boards.treadPieces + r.boards.riserPieces; i++) boardPieces.push(r.boards.pieceLength)
+    fullBoards += r.boards.fullPieces
+    ripWidths.push(...r.boards.ripWidths)
   }
 
   if (options.extraTopTread && r.treads >= 0) {
@@ -163,10 +167,19 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
     const pieces = [input.width, input.width, ...Array(joists).fill(Math.max(100, r.going - 2 * t))]
     const plan = planMixedStock(pieces)
     if (plan) lines.push({ kind: "timber", use: "Top tread frame", ...framing(NOG_DEPTH, t), count: plan.lengths, lengthM: plan.lengthM, unit: "lengths", detail: `2 × ${input.width} + ${joists} joists` })
-    const boards = r.treadBoards.length + (input.riserBoards ? r.riserBoardPieces.length : 0)
-    for (let i = 0; i < boards; i++) boardPieces.push(input.width)
+    const topBoards = [...r.treadBoards, ...(input.riserBoards ? r.riserBoardPieces : [])]
+    const boards = topBoards.length
+    fullBoards += topBoards.filter((b) => !b.ripped).length
+    ripWidths.push(...topBoards.filter((b) => b.ripped).map((b) => b.width))
     screws += 2 * boards * joists
   }
+
+  // a straight stair's boards, all the stair's width: the rips share
+  // boards where they fit side by side (a saw cut each), so they're
+  // ordered as fewer full-width pieces
+  const sharedRips = ripWidths.length - ripBlanks(ripWidths, input.boardWidth)
+  for (let i = 0; i < fullBoards + ripBlanks(ripWidths, input.boardWidth); i++) boardPieces.push(input.width)
+  const laidPieces = boardPieces.length + sharedRips
 
   // decking: equal pieces cut from one length where they're all the same
   if (boardPieces.length) {
@@ -180,7 +193,7 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
         count: plan.lengths,
         lengthM: plan.lengthM,
         unit: "lengths",
-        detail: `${boardPieces.length} pieces${same ? ` at ${Math.round(boardPieces[0])} mm` : ""}`,
+        detail: `${laidPieces} pieces${same ? ` at ${Math.round(boardPieces[0])} mm` : ""}${sharedRips > 0 ? ` — ${sharedRips} rip${sharedRips === 1 ? "" : "s"} cut from another's offcut` : ""}`,
       })
   }
   if (screws > 0) lines.push({ kind: "screws", use: "Decking screws", material: "Stainless decking screws", size: "", count: Math.ceil(screws * 1.1), lengthM: null, unit: "each", detail: `${screws} + 10% spare` })
