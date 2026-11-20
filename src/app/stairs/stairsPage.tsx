@@ -28,6 +28,7 @@ import { combineOrder, stairOrder } from "@/components/stairs/stairMaterials"
 import StairOrderCard from "@/components/stairs/stairOrderCard"
 import LayoutEditor from "./layoutEditor"
 import DraftNumberInput from "./draftNumberInput"
+import StepDetailModal from "./stepDetailModal"
 import styles from "./stairsPage.module.scss"
 
 const mm = (v: number) => `${Math.round(v)} mm`
@@ -84,6 +85,7 @@ const StairsPage: React.FC<{
   extraTopTread?: boolean
 }> = ({ value, onChange, riseNote, header, extraTopTread }) => {
   const [own, setOwn] = useState<StairInput>(DEFAULT_INPUT)
+  const [stepDetailOpen, setStepDetailOpen] = useState(false)
   const input = value ?? own
   const setInput = (next: StairInput | ((s: StairInput) => StairInput)) => {
     const resolved = typeof next === "function" ? next(input) : next
@@ -127,7 +129,7 @@ const StairsPage: React.FC<{
     )
   if (riserRip && riserRip.width < MIN_RIP)
     notes.push(
-      `The top riser board is ripped to only ${mm(riserRip.width)} — consider a narrower board for the risers.`,
+      `The ${input.riserRip === "bottom" ? "bottom" : "top"} riser board is ripped to only ${mm(riserRip.width)} — change the gap between riser boards, or use a narrower board for the risers.`,
     )
   if (!input.riserBoards && r.treads > 0 && r.openRiserGap > OPEN_RISER_MAX_GAP)
     notes.push(
@@ -463,8 +465,18 @@ const StairsPage: React.FC<{
               />
               Close the risers with decking boards
             </label>
+            <button type="button" className={styles.textButton} onClick={() => setStepDetailOpen(true)}>
+              Edit the step detail…
+            </button>
           </fieldset>
         </form>
+        <StepDetailModal
+          isOpen={stepDetailOpen}
+          onClose={() => setStepDetailOpen(false)}
+          value={input}
+          onApply={(next) => setInput(next)}
+          maxRun={Math.max(150, maxGoing)}
+        />
 
         <div className={styles.results}>
           <div className={`${styles.compliance} ${styles[r.compliance]}`}>

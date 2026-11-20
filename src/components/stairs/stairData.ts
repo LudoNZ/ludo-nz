@@ -37,6 +37,8 @@ export const stairInputFromData = (raw: unknown): StairInput => {
     boardThickness: num(d.boardThickness, D.boardThickness),
     nosing: numOrNull(d.nosing, D.nosing),
     riserBoards: typeof d.riserBoards === "boolean" ? d.riserBoards : D.riserBoards,
+    riserBoardGap: Math.max(0, num(d.riserBoardGap, D.riserBoardGap)),
+    riserRip: d.riserRip === "bottom" ? "bottom" : "top",
     // one more flight than turns, always
     flights: flights.length === turns.length + 1 ? flights : [...turns.map(() => ({ treads: null })), { treads: null }],
     turns,

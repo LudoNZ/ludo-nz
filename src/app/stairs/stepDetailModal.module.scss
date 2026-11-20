@@ -1,0 +1,89 @@
+// the drawing across the top, the fields under it
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.75rem 1.25rem;
+  align-items: start;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+// literal materials colours, as on the side view: they stand for real things
+.board {
+  fill: #8b5e34;
+  stroke: #4a3018;
+}
+
+.boardRipped {
+  fill: #e0a030;
+  stroke: #7a5200;
+}
+
+.framing {
+  fill: #d9b98a;
+  stroke: #7a5a2b;
+}
+
+.ghost {
+  opacity: 0.45;
+}
+
+.select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--foreground);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: max(0.9rem, 16px);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  i {
+    display: inline-block;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+}
+
+.swatchBoard {
+  background: #8b5e34;
+  border-color: #4a3018;
+}
+
+.swatchRipped {
+  background: #e0a030;
+  border-color: #7a5200;
+}
+
+.swatchFraming {
+  background: #d9b98a;
+  border-color: #7a5a2b;
+}
+
+.swatchHandle {
+  background: #2a78d6;
+  border-color: #1c5cab;
+}

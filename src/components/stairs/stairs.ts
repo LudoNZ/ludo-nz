@@ -104,6 +104,10 @@ export const STOCK_LENGTHS_M = [2.4, 3.0, 3.6, 4.2, 4.8, 5.4, 6.0]
 
 const SAW_KERF = 5
 
+/** the riser's ripped board: at the top (under the tread above) or the
+ * bottom (on the tread below) */
+export type RiserRip = "top" | "bottom"
+
 export interface StairInput {
   totalRise: number
   /** null = the fewest risers that keep every rise within 190 */
@@ -121,6 +125,10 @@ export interface StairInput {
   /** null = auto (a whole number of boards covers each tread exactly) */
   nosing: number | null
   riserBoards: boolean
+  /** mm between riser boards (0 = tight) */
+  riserBoardGap: number
+  /** where the riser's ripped (narrower) board goes */
+  riserRip: RiserRip
   /** flights from the ground up; the last always takes whatever risers are
    * left over (treads: null). One flight and no turns = a straight stair. */
   flights: FlightSpec[]
@@ -142,6 +150,8 @@ export const DEFAULT_INPUT: StairInput = {
   boardThickness: 20,
   nosing: null,
   riserBoards: false,
+  riserBoardGap: 0,
+  riserRip: "top",
   flights: [{ treads: null }],
   turns: [],
 }
@@ -466,9 +476,12 @@ export function calculateStairs(input: StairInput): StairResult {
   const suggestedNosing = hasRip && fitNosing <= AUTO_NOSING_MAX && Math.abs(fitNosing - nosing) > 0.5 ? fitNosing : null
 
   // riser boards stack up from the tread below to the underside of the
-  // tread above, tight (no gap), top one ripped
+  // tread above (offsets from the bottom), the ripped one at the top or
+  // the bottom
   const riserHeight = R - t
-  const riserBoardPieces = input.riserBoards ? layBoards(riserHeight, input.boardWidth, 0) : []
+  const riserLaid = input.riserBoards ? layBoards(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap)) : []
+  const riserBoardPieces =
+    input.riserRip === "bottom" ? riserLaid.map((b) => ({ ...b, offset: riserHeight - b.offset - b.width })).reverse() : riserLaid
   const openRiserGap = input.riserBoards ? 0 : riserHeight
 
   // ---- stringers ---------------------------------------------------------
