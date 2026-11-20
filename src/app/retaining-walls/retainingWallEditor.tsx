@@ -81,7 +81,7 @@ export interface EditorAddOnContext {
 
 export interface EditorAddOns {
   /** drawn over the plan, in plan metres */
-  planOverlay?: (ctx: EditorAddOnContext, sizes: { strokeW: number; fontSize: number }) => ReactNode
+  planOverlay?: (ctx: EditorAddOnContext, sizes: { strokeW: number; fontSize: number; rotationDeg: number }) => ReactNode
   /** the shapes the overlay draws, so the plan fits them in and keeps
    * its labels clear of them */
   planShapes?: (ctx: EditorAddOnContext) => PlanPoint[][]
@@ -128,6 +128,8 @@ const RetainingWallEditor: React.FC<{
   // which side of the wall (walking it from A onward) the ground is held
   // back on — decides which face the elevations are looking at
   const [retainedSide, setRetainedSide] = useState<RetainedSide>(initial.retainedSide)
+  // how the plan view's turned on screen — saved, so it opens the same way
+  const [planRotationDeg, setPlanRotationDeg] = useState(initial.planRotationDeg)
   // which run's elevation is showing, or the whole wall unfolded flat
   const [elevationView, setElevationView] = useState<number | "all">("all")
   const [retainedHeight, setRetainedHeight] = useState(String(initial.retainedHeightM))
@@ -330,6 +332,7 @@ const RetainingWallEditor: React.FC<{
     alignedLayout.current = restored ? JSON.stringify(postFractions(restored)) : null
     setPlanPoints(wall.planPoints)
     setRetainedSide(wall.retainedSide)
+    setPlanRotationDeg(wall.planRotationDeg)
     setRetainedHeight(String(wall.retainedHeightM))
     setSoil(wall.soil)
     setRlDatum(String(wall.rlDatumM))
@@ -399,6 +402,7 @@ const RetainingWallEditor: React.FC<{
     if (!(retainedHeightM > 0)) return
     const wall: WallProject = {
       planPoints,
+      planRotationDeg,
       retainedSide,
       retainedHeightM,
       soil,
@@ -435,7 +439,7 @@ const RetainingWallEditor: React.FC<{
     if (restoringRef.current) restoringRef.current = false
     else recordChangeRef.current(JSON.parse(previous) as WallProject, wall)
     onChangeRef.current(wall)
-  }, [planPoints, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, gradePostSizes, postSizes, holeDiametersMm, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, obstructions, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
+  }, [planPoints, planRotationDeg, retainedSide, retainedHeightM, soil, rlDatumM, augerDiameterMm, postSizeOverride, gradePostSizes, postSizes, holeDiametersMm, holeDepthOverrideMm, pileStandoffMm, runSpacing, boardOrderFixed, boardOrderPartial, boardOrdersPlaced, steppedWalls, bayCourses, obstructions, controlPoints, depthPoints, measuredHoleDepthsMm, topCapEnabled, rakedTopBoard, boardsToPostOutside, locked, calcSettings, calcSettingsName, estimateSettings])
 
   // Hand-set levels, depths and sizes are keyed by post index, so whenever
   // the post layout changes — a wall reshaped, a post added or pinned,
@@ -1177,6 +1181,8 @@ const RetainingWallEditor: React.FC<{
         <WallPlanView
           points={planPoints}
           retainedSide={retainedSide}
+          rotationDeg={planRotationDeg}
+          onRotationChange={setPlanRotationDeg}
           profile={profile}
           selectedSegment={shownSegment}
           selectedPostIndex={selectedIndex}

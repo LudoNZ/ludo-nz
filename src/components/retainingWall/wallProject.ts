@@ -9,7 +9,7 @@ import { buildWallProfile, ControlPoints, DepthPoints, legacyPlan, ProfileOverri
 import { SavedWallDesign } from "./retainingWallData"
 import { Obstruction, obstructionsFromData } from "./obstructions"
 import { SOIL_LABELS, SoilType } from "./retainingWallCalc"
-import { PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
+import { normalizeDeg, PlanPoint, RetainedSide, segmentLengths, straightPlan, totalLength } from "./wallPlan"
 import { DEFAULT_ESTIMATE_SETTINGS, EstimateSettings, estimateSettingsFromData } from "./pricing"
 
 export interface PartialBoardOrder {
@@ -56,6 +56,9 @@ const numberMap = (raw: unknown): Record<string, number> =>
 
 export interface WallProject {
   planPoints: PlanPoint[]
+  /** degrees clockwise the plan view is turned on screen — how it's
+   * looked at, not the wall's shape */
+  planRotationDeg: number
   retainedSide: RetainedSide
   retainedHeightM: number
   soil: SoilType
@@ -143,6 +146,7 @@ export const SCRATCH_STORAGE_KEY = "retainingWalls.scratch.v1"
 
 export const newBlankWall = (): WallProject => ({
   planPoints: straightPlan(5),
+  planRotationDeg: 0,
   retainedSide: "left",
   retainedHeightM: 1,
   soil: "firmClay",
@@ -200,6 +204,7 @@ export const wallFromData = (data: unknown): WallProject => {
   const settings = d.calcSettings
   return {
     planPoints: points.length >= 2 ? points : blank.planPoints,
+    planRotationDeg: typeof d.planRotationDeg === "number" && Number.isFinite(d.planRotationDeg) ? normalizeDeg(d.planRotationDeg) : 0,
     retainedSide: d.retainedSide === "right" ? "right" : "left",
     retainedHeightM: typeof d.retainedHeightM === "number" && d.retainedHeightM > 0 ? d.retainedHeightM : blank.retainedHeightM,
     soil: typeof d.soil === "string" && d.soil in SOIL_LABELS ? (d.soil as SoilType) : blank.soil,

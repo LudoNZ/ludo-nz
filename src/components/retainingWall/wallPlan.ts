@@ -141,6 +141,32 @@ export const sideNormal = (a: PlanPoint, b: PlanPoint, side: RetainedSide): Plan
   return side === "left" ? { xM: dy, yM: -dx } : { xM: -dy, yM: dx }
 }
 
+/** degrees, folded into (-180, 180] */
+export const normalizeDeg = (deg: number): number => {
+  const d = ((((deg + 180) % 360) + 360) % 360) - 180
+  return d === -180 ? 180 : d
+}
+
+/** `p` turned `deg` clockwise on screen about the origin — what SVG's
+ * rotate(deg) does to it (y points down) */
+export const rotatePoint = (p: PlanPoint, deg: number): PlanPoint => {
+  const th = (deg * Math.PI) / 180
+  const c = Math.cos(th)
+  const s = Math.sin(th)
+  return { xM: p.xM * c - p.yM * s, yM: p.xM * s + p.yM * c }
+}
+
+/** The plan turn that lays wall `segmentIndex` level on screen, its
+ * retained side at the top — the way the elevations look at it */
+export const levelRotationFor = (points: PlanPoint[], segmentIndex: number, side: RetainedSide): number => {
+  const a = points[segmentIndex]
+  const b = points[segmentIndex + 1]
+  if (!a || !b) return 0
+  const angle = (Math.atan2(b.yM - a.yM, b.xM - a.xM) * 180) / Math.PI
+  // walking a → b pointing right on screen puts its left side at the top
+  return normalizeDeg(side === "left" ? -angle : 180 - angle)
+}
+
 /** Plan position of the point `distanceM` along the unfolded wall. */
 export const pointAtDistance = (points: PlanPoint[], distanceM: number): PlanPoint => {
   let remaining = distanceM

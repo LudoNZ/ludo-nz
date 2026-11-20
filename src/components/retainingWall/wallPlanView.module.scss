@@ -171,6 +171,60 @@
   stroke-linecap: round;
 }
 
+.turnBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.turnLabel {
+  opacity: 0.8;
+}
+
+.turnButton,
+.turnText {
+  min-height: 2.25rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  }
+}
+
+.turnButton {
+  width: 2.25rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+
+  svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+.turnText {
+  padding: 0 0.8rem;
+}
+
+.turnAngle {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;

@@ -56,6 +56,7 @@ export function describeWallChange(before: WallProject, after: WallProject): str
   if (before.retainedHeightM !== after.retainedHeightM)
     parts.push(`Retained height ${m(before.retainedHeightM)} → ${m(after.retainedHeightM)}`)
   if (before.retainedSide !== after.retainedSide) parts.push("Retained side")
+  if ((before.planRotationDeg ?? 0) !== (after.planRotationDeg ?? 0)) parts.push(`Plan turned to ${after.planRotationDeg}°`)
   if (before.soil !== after.soil) parts.push("Soil type")
   if (before.rlDatumM !== after.rlDatumM) parts.push(`RL datum ${m(before.rlDatumM)} → ${m(after.rlDatumM)}`)
   if (before.augerDiameterMm !== after.augerDiameterMm)

@@ -17,6 +17,9 @@ import {
   removeCorner,
   RetainedSide,
   segmentLabel,
+  levelRotationFor,
+  normalizeDeg,
+  rotatePoint,
   segmentLengths,
   setSegmentLength,
   sideNormal,
@@ -102,10 +105,15 @@ const WallPlanView: React.FC<{
   onObstructionChange?: (id: string, patch: Partial<Obstruction>) => void
   /** more to draw on the plan (stairs off the wall, say), in plan metres,
    * given the line weight and text size the plan's drawn at */
-  overlay?: (sizes: { strokeW: number; fontSize: number }) => ReactNode
+  overlay?: (sizes: { strokeW: number; fontSize: number; rotationDeg: number }) => ReactNode
   /** the shapes the overlay draws, so the view fits them in and the
    * wall labels keep clear of them */
   overlayShapes?: PlanPoint[][]
+  /** degrees clockwise the drawing's turned on screen (a view setting:
+   * the wall's shape is the same either way) */
+  rotationDeg?: number
+  /** turns the view — without it there's no turn control */
+  onRotationChange?: (deg: number) => void
 }> = ({ points, retainedSide, profile, selectedSegment, selectedPostIndex, onChange, onRetainedSideChange, onSelectSegment,
   onSetBayCount,
   selectedObstructionId = null,
@@ -114,8 +122,14 @@ const WallPlanView: React.FC<{
   overlay,
   overlayShapes = [],
   readOnly = false,
+  rotationDeg = 0,
+  onRotationChange,
 }) => {
-  const svgRef = useRef<SVGSVGElement>(null)
+  /** the turned group the drawing's in: pointer positions map through it
+   * back to plan metres */
+  const planGroupRef = useRef<SVGGElement>(null)
+  /** what the view's fitted to, turned the way it's shown */
+  const fitShown = () => fitViewBox([...points, ...overlayShapes.flat()].map((p) => rotatePoint(p, rotationDeg)))
   // the view is held still for the length of a drag — refitting it to the
   // moving corner every frame would slide the drawing out from under the
   // finger
@@ -125,7 +139,7 @@ const WallPlanView: React.FC<{
   const editing = editingWalls && !readOnly
   const dragRef = useRef<{ index: number; startClientX: number; startClientY: number; dragging: boolean } | null>(null)
 
-  const view = frozenView ?? fitViewBox([...points, ...overlayShapes.flat()])
+  const view = frozenView ?? fitShown()
   const scale = Math.max(view.w, view.h)
   // labels are placed at the fitted text size, so they hold still while
   // the drawing's zoomed (they only get smaller on screen-size terms)
@@ -133,11 +147,22 @@ const WallPlanView: React.FC<{
   const lengths = segmentLengths(points)
   const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
   const labelTexts = lengths.map((l, i) => `${segmentLabel(i)} · ${l.toFixed(2)} m`)
-  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, baseFontSize, view, overlayShapes)
+  // placed on screen terms (in the turned frame), so they stay level and
+  // clear of each other whichever way the plan's turned
+  const labelSpots = placeLabels(
+    points.map((p) => rotatePoint(p, rotationDeg)),
+    labelTexts,
+    lowSide,
+    retainedSide,
+    baseFontSize,
+    view,
+    overlayShapes.map((shape) => shape.map((p) => rotatePoint(p, rotationDeg))),
+  )
 
   const toPlan = (clientX: number, clientY: number): PlanPoint | null => {
-    const svg = svgRef.current
-    const ctm = svg?.getScreenCTM()
+    const group = planGroupRef.current
+    const svg = group?.ownerSVGElement
+    const ctm = group?.getScreenCTM()
     if (!svg || !ctm) return null
     const pt = svg.createSVGPoint()
     pt.x = clientX
@@ -160,7 +185,7 @@ const WallPlanView: React.FC<{
     if (readOnly) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { index, startClientX: e.clientX, startClientY: e.clientY, dragging: false }
-    setFrozenView(fitViewBox([...points, ...overlayShapes.flat()]))
+    setFrozenView(fitShown())
   }
   const handlePointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current
@@ -237,7 +262,7 @@ const WallPlanView: React.FC<{
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     obDrag.current = { id, mode, pointerId: e.pointerId }
-    setFrozenView(fitViewBox([...points, ...overlayShapes.flat()]))
+    setFrozenView(fitShown())
     onSelectObstruction?.(id)
   }
   const moveObDrag = (e: React.PointerEvent) => {
@@ -295,6 +320,11 @@ const WallPlanView: React.FC<{
     const boardShow = ramp(...DETAIL.boards)
     const tagShow = ramp(...DETAIL.tags)
     const lowNormal = (a: PlanPoint, b: PlanPoint) => sideNormal(a, b, lowSide)
+    const turn = rotationDeg ? `rotate(${rotationDeg})` : undefined
+    /** turns text at `at` back level, inside the turned drawing */
+    const upright = (at: PlanPoint) => (rotationDeg ? `rotate(${-rotationDeg} ${at.xM} ${at.yM})` : undefined)
+    /** screen-up, in plan terms */
+    const up = rotatePoint({ xM: 0, yM: -1 }, -rotationDeg)
     /** the run a post sits on, and its two ends */
     const runOf = (postIndex: number) => {
       const seg = profile?.segments.find((g) => postIndex >= g.startPostIndex && postIndex <= g.endPostIndex)
@@ -303,12 +333,14 @@ const WallPlanView: React.FC<{
     }
     return (
         <svg
-          ref={svgRef}
           viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
           className={styles.svg}
           role="img"
           aria-label="Plan view of the wall, seen from above"
         >
+          {/* the drawing in plan metres, turned as it's shown; text in it
+              turns back to stay level (see upright) */}
+          <g ref={planGroupRef} transform={turn}>
           {/* retained ground: a band of soil along the uphill side */}
           <polygon points={band.map((p) => `${p.xM},${p.yM}`).join(" ")} className={styles.retainedBand} />
 
@@ -475,6 +507,7 @@ const WallPlanView: React.FC<{
                   dominantBaseline="middle"
                   className={post.index === selectedPostIndex ? styles.postTagSelected : styles.postTag}
                   opacity={tagShow}
+                  transform={upright({ xM: at.xM + n.xM * off, yM: at.yM + n.yM * off })}
                 >
                   {post.index + 1} · {shortPostSize(post.sizeLabel)}
                 </text>
@@ -491,8 +524,9 @@ const WallPlanView: React.FC<{
               const n = sideNormal(ra, rb, retainedSide)
               const off = Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + fontSize * 0.75
               const mid = { xM: (a.xM + b.xM) / 2 + n.xM * off, yM: (a.yM + b.yM) / 2 + n.yM * off }
-              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI
-              // never upside down
+              // along the run as it's shown on screen, never upside down
+              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI + rotationDeg
+              deg = normalizeDeg(deg)
               if (deg > 90) deg -= 180
               if (deg <= -90) deg += 180
               return (
@@ -504,7 +538,7 @@ const WallPlanView: React.FC<{
                   textAnchor="middle"
                   dominantBaseline="middle"
                   className={styles.bayDim}
-                  transform={`rotate(${deg} ${mid.xM} ${mid.yM})`}
+                  transform={`rotate(${deg - rotationDeg} ${mid.xM} ${mid.yM})`}
                   opacity={tagShow}
                 >
                   {Math.round(Math.abs(pb.xM - pa.xM) * 1000)}
@@ -512,7 +546,8 @@ const WallPlanView: React.FC<{
               )
             })}
 
-          {overlay?.({ strokeW, fontSize })}
+          {overlay?.({ strokeW, fontSize, rotationDeg })}
+          </g>
 
           {/* run labels, placed clear of each other and of the walls (see
               placeLabels) — on the low side where there's room */}
@@ -533,6 +568,7 @@ const WallPlanView: React.FC<{
             )
           })}
 
+          <g transform={turn}>
           {/* "+" on each run: adds a corner there, ready to drag out */}
           {(fixed ? [] : points.slice(0, -1)).map((a, i) => {
             const b = points[i + 1]
@@ -622,21 +658,60 @@ const WallPlanView: React.FC<{
                       <circle cx={tip.xM} cy={tip.yM} r={handleR * 2.4} className={styles.handleHit} />
                       <circle cx={tip.xM} cy={tip.yM} r={handleR} fill="#fff" stroke={color} strokeWidth={strokeW * 0.6} />
                     </g>
-                    <text x={tip.xM} y={tip.yM - handleR * 1.8} fontSize={fontSize * 0.8} textAnchor="middle" fill={color}>
-                      {o.angleDeg}°
-                    </text>
+                    {(() => {
+                      const at = { xM: tip.xM + up.xM * handleR * 1.8, yM: tip.yM + up.yM * handleR * 1.8 }
+                      return (
+                        <text x={at.xM} y={at.yM} fontSize={fontSize * 0.8} textAnchor="middle" fill={color} transform={upright(at)}>
+                          {o.angleDeg}°
+                        </text>
+                      )
+                    })()}
                   </g>
                 )
               })}
+          </g>
         </svg>
     )
   }
 
+  const turnBy = (deg: number) => onRotationChange?.(normalizeDeg(rotationDeg + deg))
+  const levelSegment = selectedSegment ?? 0
+  const turnControls = onRotationChange && (
+    <div className={styles.turnBar} role="group" aria-label="Turn the plan view">
+      <span className={styles.turnLabel}>Turn view</span>
+      <button type="button" className={styles.turnButton} onClick={() => turnBy(-15)} aria-label="Turn the plan 15° anticlockwise" title="15° anticlockwise">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.5 7.5A6 6 0 1 1 4 11.5M5.5 3.5v4h4" />
+        </svg>
+      </button>
+      <button type="button" className={styles.turnButton} onClick={() => turnBy(15)} aria-label="Turn the plan 15° clockwise" title="15° clockwise">
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M14.5 7.5A6 6 0 1 0 16 11.5M14.5 3.5v4h-4" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className={styles.turnText}
+        onClick={() => onRotationChange(levelRotationFor(points, levelSegment, retainedSide))}
+        title="Turn the plan so this wall lies level, its retained side at the top"
+      >
+        Wall {segmentLabel(levelSegment)} level
+      </button>
+      <span className={styles.turnAngle}>{rotationDeg}°</span>
+      {rotationDeg !== 0 && (
+        <button type="button" className={styles.turnText} onClick={() => onRotationChange(0)}>
+          Reset
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className={styles.planRoot}>
-      <DiagramExplorer label="Wall plan" editable={!readOnly}>
+      <DiagramExplorer label="Wall plan" editable={!readOnly} toolbar={turnControls}>
         {drawPlan}
       </DiagramExplorer>
+      {turnControls}
 
       <div className={styles.legend}>
         <span>

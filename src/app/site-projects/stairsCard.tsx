@@ -318,7 +318,9 @@ export const StairsPlanOverlay: React.FC<{
   onSelect: (id: string) => void
   strokeW: number
   fontSize: number
-}> = ({ placements, selectedId, onSelect, strokeW, fontSize }) => (
+  /** how far the plan's turned — the labels turn back to stay upright */
+  rotationDeg?: number
+}> = ({ placements, selectedId, onSelect, strokeW, fontSize, rotationDeg = 0 }) => (
   <g>
     {placements.map((p) => {
       const picked = p.stair.id === selectedId
@@ -349,7 +351,17 @@ export const StairsPlanOverlay: React.FC<{
             strokeLinecap="round"
           />
           <circle cx={p.fixedPoint.xM} cy={p.fixedPoint.yM} r={strokeW * 1.4} fill="#fff" stroke={STAIR_COLOR} strokeWidth={strokeW * 0.5} />
-          <text x={cx} y={cy} fontSize={fontSize * 0.75} textAnchor="middle" dominantBaseline="middle" fill={STAIR_COLOR} fontWeight={600} pointerEvents="none">
+          <text
+            x={cx}
+            y={cy}
+            fontSize={fontSize * 0.75}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={STAIR_COLOR}
+            fontWeight={600}
+            pointerEvents="none"
+            transform={rotationDeg ? `rotate(${-rotationDeg} ${cx} ${cy})` : undefined}
+          >
             {p.stair.label || "Stairs"} ↓
           </text>
         </g>
