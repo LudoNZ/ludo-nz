@@ -282,10 +282,10 @@ export const WallsCard: React.FC<{
       <div className={styles.kindSwitch} role="group" aria-label="What to import">
         <span>Import</span>
         <button type="button" className={kind === "wall" ? styles.kindOn : styles.kind} aria-pressed={kind === "wall"} onClick={() => setKind("wall")}>
-          A wall
+          Wall
         </button>
         <button type="button" className={kind === "stair" ? styles.kindOn : styles.kind} aria-pressed={kind === "stair"} onClick={() => setKind("stair")}>
-          A stair
+          Stair
         </button>
       </div>
       {kind === "stair" ? (

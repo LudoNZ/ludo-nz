@@ -4,7 +4,7 @@
  * (publicStairProjects) anyone with the link can open and edit, no login
  * needed — only an admin can delete a public one. */
 
-import { collection, deleteDoc, doc, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
+import { collection, deleteDoc, doc, DocumentReference, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import type { ProjectLocation } from "../retainingWall/wallProjectStore"
 import { StairInput } from "./stairs"
@@ -84,6 +84,18 @@ export const saveStairProjectSoon = async (location: ProjectLocation, id: string
 }
 
 export const stairProjectHref = (id: string) => `/stairs/project?id=${encodeURIComponent(id)}`
+
+/** Admin: a private copy, in your own account, of any stair (someone
+ * else's private one included — the rules let an admin read it). Resolves
+ * to the copy's id. */
+export const copyStairToMine = async (from: DocumentReference, uid: string, name: string) => {
+  const snap = await getDoc(from)
+  if (!snap.exists()) throw new Error("That stair's gone")
+  const location: ProjectLocation = { kind: "private", uid }
+  const id = newStairProjectId(location)
+  await saveStairProject(location, id, `${name} (copy)`.slice(0, 100), stairInputFromData(snap.data().stair))
+  return id
+}
 
 /** No-op for a public project — the rules refuse it anyway. */
 export const deleteStairProject = async (location: ProjectLocation, id: string) => {

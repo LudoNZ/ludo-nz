@@ -29,6 +29,34 @@
   font-size: 0.72rem;
 }
 
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.copied {
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
 .delete {
   padding: 0.25rem 0.7rem;
   border: 1px solid #c0392b;

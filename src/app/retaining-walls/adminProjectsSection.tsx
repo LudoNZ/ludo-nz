@@ -24,6 +24,7 @@ function AdminProjectsSection<S>({
   subscribe,
   hrefFor,
   describe,
+  onCopy,
 }: {
   myUid: string | null
   title?: string
@@ -35,11 +36,17 @@ function AdminProjectsSection<S>({
   /** a project's own page */
   hrefFor: (id: string) => string
   describe: (summary: S) => string
+  /** a "Copy to mine" on every project that isn't already yours: makes a
+   * private copy in your account and resolves to its id */
+  onCopy?: (row: AdminProjectRow<S>) => Promise<string>
 }) {
   const [rows, setRows] = useState<AdminProjectRow<S>[] | null>(null)
   const [error, setError] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [copying, setCopying] = useState<string | null>(null)
+  const [copied, setCopied] = useState<{ key: string; id: string } | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
 
   useEffect(() => subscribe(setRows, () => setError(true)), [subscribe])
 
@@ -71,6 +78,20 @@ function AdminProjectsSection<S>({
     }
   }
 
+  const copy = async (row: AdminProjectRow<S>) => {
+    if (!onCopy) return
+    setCopying(row.key)
+    setCopyError(null)
+    try {
+      setCopied({ key: row.key, id: await onCopy(row) })
+    } catch (err) {
+      console.error(`Admin copy of ${what} failed`, err)
+      setCopyError(`Couldn't copy "${row.name}".`)
+    } finally {
+      setCopying(null)
+    }
+  }
+
   return (
     <section className={pageStyles.section}>
       <h2 className={pageStyles.sectionTitle}>{title}</h2>
@@ -80,6 +101,7 @@ function AdminProjectsSection<S>({
       </p>
       {error && <p className={pageStyles.error}>Couldn&apos;t load the full list.</p>}
       {deleteError && <p className={pageStyles.error}>{deleteError}</p>}
+      {copyError && <p className={pageStyles.error}>{copyError}</p>}
       {!rows ? (
         !error && <p className={pageStyles.hint}>Loading…</p>
       ) : sorted.length === 0 ? (
@@ -109,9 +131,21 @@ function AdminProjectsSection<S>({
                     <td>{r.summary ? describe(r.summary) : "—"}</td>
                     <td>{when(r.updatedAt)}</td>
                     <td>
-                      <button type="button" className={styles.delete} disabled={deleting !== null} onClick={() => remove(r)}>
-                        {deleting === r.key ? "Deleting…" : "Delete"}
-                      </button>
+                      <div className={styles.rowActions}>
+                        {onCopy && myUid && r.ownerUid !== myUid && (
+                          <button type="button" className={styles.copy} disabled={copying !== null} onClick={() => copy(r)} title={`Make a private copy of this ${what} in your account`}>
+                            {copying === r.key ? "Copying…" : "Copy to mine"}
+                          </button>
+                        )}
+                        {copied?.key === r.key && (
+                          <Link href={hrefFor(copied.id)} className={styles.copied}>
+                            Open your copy
+                          </Link>
+                        )}
+                        <button type="button" className={styles.delete} disabled={deleting !== null} onClick={() => remove(r)}>
+                          {deleting === r.key ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

@@ -10,6 +10,7 @@ import { DEFAULT_INPUT, StairInput } from "@/components/stairs/stairs"
 import { stairInputFromData, summariseStair } from "@/components/stairs/stairData"
 import StairProjectCard from "@/components/stairs/stairProjectCard"
 import {
+  copyStairToMine,
   newStairProjectId,
   ProjectLocation,
   saveStairProjectSoon,
@@ -152,6 +153,7 @@ const StairProjectsPage = () => {
           column="Stair"
           subscribe={subscribeToAllStairProjects}
           hrefFor={stairProjectHref}
+          onCopy={(row) => copyStairToMine(row.ref, uid as string, row.name)}
           describe={(s: StairSummary) => `${(s.totalRiseMm / 1000).toFixed(2)} m rise · ${s.risers} risers · ${s.widthMm} mm wide`}
         />
       )}
