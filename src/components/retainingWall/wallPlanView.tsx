@@ -4,7 +4,7 @@ import DiagramExplorer, { ExploreState } from "@/components/diagramExplorer/diag
 import { ReactNode, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
-import { WallProfile } from "./postProfile"
+import { ProfilePost, WallProfile } from "./postProfile"
 import { MAX_ANGLE_DEG, MIN_ANGLE_DEG, Obstruction, OBSTRUCTION_TYPES } from "./obstructions"
 import {
   appendSegment,
@@ -353,6 +353,23 @@ const WallPlanView: React.FC<{
       const i = seg?.index ?? 0
       return { a: points[i], b: points[i + 1] ?? points[i] }
     }
+    /** a post's tag ("7 · □150") — level on screen, so how far it reaches
+     * out from its middle along the plan direction `n` depends on how the
+     * plan's turned: half its width across a wall that runs up the screen,
+     * half its height across one that runs along it */
+    const tagText = (post: { index: number; sizeLabel: string }) => `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`
+    const tagReach = (text: string, n: PlanPoint) => {
+      const ns = rotatePoint(n, shownDeg)
+      const tagFont = fontSize * 0.7
+      // the site font's monospace: about 0.6 of the size per character
+      return (Math.abs(ns.xM) * text.length * 0.6 * tagFont) / 2 + (Math.abs(ns.yM) * tagFont) / 2
+    }
+    /** how far out from a post's centre its tag sits, and its running
+     * measurement past that */
+    const tagOffset = (post: ProfilePost, n: PlanPoint) =>
+      Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.25 + tagReach(tagText(post), n)
+    const runningOffset = (post: ProfilePost, n: PlanPoint) =>
+      tagOffset(post, n) + tagReach(tagText(post), n) + fontSize * 0.75
     /** the run a bay's on — for a bay starting at a corner post, the run
      * it starts, not the one the corner post ends */
     const runOfBay = (left: number, right: number) => {
@@ -556,7 +573,7 @@ const WallPlanView: React.FC<{
               if (deg <= -90) deg += 180
               return posts.slice(seg.startPostIndex, seg.endPostIndex + 1).map((post) => {
                 const at = pointAtDistance(points, post.xM)
-                const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 1.9
+                const off = runningOffset(post, n)
                 const spot = { xM: at.xM + n.xM * off, yM: at.yM + n.yM * off }
                 const tick = fontSize * 0.45
                 return (
@@ -616,6 +633,23 @@ const WallPlanView: React.FC<{
               )
             })()}
 
+          {/* each picked pile's centre, where it's measured from — over the line */}
+          {measuring &&
+            picks.map((i) => {
+              const post = posts[i]
+              const at = pointAtDistance(points, post.xM)
+              return (
+                <circle
+                  key={`measure-point-${i}`}
+                  cx={at.xM}
+                  cy={at.yM}
+                  r={Math.min(handleR * 0.45, postSize(post.widthM) * 0.3)}
+                  className={styles.measurePoint}
+                  strokeWidth={strokeW * 0.3}
+                />
+              )
+            })}
+
           {/* close in: each post's number and size on the low side, and
               each bay's post centres along the retained side */}
           {tagShow > 0 &&
@@ -623,7 +657,7 @@ const WallPlanView: React.FC<{
               const at = pointAtDistance(points, post.xM)
               const { a, b } = runOf(post.index)
               const n = lowNormal(a, b)
-              const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.7
+              const off = tagOffset(post, n)
               return (
                 <text
                   key={`tag-${post.index}`}
@@ -636,7 +670,7 @@ const WallPlanView: React.FC<{
                   opacity={tagShow}
                   transform={upright({ xM: at.xM + n.xM * off, yM: at.yM + n.yM * off })}
                 >
-                  {post.index + 1} · {shortPostSize(post.sizeLabel)}
+                  {tagText(post)}
                 </text>
               )
             })}
