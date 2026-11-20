@@ -255,9 +255,22 @@
   pointer-events: none;
 }
 
+// each wall's running dimension (as the stair side view's): green line,
+// ticks and values
 .runningDim {
-  fill: #8b5a2b;
+  fill: var(--color-primary);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.runningLine {
+  pointer-events: none;
+
+  line {
+    stroke: var(--color-primary);
+    stroke-opacity: 0.7;
+  }
 }
 
 // Measure

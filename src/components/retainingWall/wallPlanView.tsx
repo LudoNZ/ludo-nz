@@ -365,18 +365,28 @@ const WallPlanView: React.FC<{
       const i = seg?.index ?? 0
       return { a: points[i], b: points[i + 1] ?? points[i] }
     }
-    /** a post's label, close in: its number and size ("7 · □150"), and
-     * under it how far it is from the start of its wall — at a corner,
-     * where it ends one wall and starts the next, both ("2000 · E 0") */
-    const postLabel = (post: ProfilePost) => {
-      const runs = (profile?.segments ?? []).filter((g) => post.index >= g.startPostIndex && post.index <= g.endPostIndex)
-      const running = runs
-        .map((g) => (post.index === g.startPostIndex ? `${segmentLabel(g.index)} 0` : `${Math.round((post.xM - g.startXM) * 1000)}`))
-        .join(" · ")
-      return { tag: `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`, running }
-    }
+    /** a post's label, close in: its number and size ("7 · □150") — how
+     * far along its wall it is goes on the wall's running dimension */
+    const postLabel = (post: ProfilePost) => `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`
     const labelFont = Math.max(fontSize * 0.7, toPx(16) * textZoomedIn)
     const labelLine = labelFont * 1.2
+    /** each bay's post-centre spacing, along the retained side */
+    const bayFont = Math.max(fontSize * 0.65, labelFont * 0.85)
+    /** how far out from the wall line, on the retained side, the bay
+     * spacings sit and then the running dimension line beyond them */
+    const backOfBoards = (run: { startPostIndex: number; endPostIndex: number }) =>
+      Math.max(...posts.slice(run.startPostIndex, run.endPostIndex + 1).map((p) => p.widthM), 0) / 2 + BOARD_THICKNESS_M
+    const bayDimOff = (run: { startPostIndex: number; endPostIndex: number }) => backOfBoards(run) + bayFont * 1.1
+    // (and clear of the backfill band, so it doesn't read as its edge)
+    const runDimOff = (run: { startPostIndex: number; endPostIndex: number }) =>
+      Math.max(bayDimOff(run) + bayFont * 0.9 + labelFont * 0.5, backfillFrom + px * 0.05 + labelFont * 0.7)
+    /** text along a run as it's shown on screen, never upside down */
+    const alongDeg = (ra: PlanPoint, rb: PlanPoint) => {
+      let deg = normalizeDeg((Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI + shownDeg)
+      if (deg > 90) deg -= 180
+      if (deg <= -90) deg += 180
+      return deg - shownDeg
+    }
     /** how far the two-line label reaches out from its middle along the
      * plan direction `n` — it's level on screen, so that's half its width
      * across a wall running up the screen, half its height across one
@@ -634,38 +644,79 @@ const WallPlanView: React.FC<{
               const at = pointAtDistance(points, post.xM)
               const { a, b } = runOf(post.index)
               const n = lowNormal(a, b)
-              const { tag, running } = postLabel(post)
-              const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.25 + labelReach([tag, running], n)
+              const tag = postLabel(post)
+              const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.25 + labelReach([tag], n)
               const mid = { xM: at.xM + n.xM * off, yM: at.yM + n.yM * off }
-              // the tag half a line up the screen, the running measurement
-              // half a line down
-              const line = (k: number) => ({ xM: mid.xM + up.xM * labelLine * k, yM: mid.yM + up.yM * labelLine * k })
-              const top = line(0.5)
-              const bottom = line(-0.5)
               return (
                 <g key={`tag-${post.index}`} opacity={tagShow} className={styles.postLabel}>
                   <text
-                    x={top.xM}
-                    y={top.yM}
+                    x={mid.xM}
+                    y={mid.yM}
                     fontSize={labelFont}
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className={post.index === selectedPostIndex ? styles.postTagSelected : styles.postTag}
-                    transform={upright(top)}
+                    transform={upright(mid)}
                   >
                     {tag}
                   </text>
-                  <text
-                    x={bottom.xM}
-                    y={bottom.yM}
-                    fontSize={labelFont}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    className={styles.runningDim}
-                    transform={upright(bottom)}
-                  >
-                    {running}
-                  </text>
+                </g>
+              )
+            })}
+          {/* each wall's running dimension, as on the stair side view: a
+              line out past the bay spacings, on the wall's angle, ticked at
+              every post with how far it is from the wall's start, a faint
+              line back from each tick to the back of the boards */}
+          {tagShow > 0 &&
+            profile?.segments.map((run) => {
+              const ra = points[run.index]
+              const rb = points[run.index + 1] ?? ra
+              const n = sideNormal(ra, rb, retainedSide)
+              const off = runDimOff(run)
+              const from = backOfBoards(run)
+              const tick = labelFont * 0.35
+              const deg = alongDeg(ra, rb)
+              const runPosts = posts.slice(run.startPostIndex, run.endPostIndex + 1)
+              const out = (p: PlanPoint, d: number) => ({ xM: p.xM + n.xM * d, yM: p.yM + n.yM * d })
+              const start = out(pointAtDistance(points, run.startXM), off)
+              const end = out(pointAtDistance(points, run.endXM), off)
+              return (
+                <g key={`run-dim-${run.index}`} opacity={tagShow} className={styles.runningLine}>
+                  <line x1={start.xM} y1={start.yM} x2={end.xM} y2={end.yM} strokeWidth={strokeW * 0.6} />
+                  {runPosts.map((post) => {
+                    // a corner post sits on the run it ends too: placed
+                    // along this one, at its own distance
+                    const at = pointAtDistance(points, Math.min(run.endXM, Math.max(run.startXM, post.xM)))
+                    const t0 = out(at, off - tick)
+                    const t1 = out(at, off + tick)
+                    const e0 = out(at, from)
+                    const label = out(at, off + labelFont * 0.8)
+                    return (
+                      <g key={post.index}>
+                        <line x1={t0.xM} y1={t0.yM} x2={t1.xM} y2={t1.yM} strokeWidth={strokeW * 0.6} />
+                        <line
+                          x1={e0.xM}
+                          y1={e0.yM}
+                          x2={t0.xM}
+                          y2={t0.yM}
+                          strokeWidth={strokeW * 0.4}
+                          strokeDasharray={`${labelFont * 0.25} ${labelFont * 0.25}`}
+                          opacity={0.6}
+                        />
+                        <text
+                          x={label.xM}
+                          y={label.yM}
+                          fontSize={labelFont * 0.9}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className={styles.runningDim}
+                          transform={`rotate(${deg} ${label.xM} ${label.yM})`}
+                        >
+                          {Math.round((post.xM - run.startXM) * 1000)}
+                        </text>
+                      </g>
+                    )
+                  })}
                 </g>
               )
             })}
@@ -678,23 +729,20 @@ const WallPlanView: React.FC<{
               const b = pointAtDistance(points, pb.xM)
               const { a: ra, b: rb } = runOfBay(bay.leftIndex, bay.rightIndex)
               const n = sideNormal(ra, rb, retainedSide)
-              const off = Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + fontSize * 0.75
+              const run = profile.segments.find((g) => bay.leftIndex >= g.startPostIndex && bay.rightIndex <= g.endPostIndex)
+              const off = run ? bayDimOff(run) : Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + bayFont * 1.1
               const mid = { xM: (a.xM + b.xM) / 2 + n.xM * off, yM: (a.yM + b.yM) / 2 + n.yM * off }
-              // along the run as it's shown on screen, never upside down
-              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI + shownDeg
-              deg = normalizeDeg(deg)
-              if (deg > 90) deg -= 180
-              if (deg <= -90) deg += 180
+              const deg = alongDeg(ra, rb)
               return (
                 <text
                   key={`bay-${bay.leftIndex}`}
                   x={mid.xM}
                   y={mid.yM}
-                  fontSize={fontSize * 0.65}
+                  fontSize={bayFont}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   className={styles.bayDim}
-                  transform={`rotate(${deg - shownDeg} ${mid.xM} ${mid.yM})`}
+                  transform={`rotate(${deg} ${mid.xM} ${mid.yM})`}
                   opacity={tagShow}
                 >
                   {Math.round(Math.abs(pb.xM - pa.xM) * 1000)}
