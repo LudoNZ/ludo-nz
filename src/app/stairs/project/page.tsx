@@ -1,5 +1,6 @@
 "use client"
 
+import { otherOwner, otherOwnerNote, projectCandidates } from "@/components/projects/projectOwner"
 import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -26,7 +27,10 @@ const LOAD_TEXT: Record<Exclude<LoadState, "ready">, string> = {
 const StairProjectEditor = () => {
   const auth = useAuth()
   const router = useRouter()
-  const projectId = useSearchParams().get("id") ?? ""
+  const search = useSearchParams()
+  const projectId = search.get("id") ?? ""
+  // an admin opening someone else's private stair (see projectOwner.ts)
+  const owner = search.get("owner")
   const [location, setLocation] = useState<ProjectLocation | null>(null)
   const [name, setName] = useState("")
   const [input, setInput] = useState<StairInput | null>(null)
@@ -49,7 +53,7 @@ const StairProjectEditor = () => {
     let cancelled = false
     const uid = auth.currentUser?.uid
     ;(async () => {
-      const candidates: ProjectLocation[] = [{ kind: "public" }, ...(uid ? [{ kind: "private" as const, uid }] : [])]
+      const candidates: ProjectLocation[] = projectCandidates(uid, owner)
       let unreachable = false
       for (const loc of candidates) {
         try {
@@ -73,7 +77,7 @@ const StairProjectEditor = () => {
     return () => {
       cancelled = true
     }
-  }, [auth, auth?.authLoading, auth?.currentUser, projectId])
+  }, [auth, auth?.authLoading, auth?.currentUser, projectId, owner])
 
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -156,6 +160,7 @@ const StairProjectEditor = () => {
             <>
               {statusText}
               {location.kind === "public" && " · anyone with the link can edit"}
+              {otherOwner(location, auth?.currentUser?.uid) && otherOwnerNote(location.kind === "private" ? location.uid : "")}
             </>
           }
           actions={

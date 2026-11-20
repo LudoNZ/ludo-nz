@@ -12,9 +12,12 @@ import {
   ProjectLocation,
   saveSiteProjectSoon,
   siteProjectHref,
+  SiteSummary,
   StoredSiteProject,
+  subscribeToAllSiteProjects,
   subscribeToSiteProjects,
 } from "@/components/site/siteProjectStore"
+import AdminProjectsSection from "../retaining-walls/adminProjectsSection"
 import styles from "../weatherboards/weatherboardsPage.module.scss"
 
 /** Site projects: retaining walls and the stairs that come off them (more
@@ -134,6 +137,18 @@ const SiteProjectsPage = () => {
           <div className={styles.grid}>{publicProjects.map(card)}</div>
         )}
       </section>
+
+      {!!auth?.customClaims?.admin && (
+        <AdminProjectsSection
+          myUid={uid}
+          title="All site projects in the database (admin)"
+          what="site project"
+          column="Site"
+          subscribe={subscribeToAllSiteProjects}
+          hrefFor={siteProjectHref}
+          describe={(s: SiteSummary) => `${plural(s.wallCount ?? 0, "wall")} · ${plural(s.stairs ?? 0, "stair")} · ${s.wall?.wallLengthM ?? 0} m of wall`}
+        />
+      )}
     </div>
   )
 }

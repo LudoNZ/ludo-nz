@@ -15,8 +15,11 @@ import {
   saveStairProjectSoon,
   stairProjectHref,
   StoredStairProject,
+  subscribeToAllStairProjects,
   subscribeToStairProjects,
 } from "@/components/stairs/stairProjectStore"
+import type { StairSummary } from "@/components/stairs/stairData"
+import AdminProjectsSection from "../retaining-walls/adminProjectsSection"
 import styles from "../weatherboards/weatherboardsPage.module.scss"
 
 /** where the scratch stair is kept, in this browser */
@@ -140,6 +143,18 @@ const StairProjectsPage = () => {
           <div className={styles.grid}>{publicProjects.map(card)}</div>
         )}
       </section>
+
+      {!!auth?.customClaims?.admin && (
+        <AdminProjectsSection
+          myUid={uid}
+          title="All stairs in the database (admin)"
+          what="stair"
+          column="Stair"
+          subscribe={subscribeToAllStairProjects}
+          hrefFor={stairProjectHref}
+          describe={(s: StairSummary) => `${(s.totalRiseMm / 1000).toFixed(2)} m rise · ${s.risers} risers · ${s.widthMm} mm wide`}
+        />
+      )}
     </div>
   )
 }

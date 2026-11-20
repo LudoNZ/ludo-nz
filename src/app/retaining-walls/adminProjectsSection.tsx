@@ -2,24 +2,46 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { adminDeleteProject, AdminProjectRow, projectHref, subscribeToAllProjects } from "@/components/retainingWall/wallProjectStore"
+import { adminDeleteProject, AdminProjectRow } from "@/components/projects/adminProjects"
+import { withOwner } from "@/components/projects/projectOwner"
 import pageStyles from "../weatherboards/weatherboardsPage.module.scss"
 import styles from "./adminProjectsSection.module.scss"
 
 const when = (d: Date | null) =>
   d ? d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"
 
-/** Admin-only: every retaining wall project in the database — public
- * ones and every account's private ones — with a delete on each, for
+/** Admin-only: every project of one kind in the database — public ones
+ * and every account's private ones — each opening to view and edit
+ * (someone else's private one opens with its owner on the link, which
+ * only an admin's account can load or save), with a delete on each, for
  * clearing out duplicates. Sorted by name (then newest first) so copies
  * of the same job sit together; a name used more than once is flagged. */
-const AdminProjectsSection: React.FC<{ myUid: string | null }> = ({ myUid }) => {
-  const [rows, setRows] = useState<AdminProjectRow[] | null>(null)
+function AdminProjectsSection<S>({
+  myUid,
+  title = "All projects in the database (admin)",
+  what = "retaining wall project",
+  column = "Wall",
+  subscribe,
+  hrefFor,
+  describe,
+}: {
+  myUid: string | null
+  title?: string
+  /** e.g. "stair" — in the hint and the delete confirmation */
+  what?: string
+  /** the summary column's heading */
+  column?: string
+  subscribe: (onData: (rows: AdminProjectRow<S>[]) => void, onError: (err: unknown) => void) => () => void
+  /** a project's own page */
+  hrefFor: (id: string) => string
+  describe: (summary: S) => string
+}) {
+  const [rows, setRows] = useState<AdminProjectRow<S>[] | null>(null)
   const [error, setError] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  useEffect(() => subscribeToAllProjects(setRows, () => setError(true)), [])
+  useEffect(() => subscribe(setRows, () => setError(true)), [subscribe])
 
   const sorted = useMemo(
     () =>
@@ -34,15 +56,15 @@ const AdminProjectsSection: React.FC<{ myUid: string | null }> = ({ myUid }) => 
     return counts
   }, [sorted])
 
-  const remove = async (row: AdminProjectRow) => {
-    const where = row.ownerUid ? (row.ownerUid === myUid ? "your private project" : "someone's private project") : "public project"
+  const remove = async (row: AdminProjectRow<S>) => {
+    const where = row.ownerUid ? (row.ownerUid === myUid ? `your private ${what}` : `someone's private ${what}`) : `public ${what}`
     if (!window.confirm(`Delete "${row.name}" (${where}, last saved ${when(row.updatedAt)})? This can't be undone.`)) return
     setDeleting(row.key)
     setDeleteError(null)
     try {
       await adminDeleteProject(row.ref)
     } catch (err) {
-      console.error("Admin delete of retaining wall project failed", err)
+      console.error(`Admin delete of ${what} failed`, err)
       setDeleteError(`Couldn't delete "${row.name}".`)
     } finally {
       setDeleting(null)
@@ -51,17 +73,17 @@ const AdminProjectsSection: React.FC<{ myUid: string | null }> = ({ myUid }) => 
 
   return (
     <section className={pageStyles.section}>
-      <h2 className={pageStyles.sectionTitle}>All projects in the database (admin)</h2>
+      <h2 className={pageStyles.sectionTitle}>{title}</h2>
       <p className={pageStyles.hint}>
-        Every retaining wall project — public, and every account&apos;s private ones. Only admins see this. Deleting is
-        permanent.
+        Every {what} — public, and every account&apos;s private ones. Only admins see this. Open any of them to view and
+        edit it; changes to someone&apos;s private {what} save to their account. Deleting is permanent.
       </p>
       {error && <p className={pageStyles.error}>Couldn&apos;t load the full list.</p>}
       {deleteError && <p className={pageStyles.error}>{deleteError}</p>}
       {!rows ? (
         !error && <p className={pageStyles.hint}>Loading…</p>
       ) : sorted.length === 0 ? (
-        <p className={pageStyles.hint}>No projects.</p>
+        <p className={pageStyles.hint}>None.</p>
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -69,7 +91,7 @@ const AdminProjectsSection: React.FC<{ myUid: string | null }> = ({ myUid }) => 
               <tr>
                 <th>Name</th>
                 <th>Where</th>
-                <th>Wall</th>
+                <th>{column}</th>
                 <th>Last saved</th>
                 <th />
               </tr>
@@ -77,20 +99,14 @@ const AdminProjectsSection: React.FC<{ myUid: string | null }> = ({ myUid }) => 
             <tbody>
               {sorted.map((r) => {
                 const duplicate = (nameCounts.get(r.name.trim().toLowerCase()) ?? 0) > 1
-                // a private project only opens for its owner
-                const canOpen = !r.ownerUid || r.ownerUid === myUid
                 return (
                   <tr key={r.key}>
                     <td>
-                      {canOpen ? <Link href={projectHref(r.id)}>{r.name}</Link> : r.name}
+                      <Link href={withOwner(hrefFor(r.id), r.ownerUid, myUid)}>{r.name}</Link>
                       {duplicate && <span className={styles.duplicate}>same name</span>}
                     </td>
                     <td>{!r.ownerUid ? "Public" : r.ownerUid === myUid ? "Private — yours" : `Private — ${r.ownerUid.slice(0, 6)}…`}</td>
-                    <td>
-                      {r.summary
-                        ? `${r.summary.wallLengthM} m · ${r.summary.walls} wall${r.summary.walls === 1 ? "" : "s"} · ${r.summary.posts} posts`
-                        : "—"}
-                    </td>
+                    <td>{r.summary ? describe(r.summary) : "—"}</td>
                     <td>{when(r.updatedAt)}</td>
                     <td>
                       <button type="button" className={styles.delete} disabled={deleting !== null} onClick={() => remove(r)}>

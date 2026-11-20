@@ -313,6 +313,15 @@ service cloud.firestore {
         && request.resource.data.wall is map
         && request.resource.data.summary is map
         && request.resource.data.updatedAt is timestamp;
+      // an admin can change anyone's (see projectOwner.ts)
+      allow update: if request.auth != null && request.auth.token.admin == true
+        && request.resource.data.keys().hasOnly(['name', 'wall', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.wall is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
     }
 
     match /publicRetainingWallProjects/{projectId} {
@@ -334,6 +343,15 @@ service cloud.firestore {
     match /users/{userId}/siteProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'site', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.site is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+      // an admin can change anyone's (see projectOwner.ts)
+      allow update: if request.auth != null && request.auth.token.admin == true
         && request.resource.data.keys().hasOnly(['name', 'site', 'summary', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -368,6 +386,15 @@ service cloud.firestore {
         && request.resource.data.stair is map
         && request.resource.data.summary is map
         && request.resource.data.updatedAt is timestamp;
+      // an admin can change anyone's (see projectOwner.ts)
+      allow update: if request.auth != null && request.auth.token.admin == true
+        && request.resource.data.keys().hasOnly(['name', 'stair', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.stair is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
     }
 
     match /publicStairProjects/{projectId} {
@@ -383,6 +410,16 @@ service cloud.firestore {
     }
 
     match /{path=**}/retainingWallProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    // an admin can list, open and delete every account's site projects and
+    // stairs too, as with retaining walls
+    match /{path=**}/siteProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    match /{path=**}/stairProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }
 

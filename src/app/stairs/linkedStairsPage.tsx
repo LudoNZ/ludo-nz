@@ -1,5 +1,6 @@
 "use client"
 
+import { projectCandidates, withOwner } from "@/components/projects/projectOwner"
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -21,7 +22,7 @@ type State =
  * (/stairs?site=…&stair=…): the same stair as in the project, and every
  * change saved back to it. Where it sits — and so its rise — is set in
  * the project, against the wall. */
-const LinkedStairs: React.FC<{ projectId: string; stairId: string }> = ({ projectId, stairId }) => {
+const LinkedStairs: React.FC<{ projectId: string; stairId: string; owner: string | null }> = ({ projectId, stairId, owner }) => {
   const auth = useAuth()
   const [state, setState] = useState<State>({ kind: "loading" })
   const [status, setStatus] = useState<"saved" | "unsaved" | "saving" | "failed">("saved")
@@ -34,7 +35,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string }> = ({ projec
     let cancelled = false
     const uid = auth.currentUser?.uid
     ;(async () => {
-      const candidates: ProjectLocation[] = [{ kind: "public" }, ...(uid ? [{ kind: "private" as const, uid }] : [])]
+      const candidates: ProjectLocation[] = projectCandidates(uid, owner)
       for (const loc of candidates) {
         try {
           const found = await loadSiteProject(loc, projectId)
@@ -59,7 +60,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string }> = ({ projec
     return () => {
       cancelled = true
     }
-  }, [auth, auth?.authLoading, auth?.currentUser, projectId, stairId])
+  }, [auth, auth?.authLoading, auth?.currentUser, projectId, stairId, owner])
 
   // saves just this stair's inputs into the project as it is now (loaded
   // fresh, so the rest of the project isn't put back as it was)
@@ -123,7 +124,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string }> = ({ projec
           <h1>Stairs Calculator — {state.stairName}</h1>
           <p className={styles.linkedBanner}>
             Part of the site project{" "}
-            <Link href={siteProjectHref(projectId)}>
+            <Link href={withOwner(siteProjectHref(projectId), owner, auth?.currentUser?.uid)}>
               <strong>{state.projectName}</strong>
             </Link>
             . Changes here save to that stair in the project. Where it sits on the wall, and so its rise, is set in the
@@ -143,7 +144,7 @@ const StairsRoute = () => {
   const params = useSearchParams()
   const site = params.get("site")
   const stair = params.get("stair")
-  if (site && stair) return <LinkedStairs key={`${site}/${stair}`} projectId={site} stairId={stair} />
+  if (site && stair) return <LinkedStairs key={`${site}/${stair}`} projectId={site} stairId={stair} owner={params.get("owner")} />
   return <StairProjectsPage />
 }
 

@@ -21,6 +21,8 @@ import {
 // same layout as the weatherboard projects page, so the two match
 import styles from "../weatherboards/weatherboardsPage.module.scss"
 import AdminProjectsSection from "./adminProjectsSection"
+import { subscribeToAllProjects } from "@/components/retainingWall/wallProjectStore"
+import type { WallSummary } from "@/components/retainingWall/wallProject"
 
 /** Landing page for the retaining wall calculator: a scratch wall that
  * lives in this browser, public projects (anyone can open, add or edit
@@ -188,7 +190,14 @@ const RetainingWallProjectsPage = () => {
         )}
       </section>
 
-      {isAdmin && <AdminProjectsSection myUid={auth?.currentUser?.uid ?? null} />}
+      {isAdmin && (
+        <AdminProjectsSection
+          myUid={auth?.currentUser?.uid ?? null}
+          subscribe={subscribeToAllProjects}
+          hrefFor={projectHref}
+          describe={(s: WallSummary) => `${s.wallLengthM} m · ${s.walls} wall${s.walls === 1 ? "" : "s"} · ${s.posts} posts`}
+        />
+      )}
 
       {designs.length > 0 && (
         <section className={styles.section}>

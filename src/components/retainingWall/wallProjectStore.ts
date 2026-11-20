@@ -8,9 +8,10 @@
  * Every loaded project carries the location it came from so saves go
  * back to the same place. */
 
-import { collection, collectionGroup, deleteDoc, doc, DocumentReference, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
+import { collection, deleteDoc, doc, getDoc, getDocFromCache, onSnapshot, orderBy, query, setDoc, Timestamp } from "firebase/firestore"
 import { firestore } from "../../../firebase/client"
 import { summariseWall, wallFromData, WallProject, WallSummary } from "./wallProject"
+import { AdminProjectRow, subscribeToAllOf } from "../projects/adminProjects"
 
 export type ProjectLocation = { kind: "private"; uid: string } | { kind: "public" }
 
@@ -133,64 +134,7 @@ export const makeProjectPublic = async (uid: string, id: string, name: string, w
   await deleteDoc(docRef({ kind: "private", uid }, id))
 }
 
-/** A project as an admin sees it: any project in the database, with a
- * handle to delete it by. */
-export interface AdminProjectRow {
-  /** unique across both places — a moved project's id can exist in each */
-  key: string
-  id: string
-  name: string
-  /** null for a public project */
-  ownerUid: string | null
-  summary: WallSummary | null
-  updatedAt: Date | null
-  ref: DocumentReference
-}
-
 /** Every retaining wall project there is — the public ones plus every
- * account's private ones. Admins only: the rules refuse the private
- * half to anyone else. */
-export const subscribeToAllProjects = (onData: (rows: AdminProjectRow[]) => void, onError?: (err: unknown) => void) => {
-  let publicRows: AdminProjectRow[] = []
-  let privateRows: AdminProjectRow[] = []
-  const row = (d: { id: string; ref: DocumentReference; data: () => Record<string, unknown> }, ownerUid: string | null): AdminProjectRow => {
-    const data = d.data()
-    return {
-      key: d.ref.path,
-      id: d.id,
-      name: typeof data.name === "string" ? data.name : "Untitled",
-      ownerUid,
-      summary: (data.summary as WallSummary | undefined) ?? null,
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : null,
-      ref: d.ref,
-    }
-  }
-  const emit = () => onData([...publicRows, ...privateRows])
-  const fail = (err: unknown) => {
-    console.error("Listing every retaining wall project failed", err)
-    onError?.(err)
-  }
-  const stopPublic = onSnapshot(
-    collection(firestore, PUBLIC),
-    (snap) => {
-      publicRows = snap.docs.map((d) => row(d, null))
-      emit()
-    },
-    fail,
-  )
-  const stopPrivate = onSnapshot(
-    collectionGroup(firestore, PRIVATE),
-    (snap) => {
-      privateRows = snap.docs.map((d) => row(d, d.ref.parent.parent?.id ?? "unknown"))
-      emit()
-    },
-    fail,
-  )
-  return () => {
-    stopPublic()
-    stopPrivate()
-  }
-}
-
-/** Admin delete of any project, public or someone's private one. */
-export const adminDeleteProject = (ref: DocumentReference) => deleteDoc(ref)
+ * account's private ones. Admins only (see projects/adminProjects.ts). */
+export const subscribeToAllProjects = (onData: (rows: AdminProjectRow<WallSummary>[]) => void, onError?: (err: unknown) => void) =>
+  subscribeToAllOf<WallSummary>(PUBLIC, PRIVATE, onData, onError)

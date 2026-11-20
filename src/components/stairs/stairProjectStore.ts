@@ -9,6 +9,7 @@ import { firestore } from "../../../firebase/client"
 import type { ProjectLocation } from "../retainingWall/wallProjectStore"
 import { StairInput } from "./stairs"
 import { stairInputFromData, StairSummary, summariseStair } from "./stairData"
+import { AdminProjectRow, subscribeToAllOf } from "../projects/adminProjects"
 
 export type { ProjectLocation }
 
@@ -89,3 +90,8 @@ export const deleteStairProject = async (location: ProjectLocation, id: string) 
   if (location.kind === "public") return
   await deleteDoc(docRef(location, id))
 }
+
+/** Every saved stair there is, public and every account's private ones.
+ * Admins only (see projects/adminProjects.ts). */
+export const subscribeToAllStairProjects = (onData: (rows: AdminProjectRow<StairSummary>[]) => void, onError?: (err: unknown) => void) =>
+  subscribeToAllOf<StairSummary>(PUBLIC, PRIVATE, onData, onError)

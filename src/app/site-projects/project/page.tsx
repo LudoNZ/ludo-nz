@@ -1,5 +1,6 @@
 "use client"
 
+import { otherOwner, otherOwnerNote, projectCandidates, withOwner } from "@/components/projects/projectOwner"
 import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -66,6 +67,8 @@ const SiteProjectEditor = () => {
   const router = useRouter()
   const params = useSearchParams()
   const projectId = params.get("id") ?? ""
+  // an admin opening someone else's private project (see projectOwner.ts)
+  const owner = params.get("owner")
   const wallParam = params.get("wall")
   const [location, setLocation] = useState<ProjectLocation | null>(null)
   const [name, setName] = useState("")
@@ -95,7 +98,7 @@ const SiteProjectEditor = () => {
     let cancelled = false
     const uid = auth.currentUser?.uid
     ;(async () => {
-      const candidates: ProjectLocation[] = [{ kind: "public" }, ...(uid ? [{ kind: "private" as const, uid }] : [])]
+      const candidates: ProjectLocation[] = projectCandidates(uid, owner)
       let unreachable = false
       for (const loc of candidates) {
         try {
@@ -119,7 +122,7 @@ const SiteProjectEditor = () => {
     return () => {
       cancelled = true
     }
-  }, [auth, auth?.authLoading, auth?.currentUser, projectId])
+  }, [auth, auth?.authLoading, auth?.currentUser, projectId, owner])
 
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -307,7 +310,7 @@ const SiteProjectEditor = () => {
             onChange={(next) => wallParam && changeStairs(wallParam, next)}
             selectedId={selectedStair}
             onSelect={setSelectedStair}
-            calculatorHref={(stairId) => stairCalculatorHref(projectId, stairId)}
+            calculatorHref={(stairId) => withOwner(stairCalculatorHref(projectId, stairId), owner, auth?.currentUser?.uid)}
           />
           {placements.size > 0 && (
             <div id="site-stair-order">
@@ -355,9 +358,10 @@ const SiteProjectEditor = () => {
     <>
       {statusText}
       {location.kind === "public" && " · anyone with the link can edit"}
+      {otherOwner(location, auth?.currentUser?.uid) && otherOwnerNote(location.kind === "private" ? location.uid : "")}
     </>
   )
-  const siteHref = siteProjectHref(projectId)
+  const siteHref = withOwner(siteProjectHref(projectId), otherOwner(location, auth?.currentUser?.uid))
   const openWall = (id: string) => {
     flush()
     router.push(`${siteHref}&wall=${encodeURIComponent(id)}`)

@@ -8,6 +8,7 @@ import { firestore } from "../../../firebase/client"
 import { summariseWall, WallSummary } from "../retainingWall/wallProject"
 import { siteFromData, SiteProject } from "./siteProject"
 import type { ProjectLocation } from "../retainingWall/wallProjectStore"
+import { AdminProjectRow, subscribeToAllOf } from "../projects/adminProjects"
 
 export type { ProjectLocation }
 
@@ -112,3 +113,8 @@ export const deleteSiteProject = async (location: ProjectLocation, id: string) =
   if (location.kind === "public") return
   await deleteDoc(docRef(location, id))
 }
+
+/** Every site project there is, public and every account's private ones.
+ * Admins only (see projects/adminProjects.ts). */
+export const subscribeToAllSiteProjects = (onData: (rows: AdminProjectRow<SiteSummary>[]) => void, onError?: (err: unknown) => void) =>
+  subscribeToAllOf<SiteSummary>(PUBLIC, PRIVATE, onData, onError)

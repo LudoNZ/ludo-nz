@@ -1,5 +1,6 @@
 "use client"
 
+import { otherOwner, otherOwnerNote, projectCandidates } from "@/components/projects/projectOwner"
 import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -65,7 +66,10 @@ const useOnline = () => {
 const ProjectEditor = () => {
   const auth = useAuth()
   const router = useRouter()
-  const projectId = useSearchParams().get("id") ?? ""
+  const search = useSearchParams()
+  const projectId = search.get("id") ?? ""
+  // an admin opening someone else's private project (see projectOwner.ts)
+  const owner = search.get("owner")
   const online = useOnline()
   const [location, setLocation] = useState<ProjectLocation | null>(null)
   // what the editor mounts with — it owns the wall from there on
@@ -101,7 +105,7 @@ const ProjectEditor = () => {
     let cancelled = false
     const uid = auth.currentUser?.uid
     ;(async () => {
-      const candidates: ProjectLocation[] = [{ kind: "public" }, ...(uid ? [{ kind: "private" as const, uid }] : [])]
+      const candidates: ProjectLocation[] = projectCandidates(uid, owner)
       // one place failing to answer (offline and never cached there)
       // mustn't stop the other being tried
       let unreachable = false
@@ -128,7 +132,7 @@ const ProjectEditor = () => {
     return () => {
       cancelled = true
     }
-  }, [auth, auth?.authLoading, auth?.currentUser, projectId])
+  }, [auth, auth?.authLoading, auth?.currentUser, projectId, owner])
 
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -345,6 +349,7 @@ const ProjectEditor = () => {
             <>
               {statusText}
               {location.kind === "public" && online && " · anyone with the link can edit"}
+              {otherOwner(location, auth?.currentUser?.uid) && otherOwnerNote(location.kind === "private" ? location.uid : "")}
             </>
           }
           actions={
