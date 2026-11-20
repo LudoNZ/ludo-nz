@@ -5,17 +5,11 @@ import { useId, useMemo } from "react"
 import { bayCourseLayout, BoardHighlight, WallProfile } from "./postProfile"
 import { segmentLabel } from "./wallPlan"
 import { OBSTRUCTION_TYPES } from "./obstructions"
-import { CalcSettings } from "./calcSettings"
+import { CalcSettings, shortPostSize as shortSize } from "./calcSettings"
 import styles from "./wallProfileDiagram.module.scss"
 
 const formatLevel = (relativeM: number, rlDatumM: number): string =>
   rlDatumM !== 0 ? `RL ${(rlDatumM + relativeM).toFixed(3)}` : `${relativeM.toFixed(2)} m`
-
-/** "150 x 150mm" → "□150", "200mm round" → "Ø200" */
-const shortSize = (label: string) => {
-  const n = label.match(/\d+/)?.[0] ?? label
-  return /round/i.test(label) ? `Ø${n}` : `□${n}`
-}
 
 /** Interactive front elevation of a raked (or, with no control points set,
  * perfectly uniform) wall: sloped ground and top-of-wall lines through

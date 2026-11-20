@@ -19,10 +19,12 @@ import {
   segmentLabel,
   segmentLengths,
   setSegmentLength,
+  sideNormal,
   setTurn,
   turnDeg,
 } from "./wallPlan"
 import { placeLabels } from "./planLabels"
+import { BOARD_THICKNESS_M, isRoundPost, shortPostSize } from "./calcSettings"
 import styles from "./wallPlanView.module.scss"
 
 /** dragged corners land on a 100mm grid… */
@@ -33,6 +35,17 @@ const ALIGN_SNAP_M = 0.15
 const MIN_SEGMENT_M = 0.1
 const NEW_SEGMENT_M = 2
 const DRAG_THRESHOLD_PX = 4
+/** a post's never drawn smaller than this share of the view, so it shows
+ * on a long wall — zoomed in, its true size takes over */
+const POST_MIN_SCREEN = 0.022
+/** when each layer of detail fades in, from first showing to fully shown,
+ * by the smallest real post's size as a share of the view (POST_MIN_SCREEN
+ * is where posts are first drawn true size) */
+const DETAIL: Record<"holes" | "boards" | "tags", [number, number]> = {
+  holes: [0.018, 0.026],
+  boards: [0.022, 0.032],
+  tags: [0.03, 0.04],
+}
 
 interface ViewBox {
   x: number
@@ -114,13 +127,13 @@ const WallPlanView: React.FC<{
 
   const view = frozenView ?? fitViewBox([...points, ...overlayShapes.flat()])
   const scale = Math.max(view.w, view.h)
-  const fontSize = scale * 0.028
-  const strokeW = scale * 0.008
-  const handleR = scale * 0.02
+  // labels are placed at the fitted text size, so they hold still while
+  // the drawing's zoomed (they only get smaller on screen-size terms)
+  const baseFontSize = scale * 0.028
   const lengths = segmentLengths(points)
   const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
   const labelTexts = lengths.map((l, i) => `${segmentLabel(i)} · ${l.toFixed(2)} m`)
-  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, fontSize, view, overlayShapes)
+  const labelSpots = placeLabels(points, labelTexts, lowSide, retainedSide, baseFontSize, view, overlayShapes)
 
   const toPlan = (clientX: number, clientY: number): PlanPoint | null => {
     const svg = svgRef.current
@@ -254,12 +267,39 @@ const WallPlanView: React.FC<{
     setFrozenView(null)
   }
 
-  const band = [...points, ...offsetPolyline(points, retainedSide, scale * 0.05).reverse()]
-  const postSize = (widthM: number) => Math.max(widthM, scale * 0.022)
-
-  return (
-    <div className={styles.planRoot}>
-      <DiagramExplorer label="Wall plan">
+  /** The drawing at a zoom (1 = fitted). Line weights, text and handles
+   * are sized in screen terms (`px`, the fitted drawing's size over the
+   * zoom), so they stay the same on screen as it's zoomed; posts, holes
+   * and boards are real things, drawn at least big enough to see and at
+   * their true size once the zoom shows it — with more detail coming in
+   * the closer it gets. */
+  const drawPlan = (zoom: number) => {
+    const px = scale / zoom
+    const fontSize = px * 0.028
+    const strokeW = px * 0.008
+    const handleR = px * 0.02
+    const band = [...points, ...offsetPolyline(points, retainedSide, px * 0.05).reverse()]
+    const postSize = (widthM: number) => Math.max(widthM, px * POST_MIN_SCREEN)
+    const posts = profile?.posts ?? []
+    // how far into each layer of detail: 0 hidden, 1 fully shown — a
+    // real post's size on screen (as a share of the drawing) sets them
+    const smallestPostM = Math.min(...posts.map((p) => p.widthM), 1)
+    const postScreen = smallestPostM / px
+    // nothing extra at the fitted view (it's the page's drawing): it comes
+    // in as soon as it's zoomed
+    const zoomedIn = Math.min(1, Math.max(0, (zoom - 1) / 0.4))
+    const ramp = (lo: number, hi: number) => zoomedIn * Math.min(1, Math.max(0, (postScreen - lo) / (hi - lo)))
+    const holeShow = ramp(...DETAIL.holes)
+    const boardShow = ramp(...DETAIL.boards)
+    const tagShow = ramp(...DETAIL.tags)
+    const lowNormal = (a: PlanPoint, b: PlanPoint) => sideNormal(a, b, lowSide)
+    /** the run a post sits on, and its two ends */
+    const runOf = (postIndex: number) => {
+      const seg = profile?.segments.find((g) => postIndex >= g.startPostIndex && postIndex <= g.endPostIndex)
+      const i = seg?.index ?? 0
+      return { a: points[i], b: points[i + 1] ?? points[i] }
+    }
+    return (
         <svg
           ref={svgRef}
           viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -280,8 +320,9 @@ const WallPlanView: React.FC<{
                   y1={a.yM}
                   x2={b.xM}
                   y2={b.yM}
-                  className={selected ? styles.wallLineSelected : styles.wallLine}
-                  strokeWidth={strokeW * (selected ? 1.6 : 1)}
+                  className={selected ? styles.wallLineSelected : boardShow >= 1 ? styles.wallLineSetout : styles.wallLine}
+                  // with the boards drawn, the wall line is just the setting-out line
+                  strokeWidth={strokeW * (selected ? 1.6 : 1) * (1 - boardShow * 0.7)}
                 />
                 {/* fat invisible stroke so a run is tappable on a phone */}
                 <line
@@ -332,25 +373,142 @@ const WallPlanView: React.FC<{
             )
           })}
 
-          {/* posts, where the layout actually puts them */}
-          {profile?.posts.map((post) => {
+          {/* the facing boards, at their real thickness, on the retained
+              side of each bay's posts — once they're big enough to see */}
+          {boardShow > 0 &&
+            profile?.bays.map((bay) => {
+              const pa = posts[bay.leftIndex]
+              const pb = posts[bay.rightIndex]
+              if (!pa || !pb) return null
+              const a = pointAtDistance(points, pa.xM)
+              const b = pointAtDistance(points, pb.xM)
+              const { a: ra, b: rb } = runOf(bay.leftIndex)
+              const n = sideNormal(ra, rb, retainedSide)
+              const near = Math.max(pa.widthM, pb.widthM) / 2
+              const far = near + BOARD_THICKNESS_M
+              const corners = [
+                [a, near],
+                [b, near],
+                [b, far],
+                [a, far],
+              ] as const
+              return (
+                <polygon
+                  key={`board-${bay.leftIndex}`}
+                  points={corners.map(([p, o]) => `${p.xM + n.xM * o},${p.yM + n.yM * o}`).join(" ")}
+                  className={bay.needsEngineer ? styles.boardBlocked : styles.board}
+                  strokeWidth={strokeW * 0.25}
+                  opacity={boardShow}
+                />
+              )
+            })}
+
+          {/* each hole, dashed round its post, once a post is drawn true size */}
+          {holeShow > 0 &&
+            posts.map((post) => {
+              const at = pointAtDistance(points, post.xM)
+              return (
+                <circle
+                  key={`hole-${post.index}`}
+                  cx={at.xM}
+                  cy={at.yM}
+                  r={post.holeDiameterM / 2}
+                  className={styles.hole}
+                  strokeWidth={strokeW * 0.3}
+                  strokeDasharray={`${strokeW * 0.8} ${strokeW * 0.6}`}
+                  opacity={holeShow}
+                />
+              )
+            })}
+
+          {/* posts, where the layout actually puts them: poles round,
+              sawn posts square */}
+          {posts.map((post) => {
             const at = pointAtDistance(points, post.xM)
             const size = postSize(post.widthM)
+            const className = post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post
             return (
               <g key={`post-${post.index}`}>
-                <rect
-                  x={at.xM - size / 2}
-                  y={at.yM - size / 2}
-                  width={size}
-                  height={size}
-                  className={post.index === selectedPostIndex ? styles.postSelected : post.needsEngineer ? styles.postBlocked : styles.post}
-                  strokeWidth={strokeW * 0.4}
-                />
+                {isRoundPost(post.sizeLabel) ? (
+                  <circle cx={at.xM} cy={at.yM} r={size / 2} className={className} strokeWidth={strokeW * 0.4} />
+                ) : (
+                  <rect
+                    x={at.xM - size / 2}
+                    y={at.yM - size / 2}
+                    width={size}
+                    height={size}
+                    className={className}
+                    strokeWidth={strokeW * 0.4}
+                    // squared to its run, as it's set out
+                    transform={(() => {
+                      const { a, b } = runOf(post.index)
+                      const deg = (Math.atan2(b.yM - a.yM, b.xM - a.xM) * 180) / Math.PI
+                      return `rotate(${deg} ${at.xM} ${at.yM})`
+                    })()}
+                  />
+                )}
                 {/* a post pinned at a set distance: ringed */}
-                {post.fixed && <circle cx={at.xM} cy={at.yM} r={size * 1.1} className={styles.postFixedRing} strokeWidth={strokeW * 0.5} />}
+                {post.fixed && (
+                  <circle cx={at.xM} cy={at.yM} r={size * 1.1} className={styles.postFixedRing} strokeWidth={strokeW * 0.5} />
+                )}
               </g>
             )
           })}
+
+          {/* close in: each post's number and size on the low side, and
+              each bay's post centres along the retained side */}
+          {tagShow > 0 &&
+            posts.map((post) => {
+              const at = pointAtDistance(points, post.xM)
+              const { a, b } = runOf(post.index)
+              const n = lowNormal(a, b)
+              const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 0.7
+              return (
+                <text
+                  key={`tag-${post.index}`}
+                  x={at.xM + n.xM * off}
+                  y={at.yM + n.yM * off}
+                  fontSize={fontSize * 0.7}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className={post.index === selectedPostIndex ? styles.postTagSelected : styles.postTag}
+                  opacity={tagShow}
+                >
+                  {post.index + 1} · {shortPostSize(post.sizeLabel)}
+                </text>
+              )
+            })}
+          {tagShow > 0 &&
+            profile?.bays.map((bay) => {
+              const pa = posts[bay.leftIndex]
+              const pb = posts[bay.rightIndex]
+              if (!pa || !pb) return null
+              const a = pointAtDistance(points, pa.xM)
+              const b = pointAtDistance(points, pb.xM)
+              const { a: ra, b: rb } = runOf(bay.leftIndex)
+              const n = sideNormal(ra, rb, retainedSide)
+              const off = Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + fontSize * 0.75
+              const mid = { xM: (a.xM + b.xM) / 2 + n.xM * off, yM: (a.yM + b.yM) / 2 + n.yM * off }
+              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI
+              // never upside down
+              if (deg > 90) deg -= 180
+              if (deg <= -90) deg += 180
+              return (
+                <text
+                  key={`bay-${bay.leftIndex}`}
+                  x={mid.xM}
+                  y={mid.yM}
+                  fontSize={fontSize * 0.65}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className={styles.bayDim}
+                  transform={`rotate(${deg} ${mid.xM} ${mid.yM})`}
+                  opacity={tagShow}
+                >
+                  {Math.round(Math.abs(pb.xM - pa.xM) * 1000)}
+                </text>
+              )
+            })}
 
           {overlay?.({ strokeW, fontSize })}
 
@@ -469,7 +627,12 @@ const WallPlanView: React.FC<{
                 )
               })}
         </svg>
-      </DiagramExplorer>
+    )
+  }
+
+  return (
+    <div className={styles.planRoot}>
+      <DiagramExplorer label="Wall plan">{drawPlan}</DiagramExplorer>
 
       <div className={styles.legend}>
         <span>

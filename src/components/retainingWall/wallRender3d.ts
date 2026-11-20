@@ -10,7 +10,7 @@
  * points down the screen), z up (= level). */
 
 import { bayCourseLayout, BoardHighlight, ProfilePost, WallProfile } from "./postProfile"
-import { CalcSettings } from "./calcSettings"
+import { BOARD_THICKNESS_M, CalcSettings } from "./calcSettings"
 import { OBSTRUCTION_TYPES } from "./obstructions"
 import { PlanPoint, RetainedSide, sideNormal } from "./wallPlan"
 import { orderSolids } from "../stairs/stairRender3d"
@@ -60,7 +60,6 @@ export interface RenderScene {
 }
 
 /** ~ a 150 × 50 board */
-const BOARD_THICKNESS_M = 0.05
 const CAP_THICKNESS_M = 0.045
 const CAP_OVERHANG_M = 0.025
 /** how far the ground runs out in front, and the earth back behind */

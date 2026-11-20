@@ -35,7 +35,11 @@ const FIT: View = { s: 1, tx: 0, ty: 0 }
  * with getScreenCTM (e.g. the wall plan's draggable corners) still lines
  * up. Elements marked data-explore-skip keep their own drags. */
 const DiagramExplorer: React.FC<{
-  children: ReactNode
+  /** the drawing — or a function of the zoom (1 = fitted, and out of
+   * explore mode), for a drawing that keeps its line weights and text the
+   * same size on screen and shows things at their true size as it's
+   * zoomed in */
+  children: ReactNode | ((zoom: number) => ReactNode)
   /** what the drawing is, for the button's label and the full-screen title */
   label: string
   /** a 3D view: one-finger / mouse drag turns it, by this many pixels */
@@ -261,7 +265,7 @@ const DiagramExplorer: React.FC<{
         }
       >
         <div className={styles.content} style={exploring ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
-          {children}
+          {typeof children === "function" ? children(exploring ? view.s : 1) : children}
         </div>
         {exploring && (
           <div className={styles.zoomButtons} data-explore-skip>

@@ -106,6 +106,15 @@ export function postWidthM(sizeLabel: string): number {
 
 export const isRoundPost = (sizeLabel: string): boolean => /round|sed|dia/i.test(sizeLabel)
 
+/** "150 x 150mm" → "□150", "200mm round" → "Ø200" */
+export const shortPostSize = (label: string): string => {
+  const n = label.match(/\d+/)?.[0] ?? label
+  return /round/i.test(label) ? `Ø${n}` : `□${n}`
+}
+
+/** m, a facing board's thickness, as drawn (3D view, zoomed-in plan) */
+export const BOARD_THICKNESS_M = 0.05
+
 /** m², the post's cross-section — what it displaces in its hole */
 export function postSectionAreaM2(sizeLabel: string): number {
   const w = postWidthM(sizeLabel)
