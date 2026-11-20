@@ -36,6 +36,20 @@ export interface ExploreState {
   setTurn: (deg: number) => void
 }
 
+/** A 3D view that flies its own camera: zooming and panning full screen
+ * move the camera (see render3d/perspective.ts) instead of enlarging the
+ * picture. Points are client (screen) pixels. */
+export interface ExploreCamera {
+  /** zoom by `k` (more than 1 = closer) toward the screen point */
+  zoom: (k: number, clientX: number, clientY: number) => void
+  /** slide so the scene follows a drag of (dx, dy) pixels */
+  pan: (dxPx: number, dyPx: number) => void
+  /** back to the fitted view */
+  reset: () => void
+  /** away from the fitted view (so Fit does something) */
+  moved: boolean
+}
+
 const normDeg = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180
 
 /** Wraps a drawing (an <svg>) so it can be explored: a button in its
@@ -69,6 +83,9 @@ const DiagramExplorer: React.FC<{
   label: string
   /** a 3D view: one-finger / mouse drag turns it, by this many pixels */
   onOrbit?: (dxPx: number, dyPx: number) => void
+  /** a 3D view that zooms and pans its own camera, flying in, rather than
+   * being enlarged */
+  camera?: ExploreCamera
   /** shown along the bottom in full-screen (e.g. the 3D view's toggles) */
   toolbar?: ReactNode | ((view: ExploreState) => ReactNode)
   /** a drawing that turns (given as a function, it draws itself turned
@@ -76,7 +93,9 @@ const DiagramExplorer: React.FC<{
   turnable?: boolean
   /** fill the parent's height (a fixed-height pane) */
   fill?: boolean
-}> = ({ children, label, onOrbit, toolbar, fill = false, editable = false, turnable = false }) => {
+}> = ({ children, label, onOrbit, camera, toolbar, fill = false, editable = false, turnable = false }) => {
+  const cameraRef = useRef(camera)
+  cameraRef.current = camera
   const [exploring, setExploring] = useState(false)
   const [editing, setEditing] = useState(false)
   const locked = exploring && editable && !editing
@@ -125,6 +144,13 @@ const DiagramExplorer: React.FC<{
   /** zoom by k about a point in the viewport */
   const zoomAt = useCallback(
     (k: number, px: number, py: number) => {
+      const cam = cameraRef.current
+      const el = viewportRef.current
+      if (cam) {
+        const r = el?.getBoundingClientRect()
+        cam.zoom(k, px + (r?.left ?? 0), py + (r?.top ?? 0))
+        return
+      }
       const v = viewRef.current
       const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.s * k))
       const r = s / v.s
@@ -212,6 +238,14 @@ const DiagramExplorer: React.FC<{
       const dist = Math.hypot(b.x - a.x, b.y - a.y)
       const cx = (a.x + b.x) / 2
       const cy = (a.y + b.y) / 2
+      if (camera) {
+        // a camera takes the pinch a step at a time: the change since the
+        // last move, about where the fingers are now
+        camera.pan(cx - st.cx, cy - st.cy)
+        zoomAt(dist / st.dist, cx, cy)
+        pinch.current = { ...st, dist: dist || 1, cx, cy }
+        return
+      }
       const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, st.view.s * (dist / st.dist)))
       // a twist turns a turnable drawing, as freely as the fingers go
       const twist = turnable ? normDeg(((Math.atan2(b.y - a.y, b.x - a.x) - st.angle) * 180) / Math.PI) : 0
@@ -222,6 +256,7 @@ const DiagramExplorer: React.FC<{
     const dx = p.x - prev.x
     const dy = p.y - prev.y
     if (onOrbit && mode === "rotate" && !prev.pan) orbit(dx, dy)
+    else if (camera) camera.pan(dx, dy)
     else setView((v) => clampView({ ...v, tx: v.tx + dx, ty: v.ty + dy }))
   }
 
@@ -258,7 +293,7 @@ const DiagramExplorer: React.FC<{
       if (e.key === "Escape") setExploring(false)
       else if (e.key === "+" || e.key === "=") zoomCentre(1.4)
       else if (e.key === "-") zoomCentre(1 / 1.4)
-      else if (e.key === "0") setView(FIT)
+      else if (e.key === "0") fit()
     }
     window.addEventListener("keydown", onKey)
     return () => {
@@ -269,14 +304,18 @@ const DiagramExplorer: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exploring])
 
-  const enter = () => {
+  const fit = () => {
     setView(FIT)
+    cameraRef.current?.reset()
+  }
+  const enter = () => {
+    fit()
     setEditing(false)
     setExploring(true)
   }
   const leave = () => {
     setExploring(false)
-    setView(FIT)
+    fit()
     pointers.current.clear()
     pinch.current = null
     requestAnimationFrame(() => enterButtonRef.current?.focus())
@@ -286,7 +325,9 @@ const DiagramExplorer: React.FC<{
 
   const hint = onOrbit
     ? mode === "rotate"
-      ? "Drag to turn · pinch or scroll to zoom · two fingers or right-drag to pan"
+      ? camera
+        ? "Drag to turn · pinch or scroll to fly in · two fingers or right-drag to pan"
+        : "Drag to turn · pinch or scroll to zoom · two fingers or right-drag to pan"
       : "Drag to pan · pinch or scroll to zoom"
     : turnable
       ? "Drag to pan · pinch or scroll to zoom · twist two fingers to turn (not saved) · double-click to zoom in"
@@ -350,7 +391,7 @@ const DiagramExplorer: React.FC<{
             : undefined
         }
       >
-        <div ref={contentRef} className={styles.content} style={exploring ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
+        <div ref={contentRef} className={styles.content} style={exploring && !camera ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
           {typeof children === "function" ? children(exploreState) : children}
         </div>
         {exploring && (
@@ -365,7 +406,12 @@ const DiagramExplorer: React.FC<{
                 <path d="M4 10h12" />
               </svg>
             </button>
-            <button type="button" aria-label="Fit to screen" onClick={() => setView(FIT)} disabled={view.s === 1 && view.tx === 0 && view.ty === 0 && view.r === 0}>
+            <button
+              type="button"
+              aria-label="Fit to screen"
+              onClick={fit}
+              disabled={camera ? !camera.moved : view.s === 1 && view.tx === 0 && view.ty === 0 && view.r === 0}
+            >
               <svg viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
               </svg>

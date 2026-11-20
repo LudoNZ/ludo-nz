@@ -1,7 +1,9 @@
 "use client"
 
-import { useCallback, useDeferredValue, useMemo, useState } from "react"
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react"
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
+import { useFlyCamera } from "@/components/render3d/useFlyCamera"
+import type { CameraFrame } from "@/components/render3d/perspective"
 import { buildSiteScene } from "@/components/site/siteRender3d"
 import type { SiteWall, StairPlacement } from "@/components/site/siteProject"
 import renderStyles from "@/components/retainingWall/wallRenderView.module.scss"
@@ -15,26 +17,32 @@ const SiteRenderView: React.FC<{
 }> = ({ walls, placements }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-30)
   const [elevationDeg, setElevationDeg] = useState(30)
+  const svgRef = useRef<SVGSVGElement>(null)
+  // full screen, zooming flies the camera in (the page's view is the fit)
+  const frameRef = useRef<CameraFrame | null>(null)
+  const { camera, explore, beforeTurn } = useFlyCamera(svgRef, frameRef)
   const handleOrbit = useCallback((dx: number, dy: number) => {
+    beforeTurn()
     setAzimuthDeg((a) => {
       const next = a - dx * 0.4
       return next > 180 ? next - 360 : next < -180 ? next + 360 : next
     })
     setElevationDeg((e) => Math.min(75, Math.max(5, e + dy * 0.3)))
-  }, [])
+  }, [beforeTurn])
   // a wall being dragged on the plan catches up here when there's time
   const shownWalls = useDeferredValue(walls)
   const shownPlacements = useDeferredValue(placements)
-  const scene = useMemo(() => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg }), [shownWalls, shownPlacements, azimuthDeg, elevationDeg])
+  const scene = useMemo(() => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg, camera }), [shownWalls, shownPlacements, azimuthDeg, elevationDeg, camera])
+  frameRef.current = scene?.frame ?? null
 
   return (
     <section className={styles.card} id="site-3d">
       <h2>3D view — the whole site</h2>
       {scene ? (
         <div className={renderStyles.renderRoot}>
-          <DiagramExplorer label="Site 3D view" onOrbit={handleOrbit}>
-            <svg viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`} className={renderStyles.svg} role="img" aria-label="3D view of every wall and stair on the site">
-              <rect x={scene.viewBox.x} y={scene.viewBox.y} width={scene.viewBox.w} height={scene.viewBox.h} fill="#eef3f7" />
+          <DiagramExplorer label="Site 3D view" onOrbit={handleOrbit} camera={explore}>
+            <svg ref={svgRef} viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`} className={renderStyles.svg} role="img" aria-label="3D view of every wall and stair on the site">
+              <rect x={scene.viewBox.x - scene.viewBox.w * 10} y={scene.viewBox.y - scene.viewBox.h * 10} width={scene.viewBox.w * 21} height={scene.viewBox.h * 21} fill="#eef3f7" />
               {scene.polygons.map((p, i) => (
                 <polygon key={i} points={p.points} fill={p.fill} stroke={p.stroke} strokeWidth={scene.strokeW} strokeLinejoin="round" />
               ))}

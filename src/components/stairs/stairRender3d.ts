@@ -13,6 +13,7 @@
 
 import { POST_SIZE, Pt, StairInput } from "./stairs"
 import { StairLayout, overlapDepth, rightOf } from "./layout"
+import { CameraFrame, CameraState, FIT_CAMERA, makeCamera, surfaceAtCentre } from "../render3d/perspective"
 
 export type V3 = [number, number, number]
 export type V2 = [number, number]
@@ -74,6 +75,8 @@ export interface StairRenderOptions {
   elevationDeg: number
   /** members left out, to see how it goes together */
   hidden: ReadonlySet<StairMember>
+  /** flown in (full screen); the fitted view if left out */
+  camera?: CameraState
 }
 
 export interface StairRenderPolygon {
@@ -88,6 +91,8 @@ export interface StairRenderScene {
   viewBox: { x: number; y: number; w: number; h: number }
   /** a stroke width that reads at this scale */
   strokeW: number
+  /** the camera's directions and what it's looking at (to fly it) */
+  frame: CameraFrame
 }
 
 const COLORS = {
@@ -117,7 +122,6 @@ const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 const scale = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k]
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const norm = (a: V3): V3 => {
   const l = Math.hypot(a[0], a[1], a[2]) || 1
   return [a[0] / l, a[1] / l, a[2] / l]
@@ -426,9 +430,11 @@ export function stairSolids(input: StairInput, layout: StairLayout, hidden: Read
  * is convex and none cut into another, so for any two that overlap on
  * screen, a face plane of one of them has the other wholly on its
  * outside: whichever is on the camera's side of it goes second. `eps` is
- * how close counts as touching, in the solids' units. */
-export function orderSolids(solids: Solid[], toCam: V3, project: (p: V3) => V2, eps = EPS): number[] {
-  const depthOf = (p: V3) => dot(p, toCam)
+ * how close counts as touching, in the solids' units. With `eye` (a
+ * perspective camera, see render3d/perspective.ts) "toward the camera" is
+ * toward that point, not along `toCam`. */
+export function orderSolids(solids: Solid[], toCam: V3, project: (p: V3) => V2, eps = EPS, eye?: V3): number[] {
+  const depthOf = (p: V3) => (eye ? -Math.hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]) : dot(p, toCam))
   const info = solids
     .map((s, index) => {
       const pts = s.faces.flatMap((f) => f.pts)
@@ -449,9 +455,9 @@ export function orderSolids(solids: Solid[], toCam: V3, project: (p: V3) => V2, 
   /** -1: A goes first, 1: B goes first, 0: no face of A parts them */
   const parted = (A: (typeof info)[number], B: (typeof info)[number]) => {
     for (const f of A.s.faces) {
-      const facing = dot(f.normal, toCam)
-      if (Math.abs(facing) < 1e-6) continue
       const d = dot(f.normal, f.pts[0])
+      const facing = eye ? dot(f.normal, eye) - d : dot(f.normal, toCam)
+      if (Math.abs(facing) < 1e-6) continue
       if (B.pts.every((p) => dot(f.normal, p) - d >= -eps)) return facing > 0 ? -1 : 1
     }
     return 0
@@ -499,36 +505,34 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
   const baseAz = Math.atan2(d0.y, -d0.x) // world direction of −dir: (−d.x, +d.y)
   const az = baseAz + (options.azimuthDeg * Math.PI) / 180
   const el = (options.elevationDeg * Math.PI) / 180
-  /** from the scene toward the camera */
-  const toCam: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]
-  const right: V3 = norm([-toCam[1], toCam[0], 0])
-  const up = cross(toCam, right)
+  const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
+  const cam = makeCamera(allPts, az, el, options.camera ?? FIT_CAMERA)
   const lightAz = az + (35 * Math.PI) / 180
   const lightEl = (50 * Math.PI) / 180
   const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
-  const project = (p: V3): V2 => [dot(p, right), -dot(p, up)]
 
-  const order = orderSolids(solids, toCam, project)
-  const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
+  // flown in close, whatever's wholly behind the camera is left out
+  const inView = solids.filter((sd) => sd.faces.some((f) => f.pts.some((p) => cam.ahead(p) > 0)))
+  const order = orderSolids(inView, cam.toCam, cam.project, EPS, cam.eye)
 
   // ── draw ─────────────────────────────────────────────────────────────
   const polygons: StairRenderPolygon[] = []
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
+  const drawn: { pts: V3[]; normal: V3 }[] = []
   const emit = (pts: V3[], color: string, normal: V3, seamless = false) => {
+    const cut = cam.clip(pts)
+    if (cut.length < 3) return
+    drawn.push({ pts: cut, normal })
     const shade = 0.5 + 0.6 * Math.max(0, dot(normal, light))
     const rgb = hexToRgb(color)
     const fill = rgbToHex(scale(rgb, shade))
-    const pts2 = pts.map(project)
-    pts2.forEach(([x, y]) => {
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y)
-      maxY = Math.max(maxY, y)
+    polygons.push({
+      points: cut
+        .map(cam.project)
+        .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
+        .join(" "),
+      fill,
+      stroke: seamless ? fill : rgbToHex(scale(rgb, shade * 0.72)),
     })
-    polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "), fill, stroke: seamless ? fill : rgbToHex(scale(rgb, shade * 0.72)) })
   }
 
   // the ground: a lawn round the whole footprint, drawn first
@@ -543,15 +547,16 @@ export function buildStairScene(input: StairInput, layout: StairLayout, options:
     [gx1, gy1, 0],
     [gx0, gy1, 0],
   ]
-  emit(ground, COLORS.grass, [0, 0, 1], true)
+  // (from underground, there's no lawn to see)
+  if (cam.eye[2] > 0) emit(ground, COLORS.grass, [0, 0, 1], true)
 
-  order.forEach((k) => solids[k].faces.forEach((f) => dot(f.normal, toCam) > 1e-6 && emit(f.pts, f.color, f.normal)))
+  order.forEach((k) => inView[k].faces.forEach((f) => cam.sees(f.normal, f.pts[0]) && emit(f.pts, f.color, f.normal)))
 
-  const span = Math.max(maxX - minX, maxY - minY)
-  const pad = span * 0.03
   return {
     polygons,
-    viewBox: { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 },
-    strokeW: span * 0.0012,
+    viewBox: cam.viewBox,
+    strokeW: cam.span * 0.0012,
+    // (only flown in is there anything to turn round but the middle)
+    frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
   }
 }

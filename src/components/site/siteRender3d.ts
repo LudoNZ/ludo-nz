@@ -12,7 +12,8 @@
  * World axes, metres: x east (= site plan x), y north (= −plan y), z up
  * (= level, every wall's levels taken as on one datum). Pure — no React. */
 
-import { orderSolids, Solid, V2, V3 } from "../stairs/stairRender3d"
+import { orderSolids, Solid, V3 } from "../stairs/stairRender3d"
+import { CameraState, FIT_CAMERA, makeCamera, surfaceAtCentre } from "../render3d/perspective"
 import type { RenderScene } from "../retainingWall/wallRender3d"
 import { sideNormal } from "../retainingWall/wallPlan"
 import type { StairPlacement } from "./siteProject"
@@ -23,6 +24,8 @@ export interface SiteRenderOptions {
   azimuthDeg: number
   /** degrees above horizontal */
   elevationDeg: number
+  /** flown in (full screen); the fitted view if left out */
+  camera?: CameraState
 }
 
 const BOARD_M = 0.05
@@ -42,7 +45,6 @@ const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 const scale = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k]
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const norm = (a: V3): V3 => {
   const l = Math.hypot(a[0], a[1], a[2]) || 1
   return [a[0] / l, a[1] / l, a[2] / l]
@@ -173,66 +175,61 @@ export function buildSiteScene(walls: SiteWall[], placements: { wall: SiteWall; 
   const baseAz = Math.atan2(facing[1], facing[0])
   const az = baseAz + (options.azimuthDeg * Math.PI) / 180
   const el = (options.elevationDeg * Math.PI) / 180
-  const toCam: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]
-  const right: V3 = norm([-toCam[1], toCam[0], 0])
-  const up = cross(toCam, right)
+  const all = solids.flatMap((s) => s.faces.flatMap((f) => f.pts))
+  // (the lawn's corners would make the view mostly lawn: fit to the solids)
+  const cam = makeCamera(all, az, el, options.camera ?? FIT_CAMERA, 0.08)
   const lightAz = az + (35 * Math.PI) / 180
   const lightEl = (50 * Math.PI) / 180
   const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
-  const project = (p: V3): V2 => [dot(p, right), -dot(p, up)]
 
   // ── draw ─────────────────────────────────────────────────────────────
   const polygons: RenderScene["polygons"] = []
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
+  const drawn: { pts: V3[]; normal: V3 }[] = []
   const emit = (pts: V3[], color: string, normal: V3, seamless = false) => {
+    const cut = cam.clip(pts)
+    if (cut.length < 3) return
+    drawn.push({ pts: cut, normal })
     const shade = 0.5 + 0.6 * Math.max(0, dot(normal, light))
     const rgb = hexToRgb(color)
     const fill = rgbToHex(scale(rgb, shade))
-    const pts2 = pts.map(project)
-    pts2.forEach(([x, y]) => {
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y)
-      maxY = Math.max(maxY, y)
+    polygons.push({
+      points: cut
+        .map(cam.project)
+        .map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`)
+        .join(" "),
+      fill,
+      stroke: seamless ? fill : rgbToHex(scale(rgb, shade * 0.72)),
     })
-    polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke: seamless ? fill : rgbToHex(scale(rgb, shade * 0.72)) })
   }
 
-  // a lawn round the lot at the lowest ground, drawn first
-  const all = solids.flatMap((s) => s.faces.flatMap((f) => f.pts))
+  // a lawn round the lot at the lowest ground, drawn first (from under
+  // it, there's none to see)
   const gx0 = Math.min(...all.map((p) => p[0])) - MARGIN_M
   const gx1 = Math.max(...all.map((p) => p[0])) + MARGIN_M
   const gy0 = Math.min(...all.map((p) => p[1])) - MARGIN_M
   const gy1 = Math.max(...all.map((p) => p[1])) + MARGIN_M
-  emit(
-    [
-      [gx0, gy0, base],
-      [gx1, gy0, base],
-      [gx1, gy1, base],
-      [gx0, gy1, base],
-    ],
-    COLORS.grass,
-    [0, 0, 1],
-    true,
-  )
-  // (the lawn's corners would make the view mostly lawn: fit to the solids)
-  minX = Infinity
-  minY = Infinity
-  maxX = -Infinity
-  maxY = -Infinity
+  if (cam.eye[2] > base)
+    emit(
+      [
+        [gx0, gy0, base],
+        [gx1, gy0, base],
+        [gx1, gy1, base],
+        [gx0, gy1, base],
+      ],
+      COLORS.grass,
+      [0, 0, 1],
+      true,
+    )
 
-  const order = orderSolids(solids, toCam, project, 5e-4)
-  order.forEach((k) => solids[k].faces.forEach((f) => dot(f.normal, toCam) > 1e-6 && emit(f.pts, f.color, f.normal)))
-  if (polygons.length < 2) return null
-
-  const span = Math.max(maxX - minX, maxY - minY)
-  const pad = span * 0.08
+  // flown in close, whatever's wholly behind the camera is left out
+  const inView = solids.filter((sd) => sd.faces.some((f) => f.pts.some((p) => cam.ahead(p) > 0)))
+  const order = orderSolids(inView, cam.toCam, cam.project, 5e-4, cam.eye)
+  order.forEach((k) => inView[k].faces.forEach((f) => cam.sees(f.normal, f.pts[0]) && emit(f.pts, f.color, f.normal)))
   return {
     polygons,
-    viewBox: { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 },
-    strokeW: span * 0.0012,
+    viewBox: cam.viewBox,
+    strokeW: cam.span * 0.0012,
+    // (only flown in is there anything to turn round but the middle)
+    frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
   }
 }

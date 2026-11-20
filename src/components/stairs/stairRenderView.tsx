@@ -5,6 +5,8 @@ import { StairInput } from "./stairs"
 import { StairLayout } from "./layout"
 import { STAIR_MEMBER_LABELS, StairMember, buildStairScene, stairMembers } from "./stairRender3d"
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
+import { useFlyCamera } from "@/components/render3d/useFlyCamera"
+import type { CameraFrame } from "@/components/render3d/perspective"
 import styles from "./stairRenderView.module.scss"
 
 /** the attribute on <html> that tells the print stylesheet to print just
@@ -36,13 +38,18 @@ const StairRenderView: React.FC<{
       return next
     })
   const svgRef = useRef<SVGSVGElement>(null)
+  // full screen, zooming flies the camera in (the page's view is the fit)
+  const frameRef = useRef<CameraFrame | null>(null)
+  const { camera, explore, beforeTurn } = useFlyCamera(svgRef, frameRef)
   // dragging right swings the stair round to the right; down tips it toward you
   const handleOrbit = useCallback((dx: number, dy: number) => {
+    beforeTurn()
     setAzimuthDeg((a) => ((((a - dx * 0.4 + 180) % 360) + 360) % 360) - 180)
     setElevationDeg((e) => Math.min(75, Math.max(5, e + dy * 0.3)))
-  }, [])
+  }, [beforeTurn])
 
-  const scene = useMemo(() => buildStairScene(input, layout, { azimuthDeg, elevationDeg, hidden }), [input, layout, azimuthDeg, elevationDeg, hidden])
+  const scene = useMemo(() => buildStairScene(input, layout, { azimuthDeg, elevationDeg, hidden, camera }), [input, layout, azimuthDeg, elevationDeg, hidden, camera])
+  frameRef.current = scene?.frame ?? null
 
   const handlePrint = () => {
     const root = document.documentElement
@@ -111,7 +118,7 @@ const StairRenderView: React.FC<{
     <div className={styles.renderRoot}>
       {/* stays mounted with everything hidden, so full-screen doesn't drop out */}
       <div className={styles.printArea}>
-        <DiagramExplorer label="3D view" onOrbit={handleOrbit} toolbar={memberToggles}>
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} toolbar={memberToggles}>
           {scene ? (
             <svg
               ref={svgRef}

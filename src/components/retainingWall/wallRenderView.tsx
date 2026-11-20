@@ -6,6 +6,8 @@ import { CalcSettings } from "./calcSettings"
 import { PlanPoint, RetainedSide } from "./wallPlan"
 import { buildRenderScene, RenderExtra } from "./wallRender3d"
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
+import { useFlyCamera } from "@/components/render3d/useFlyCamera"
+import type { CameraFrame } from "@/components/render3d/perspective"
 import styles from "./wallRenderView.module.scss"
 
 /** the attribute on <html> that tells the print stylesheet to print just
@@ -60,17 +62,22 @@ const WallRenderView: React.FC<{
   const [elevationDeg, setElevationDeg] = useState(26)
   const [showFootings, setShowFootings] = useState(showFootingsInitially)
   const svgRef = useRef<SVGSVGElement>(null)
+  // full screen, zooming flies the camera in (the page's view is the fit)
+  const frameRef = useRef<CameraFrame | null>(null)
+  const { camera, explore, beforeTurn } = useFlyCamera(svgRef, frameRef)
   // dragging right swings the wall round to the right; down tips it toward
   // you — within the sliders' range
   const handleOrbit = useCallback((dx: number, dy: number) => {
+    beforeTurn()
     setAzimuthDeg((a) => Math.min(75, Math.max(-75, a - dx * 0.4)))
     setElevationDeg((e) => Math.min(60, Math.max(5, e + dy * 0.3)))
-  }, [])
+  }, [beforeTurn])
 
   const scene = useMemo(
-    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex }, highlight, extras),
-    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, focusPostIndex, highlight, extras]
+    () => buildRenderScene(profile, planPoints, retainedSide, settings, topCapEnabled, { azimuthDeg, elevationDeg, showFootings, focusPostIndex, camera }, highlight, extras),
+    [profile, planPoints, retainedSide, settings, topCapEnabled, azimuthDeg, elevationDeg, showFootings, focusPostIndex, highlight, extras, camera]
   )
+  frameRef.current = scene?.frame ?? null
 
   const handlePrint = () => {
     const root = document.documentElement
@@ -135,7 +142,7 @@ Show footings
   return (
     <div className={`${styles.renderRoot} ${compact ? styles.compact : ""}`}>
       <div className={styles.printArea}>
-        <DiagramExplorer label="3D view" onOrbit={handleOrbit} fill={compact} toolbar={footingsToggle}>
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} fill={compact} toolbar={footingsToggle}>
           <svg
             ref={svgRef}
             viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}

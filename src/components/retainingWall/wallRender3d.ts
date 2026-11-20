@@ -14,6 +14,7 @@ import { BOARD_THICKNESS_M, CalcSettings } from "./calcSettings"
 import { OBSTRUCTION_TYPES } from "./obstructions"
 import { PlanPoint, RetainedSide, sideNormal } from "./wallPlan"
 import { orderSolids } from "../stairs/stairRender3d"
+import { CameraFrame, CameraState, FIT_CAMERA, makeCamera, surfaceAtCentre } from "../render3d/perspective"
 
 type V3 = [number, number, number]
 
@@ -35,6 +36,8 @@ export interface RenderOptions {
   /** a post to pick out in blue (its footing too) — the pile in focus in
    * the concrete QA speed run */
   focusPostIndex?: number | null
+  /** flown in (full screen); the fitted view if left out */
+  camera?: CameraState
 }
 
 export interface RenderPolygon {
@@ -57,6 +60,8 @@ export interface RenderScene {
   strokeW: number
   /** where the focused post's top lands in view space, for a marker */
   focus?: { x: number; y: number }
+  /** the camera's directions and what it's looking at (to fly it) */
+  frame?: CameraFrame
 }
 
 /** ~ a 150 × 50 board */
@@ -89,7 +94,6 @@ const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 const scale = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k]
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const norm = (a: V3): V3 => {
   const l = Math.hypot(a[0], a[1], a[2]) || 1
   return [a[0] / l, a[1] / l, a[2] / l]
@@ -322,15 +326,11 @@ export function buildRenderScene(
   const el = (options.elevationDeg * Math.PI) / 180
   /** from the scene toward the camera */
   const toCam: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]
-  const right: V3 = norm([-toCam[1], toCam[0], 0])
-  const up = cross(toCam, right)
   // a sun high and round to the left of the camera, so the face is lit
   // and the tops and ends read as different planes
   const lightAz = az + (35 * Math.PI) / 180
   const lightEl = (45 * Math.PI) / 180
   const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
-  const depth = (p: V3) => dot(p, toCam)
-  const project = (p: V3): [number, number] => [dot(p, right), -dot(p, up)]
 
   // ── the ground: one block under the whole wall ───────────────────────
   // A rectangle squared to the wall's face, cut into a fine grid. Every
@@ -709,6 +709,22 @@ export function buildRenderScene(
     items.push({ faces: [{ pts: paint(backAt, reach, retainedTop), color }], solid: false, key: 4, layer: LAYER.footing, opacity: 0.95 })
   })
 
+  // ── the camera: fitted to everything built, flown in if it has been ──
+  const fitPts = [...items, ...wallItems.map((w) => w.item)].flatMap((it) => it.faces.flatMap((f) => f.pts))
+  extras.forEach((x) => x.solids.forEach((faces) => faces.forEach((f) => fitPts.push(...f.pts))))
+  if (focusTop) {
+    // room for its marker above
+    const zs = fitPts.map((p) => p[2])
+    fitPts.push([focusTop[0], focusTop[1], focusTop[2] + (Math.max(...zs) - Math.min(...zs)) * 0.25])
+  }
+  const cam = makeCamera(fitPts, az, el, options.camera ?? FIT_CAMERA, 0.05)
+  const project = cam.project
+  const depth = (p: V3) => -Math.hypot(...sub(p, cam.eye))
+  /** the camera's on the outside of a face's plane */
+  const facesCamera = (n: V3, onFace: V3) => dot(n, norm(sub(cam.eye, onFace)))
+  /** flown in close, anything wholly behind the camera isn't drawn */
+  const ahead = (it: Item) => it.faces.some((f) => f.pts.some((p) => cam.ahead(p) > 0))
+
   // sort keys: back to front by depth; a post goes after the boards of
   // the bays either side of it (they're behind it), a cap after both
   wallItems.forEach((w) => (w.item.key = depth(centroid(w.item.faces.flatMap((f) => f.pts)))))
@@ -740,7 +756,7 @@ export function buildRenderScene(
   // a run seen from behind (the camera's round on its retained side) is
   // mostly hidden by the retained ground in front of it: draw it before
   // that ground, so the ground covers it — only a cap stays on top
-  const backFacing = (run: (typeof runs)[number]) => dot(run.normal, toCam) > 0
+  const backFacing = (run: (typeof runs)[number]) => facesCamera(run.normal, add(run.start, scale(run.dir, run.seg.lengthM / 2))) > 0
   wallItems.forEach((w) => {
     if (w.item.layer !== LAYER.wall || w.item.faces[0]?.color === COLORS.cap || w.item.faces[0]?.color === COLORS.capJoint) return
     const behind =
@@ -753,7 +769,7 @@ export function buildRenderScene(
   // the extras, after the walls, each in its own order
   extras.forEach((extra, e) => {
     const solids = extra.solids.map((faces) => ({ faces: orientOutward(faces).map((f) => ({ ...f, normal: norm(faceNormal(f.pts)) })) }))
-    orderSolids(solids, toCam, project, 1e-4).forEach((k, n) => {
+    orderSolids(solids, toCam, project, 1e-4, cam.eye).forEach((k, n) => {
       items.push({ faces: solids[k].faces.map(({ pts, color }) => ({ pts, color })), solid: true, key: e * 1e6 + n, layer: LAYER.extra })
     })
   })
@@ -819,9 +835,9 @@ export function buildRenderScene(
     items.length = 0
     items.push(...keep, ...queue)
   }
-  const low = items.filter((it) => it.layer === LAYER.low).sort(byLayer)
+  const low = items.filter((it) => it.layer === LAYER.low && ahead(it)).sort(byLayer)
   // (anything wholly facing away from the camera isn't drawn, so isn't sorted)
-  const shows = (it: Item) => !it.solid || it.faces.some((f) => dot(faceNormal(f.pts), toCam) > 1e-6)
+  const shows = (it: Item) => ahead(it) && (!it.solid || it.faces.some((f) => facesCamera(faceNormal(f.pts), f.pts[0]) > 1e-6))
   const rest = [...items.filter((it) => it.layer !== LAYER.low), ...wallItems.map((w) => w.item)].filter(shows).sort(byLayer)
   // pieces that only touch along an edge don't need ordering
   const overlapTol = Math.max(...items.map((it) => Math.max(...it.faces.flatMap((f) => f.pts.map((p) => Math.abs(p[0]) + Math.abs(p[1])))))) * 1e-5 + 1e-4
@@ -891,14 +907,11 @@ export function buildRenderScene(
   const all = [...low, ...sorted]
 
   const polygons: RenderPolygon[] = []
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
+  const drawn: { pts: V3[]; normal: V3 }[] = []
   all.forEach((it) => {
     it.faces.forEach((f) => {
       let n = faceNormal(f.pts)
-      const towards = dot(n, toCam)
+      const towards = facesCamera(n, f.pts[0])
       if (it.solid && towards <= 1e-6) return
       if (!it.solid && towards < 0) n = scale(n, -1)
       if (!it.solid && Math.abs(towards) < 1e-6) return
@@ -912,25 +925,22 @@ export function buildRenderScene(
       // the ground is drawn in pieces; outline them in their own colour
       // so they join up seamlessly
       const stroke = it.layer === LAYER.low || it.layer === LAYER.high || it.layer === LAYER.skirt ? fill : rgbToHex(scale(rgb, shade * 0.72))
-      const pts2 = f.pts.map(project)
-      pts2.forEach(([x, y]) => {
-        minX = Math.min(minX, x)
-        maxX = Math.max(maxX, x)
-        minY = Math.min(minY, y)
-        maxY = Math.max(maxY, y)
-      })
+      const cut = cam.clip(f.pts)
+      if (cut.length < 3) return
+      if (!it.opacity) drawn.push({ pts: cut, normal: faceNormal(f.pts) })
+      const pts2 = cut.map(project)
       polygons.push({ points: pts2.map(([x, y]) => `${x.toFixed(4)},${y.toFixed(4)}`).join(" "), fill, stroke, opacity: it.opacity, post: it.post, clearance: it.clearance })
     })
   })
-  if (!polygons.length) return null
-  const focusXY = focusTop ? project(focusTop) : null
-  if (focusXY) minY = Math.min(minY, focusXY[1] - (maxY - minY) * 0.12) // room for its marker above
-  const span = Math.max(maxX - minX, maxY - minY)
-  const pad = span * 0.05
+  // (flown in, an empty view is still a view)
+  if (!polygons.length && (options.camera ?? FIT_CAMERA) === FIT_CAMERA) return null
+  const focusXY = focusTop && cam.ahead(focusTop) > 0 ? project(focusTop) : null
   return {
     polygons,
-    viewBox: { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 },
-    strokeW: span * 0.0012,
+    viewBox: cam.viewBox,
+    strokeW: cam.span * 0.0012,
     focus: focusXY ? { x: focusXY[0], y: focusXY[1] } : undefined,
+    // (only flown in is there anything to turn round but the middle)
+    frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
   }
 }
