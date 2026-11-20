@@ -1,6 +1,6 @@
 "use client"
 
-import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
+import DiagramExplorer, { ExploreState } from "@/components/diagramExplorer/diagramExplorer"
 import { ReactNode, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
@@ -298,7 +298,11 @@ const WallPlanView: React.FC<{
    * and boards are real things, drawn at least big enough to see and at
    * their true size once the zoom shows it — with more detail coming in
    * the closer it gets. */
-  const drawPlan = ({ zoom, locked }: { zoom: number; locked: boolean }) => {
+  const drawPlan = ({ zoom, locked, turn: liveTurn }: ExploreState) => {
+    // full screen, two fingers twist the view on top of the saved turn —
+    // about the drawing's middle, and never saved
+    const shownDeg = normalizeDeg(rotationDeg + liveTurn)
+    const liveTransform = liveTurn ? `rotate(${liveTurn} ${view.x + view.w / 2} ${view.y + view.h / 2})` : undefined
     // full-screen with editing off: looked at, not changed — a drag pans
     const fixed = readOnly || locked
     const px = scale / zoom
@@ -322,9 +326,9 @@ const WallPlanView: React.FC<{
     const lowNormal = (a: PlanPoint, b: PlanPoint) => sideNormal(a, b, lowSide)
     const turn = rotationDeg ? `rotate(${rotationDeg})` : undefined
     /** turns text at `at` back level, inside the turned drawing */
-    const upright = (at: PlanPoint) => (rotationDeg ? `rotate(${-rotationDeg} ${at.xM} ${at.yM})` : undefined)
+    const upright = (at: PlanPoint) => (shownDeg ? `rotate(${-shownDeg} ${at.xM} ${at.yM})` : undefined)
     /** screen-up, in plan terms */
-    const up = rotatePoint({ xM: 0, yM: -1 }, -rotationDeg)
+    const up = rotatePoint({ xM: 0, yM: -1 }, -shownDeg)
     /** the run a post sits on, and its two ends */
     const runOf = (postIndex: number) => {
       const seg = profile?.segments.find((g) => postIndex >= g.startPostIndex && postIndex <= g.endPostIndex)
@@ -337,7 +341,10 @@ const WallPlanView: React.FC<{
           className={styles.svg}
           role="img"
           aria-label="Plan view of the wall, seen from above"
+          // twisted, its corners reach past the box: the screen's the edge
+          style={liveTurn ? { overflow: "visible" } : undefined}
         >
+          <g transform={liveTransform}>
           {/* the drawing in plan metres, turned as it's shown; text in it
               turns back to stay level (see upright) */}
           <g ref={planGroupRef} transform={turn}>
@@ -525,7 +532,7 @@ const WallPlanView: React.FC<{
               const off = Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + fontSize * 0.75
               const mid = { xM: (a.xM + b.xM) / 2 + n.xM * off, yM: (a.yM + b.yM) / 2 + n.yM * off }
               // along the run as it's shown on screen, never upside down
-              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI + rotationDeg
+              let deg = (Math.atan2(rb.yM - ra.yM, rb.xM - ra.xM) * 180) / Math.PI + shownDeg
               deg = normalizeDeg(deg)
               if (deg > 90) deg -= 180
               if (deg <= -90) deg += 180
@@ -538,7 +545,7 @@ const WallPlanView: React.FC<{
                   textAnchor="middle"
                   dominantBaseline="middle"
                   className={styles.bayDim}
-                  transform={`rotate(${deg - rotationDeg} ${mid.xM} ${mid.yM})`}
+                  transform={`rotate(${deg - shownDeg} ${mid.xM} ${mid.yM})`}
                   opacity={tagShow}
                 >
                   {Math.round(Math.abs(pb.xM - pa.xM) * 1000)}
@@ -546,7 +553,7 @@ const WallPlanView: React.FC<{
               )
             })}
 
-          {overlay?.({ strokeW, fontSize, rotationDeg })}
+          {overlay?.({ strokeW, fontSize, rotationDeg: shownDeg })}
           </g>
 
           {/* run labels, placed clear of each other and of the walls (see
@@ -562,6 +569,7 @@ const WallPlanView: React.FC<{
                 textAnchor="middle"
                 dominantBaseline="middle"
                 className={selectedSegment === i ? styles.labelSelected : styles.label}
+                transform={liveTurn ? `rotate(${-liveTurn} ${at.xM} ${at.yM})` : undefined}
               >
                 {text}
               </text>
@@ -670,48 +678,57 @@ const WallPlanView: React.FC<{
                 )
               })}
           </g>
+          </g>
         </svg>
     )
   }
 
-  const turnBy = (deg: number) => onRotationChange?.(normalizeDeg(rotationDeg + deg))
   const levelSegment = selectedSegment ?? 0
-  const turnControls = onRotationChange && (
-    <div className={styles.turnBar} role="group" aria-label="Turn the plan view">
-      <span className={styles.turnLabel}>Turn view</span>
-      <button type="button" className={styles.turnButton} onClick={() => turnBy(-15)} aria-label="Turn the plan 15° anticlockwise" title="15° anticlockwise">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M5.5 7.5A6 6 0 1 1 4 11.5M5.5 3.5v4h4" />
-        </svg>
-      </button>
-      <button type="button" className={styles.turnButton} onClick={() => turnBy(15)} aria-label="Turn the plan 15° clockwise" title="15° clockwise">
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M14.5 7.5A6 6 0 1 0 16 11.5M14.5 3.5v4h-4" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className={styles.turnText}
-        onClick={() => onRotationChange(levelRotationFor(points, levelSegment, retainedSide))}
-        title="Turn the plan so this wall lies level, its retained side at the top"
-      >
-        Wall {segmentLabel(levelSegment)} level
-      </button>
-      <span className={styles.turnAngle}>{rotationDeg}°</span>
-      {rotationDeg !== 0 && (
-        <button type="button" className={styles.turnText} onClick={() => onRotationChange(0)}>
-          Reset
+  /** the turn controls: under the plan they turn it and save it with the
+   * wall; full screen (`ex`) they only turn the view, like a twist does */
+  const turnControls = (ex?: ExploreState) => {
+    if (!onRotationChange) return null
+    const shown = ex ? normalizeDeg(rotationDeg + ex.turn) : rotationDeg
+    const turnBy = (deg: number) => (ex ? ex.turnBy(deg) : onRotationChange(normalizeDeg(rotationDeg + deg)))
+    const turnTo = (deg: number) => (ex ? ex.setTurn(normalizeDeg(deg - rotationDeg)) : onRotationChange(deg))
+    const canReset = ex ? Math.round(ex.turn) !== 0 : rotationDeg !== 0
+    return (
+      <div className={styles.turnBar} role="group" aria-label="Turn the plan view">
+        <span className={styles.turnLabel}>{ex ? "Turn (not saved)" : "Turn view"}</span>
+        <button type="button" className={styles.turnButton} onClick={() => turnBy(-15)} aria-label="Turn the plan 15° anticlockwise" title="15° anticlockwise">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M5.5 7.5A6 6 0 1 1 4 11.5M5.5 3.5v4h4" />
+          </svg>
         </button>
-      )}
-    </div>
-  )
+        <button type="button" className={styles.turnButton} onClick={() => turnBy(15)} aria-label="Turn the plan 15° clockwise" title="15° clockwise">
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M14.5 7.5A6 6 0 1 0 16 11.5M14.5 3.5v4h-4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={styles.turnText}
+          onClick={() => turnTo(levelRotationFor(points, levelSegment, retainedSide))}
+          title="Turn the plan so this wall lies level, its retained side at the top"
+        >
+          Wall {segmentLabel(levelSegment)} level
+        </button>
+        <span className={styles.turnAngle}>{Math.round(shown)}°</span>
+        {canReset && (
+          <button type="button" className={styles.turnText} onClick={() => (ex ? ex.setTurn(0) : onRotationChange(0))}>
+            {ex ? "Back to saved" : "Reset"}
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={styles.planRoot}>
-      <DiagramExplorer label="Wall plan" editable={!readOnly} toolbar={turnControls}>
+      <DiagramExplorer label="Wall plan" editable={!readOnly} turnable toolbar={(ex) => turnControls(ex)}>
         {drawPlan}
       </DiagramExplorer>
-      {turnControls}
+      {turnControls()}
 
       <div className={styles.legend}>
         <span>

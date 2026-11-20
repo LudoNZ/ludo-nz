@@ -15,8 +15,28 @@ interface View {
   s: number
   tx: number
   ty: number
+  /** degrees clockwise a turnable drawing's turned about its middle */
+  r: number
 }
-const FIT: View = { s: 1, tx: 0, ty: 0 }
+const FIT: View = { s: 1, tx: 0, ty: 0, r: 0 }
+
+/** what a drawing given as a function is told about how it's explored */
+export interface ExploreState {
+  /** 1 = fitted, and out of explore mode */
+  zoom: number
+  /** full screen with editing off (see `editable`) */
+  locked: boolean
+  /** degrees clockwise to turn the drawing about its middle, on top of
+   * however it's drawn (see `turnable`) — 0 out of explore mode, and
+   * never saved: Done or Fit puts it back */
+  turn: number
+  /** turn by `deg` about the middle of the screen */
+  turnBy: (deg: number) => void
+  /** turn to `deg` (as `turn`) about the middle of the screen */
+  setTurn: (deg: number) => void
+}
+
+const normDeg = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180
 
 /** Wraps a drawing (an <svg>) so it can be explored: a button in its
  * corner opens it full-screen, where it zooms and pans — and, for a 3D
@@ -40,7 +60,7 @@ const DiagramExplorer: React.FC<{
    * weights and text the same size on screen and shows things at their
    * true size as it's zoomed in; `locked`, true while full-screen with
    * editing off (see `editable`) */
-  children: ReactNode | ((view: { zoom: number; locked: boolean }) => ReactNode)
+  children: ReactNode | ((view: ExploreState) => ReactNode)
   /** a drawing that can be edited (dragged corners and the like): full
    * screen it opens locked, so a drag always pans, with an Edit switch
    * beside Done to turn editing back on */
@@ -50,10 +70,13 @@ const DiagramExplorer: React.FC<{
   /** a 3D view: one-finger / mouse drag turns it, by this many pixels */
   onOrbit?: (dxPx: number, dyPx: number) => void
   /** shown along the bottom in full-screen (e.g. the 3D view's toggles) */
-  toolbar?: ReactNode
+  toolbar?: ReactNode | ((view: ExploreState) => ReactNode)
+  /** a drawing that turns (given as a function, it draws itself turned
+   * by `turn` about its middle): two fingers twist it full screen */
+  turnable?: boolean
   /** fill the parent's height (a fixed-height pane) */
   fill?: boolean
-}> = ({ children, label, onOrbit, toolbar, fill = false, editable = false }) => {
+}> = ({ children, label, onOrbit, toolbar, fill = false, editable = false, turnable = false }) => {
   const [exploring, setExploring] = useState(false)
   const [editing, setEditing] = useState(false)
   const locked = exploring && editable && !editing
@@ -62,12 +85,13 @@ const DiagramExplorer: React.FC<{
   const viewRef = useRef(view)
   viewRef.current = view
   const viewportRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const enterButtonRef = useRef<HTMLButtonElement>(null)
 
   /** pointers down on the drawing, where each was last */
   const pointers = useRef(new Map<number, { x: number; y: number; pan: boolean; dragging: boolean }>())
   /** a two-finger gesture's starting point */
-  const pinch = useRef<{ dist: number; cx: number; cy: number; view: View } | null>(null)
+  const pinch = useRef<{ dist: number; angle: number; cx: number; cy: number; view: View } | null>(null)
 
   // orbiting rebuilds the whole 3D scene: at most once a frame
   const orbitAcc = useRef({ dx: 0, dy: 0, frame: 0 })
@@ -95,7 +119,7 @@ const DiagramExplorer: React.FC<{
     const w = el.clientWidth
     const h = el.clientHeight
     const clamp = (t: number, size: number) => Math.min(size * (1 - KEEP_ON_SCREEN), Math.max(size * KEEP_ON_SCREEN - size * s, t))
-    return { s, tx: clamp(v.tx, w), ty: clamp(v.ty, h) }
+    return { s, tx: clamp(v.tx, w), ty: clamp(v.ty, h), r: v.r }
   }, [])
 
   /** zoom by k about a point in the viewport */
@@ -104,10 +128,38 @@ const DiagramExplorer: React.FC<{
       const v = viewRef.current
       const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.s * k))
       const r = s / v.s
-      setView(clampView({ s, tx: px - (px - v.tx) * r, ty: py - (py - v.ty) * r }))
+      setView(clampView({ s, tx: px - (px - v.tx) * r, ty: py - (py - v.ty) * r, r: v.r }))
     },
     [clampView],
   )
+  /** `from` moved so the screen point (m0x, m0y) lands on (mx, my), with
+   * the drawing scaled to `s` about it and turned `deg` more — the drawing
+   * turns about its own middle, so the shift makes up the difference */
+  const moved = (from: View, s: number, deg: number, m0x: number, m0y: number, mx: number, my: number): View => {
+    const el = contentRef.current
+    const cx = (el?.offsetWidth ?? 0) / 2
+    const cy = (el?.offsetHeight ?? 0) / 2
+    const k = s / from.s
+    const th = (deg * Math.PI) / 180
+    const vx = from.tx + from.s * cx - m0x
+    const vy = from.ty + from.s * cy - m0y
+    return {
+      s,
+      tx: mx + k * (vx * Math.cos(th) - vy * Math.sin(th)) - s * cx,
+      ty: my + k * (vx * Math.sin(th) + vy * Math.cos(th)) - s * cy,
+      r: normDeg(from.r + deg),
+    }
+  }
+  const turnBy = (deg: number) => {
+    const el = viewportRef.current
+    if (!el) return
+    const mx = el.clientWidth / 2
+    const my = el.clientHeight / 2
+    // off the latest view, so quick taps each count
+    setView((v) => clampView(moved(v, v.s, deg, mx, my, mx, my)))
+  }
+  const setTurn = (deg: number) => turnBy(normDeg(deg - viewRef.current.r))
+
   const zoomCentre = (k: number) => {
     const el = viewportRef.current
     if (el) zoomAt(k, el.clientWidth / 2, el.clientHeight / 2)
@@ -120,7 +172,13 @@ const DiagramExplorer: React.FC<{
 
   const startPinch = () => {
     const [a, b] = [...pointers.current.values()]
-    pinch.current = { dist: Math.hypot(b.x - a.x, b.y - a.y) || 1, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, view: viewRef.current }
+    pinch.current = {
+      dist: Math.hypot(b.x - a.x, b.y - a.y) || 1,
+      angle: Math.atan2(b.y - a.y, b.x - a.x),
+      cx: (a.x + b.x) / 2,
+      cy: (a.y + b.y) / 2,
+      view: viewRef.current,
+    }
   }
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -155,15 +213,16 @@ const DiagramExplorer: React.FC<{
       const cx = (a.x + b.x) / 2
       const cy = (a.y + b.y) / 2
       const s = Math.min(MAX_SCALE, Math.max(MIN_SCALE, st.view.s * (dist / st.dist)))
-      const r = s / st.view.s
+      // a twist turns a turnable drawing, as freely as the fingers go
+      const twist = turnable ? normDeg(((Math.atan2(b.y - a.y, b.x - a.x) - st.angle) * 180) / Math.PI) : 0
       // the point under the fingers' first midpoint follows the midpoint
-      setView(clampView({ s, tx: cx - (st.cx - st.view.tx) * r, ty: cy - (st.cy - st.view.ty) * r }))
+      setView(clampView(moved(st.view, s, twist, st.cx, st.cy, cx, cy)))
       return
     }
     const dx = p.x - prev.x
     const dy = p.y - prev.y
     if (onOrbit && mode === "rotate" && !prev.pan) orbit(dx, dy)
-    else setView((v) => clampView({ s: v.s, tx: v.tx + dx, ty: v.ty + dy }))
+    else setView((v) => clampView({ ...v, tx: v.tx + dx, ty: v.ty + dy }))
   }
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -223,11 +282,15 @@ const DiagramExplorer: React.FC<{
     requestAnimationFrame(() => enterButtonRef.current?.focus())
   }
 
+  const exploreState: ExploreState = { zoom: exploring ? view.s : 1, locked, turn: exploring ? view.r : 0, turnBy, setTurn }
+
   const hint = onOrbit
     ? mode === "rotate"
       ? "Drag to turn · pinch or scroll to zoom · two fingers or right-drag to pan"
       : "Drag to pan · pinch or scroll to zoom"
-    : "Drag to pan · pinch or scroll to zoom · double-click to zoom in"
+    : turnable
+      ? "Drag to pan · pinch or scroll to zoom · twist two fingers to turn (not saved) · double-click to zoom in"
+      : "Drag to pan · pinch or scroll to zoom · double-click to zoom in"
   const lockHint = editable ? (editing ? " · Edit is on: drag corners to move them" : " · Editing locked — turn on Edit to change it") : ""
 
   return (
@@ -287,8 +350,8 @@ const DiagramExplorer: React.FC<{
             : undefined
         }
       >
-        <div className={styles.content} style={exploring ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
-          {typeof children === "function" ? children({ zoom: exploring ? view.s : 1, locked }) : children}
+        <div ref={contentRef} className={styles.content} style={exploring ? { transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` } : undefined}>
+          {typeof children === "function" ? children(exploreState) : children}
         </div>
         {exploring && (
           <div className={styles.zoomButtons} data-explore-skip>
@@ -302,7 +365,7 @@ const DiagramExplorer: React.FC<{
                 <path d="M4 10h12" />
               </svg>
             </button>
-            <button type="button" aria-label="Fit to screen" onClick={() => setView(FIT)} disabled={view.s === 1 && view.tx === 0 && view.ty === 0}>
+            <button type="button" aria-label="Fit to screen" onClick={() => setView(FIT)} disabled={view.s === 1 && view.tx === 0 && view.ty === 0 && view.r === 0}>
               <svg viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" />
               </svg>
@@ -318,7 +381,7 @@ const DiagramExplorer: React.FC<{
               {hint}
               {lockHint}
             </p>
-            {toolbar}
+            {typeof toolbar === "function" ? toolbar(exploreState) : toolbar}
           </div>
         </>
       ) : (
