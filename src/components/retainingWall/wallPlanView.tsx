@@ -137,6 +137,21 @@ const WallPlanView: React.FC<{
   // moving corner every frame would slide the drawing out from under the
   // finger
   const [frozenView, setFrozenView] = useState<ViewBox | null>(null)
+  // Measure: tap two posts for the distance between them
+  const [measuring, setMeasuring] = useState(false)
+  const [measurePicks, setMeasurePicks] = useState<number[]>([])
+  const postCount = profile?.posts.length ?? 0
+  // a wall reshaped down to fewer posts drops picks that no longer exist
+  const picks = measurePicks.filter((i) => i < postCount)
+  const pickPost = (i: number) => setMeasurePicks((p) => (p.length >= 2 ? [i] : p.includes(i) ? p : [...p, i]))
+  /** the two picked posts' centres: straight across, and along the wall */
+  const measured = (() => {
+    if (picks.length < 2 || !profile) return null
+    const [pa, pb] = picks.map((i) => profile.posts[i])
+    const a = pointAtDistance(points, pa.xM)
+    const b = pointAtDistance(points, pb.xM)
+    return { pa, pb, a, b, straightM: Math.hypot(b.xM - a.xM, b.yM - a.yM), alongM: Math.abs(pb.xM - pa.xM) }
+  })()
   // the wall cards show as one-line summaries until "Edit walls" is pressed
   const [editingWalls, setEditingWalls] = useState(false)
   const editing = editingWalls && !readOnly
@@ -338,6 +353,13 @@ const WallPlanView: React.FC<{
       const i = seg?.index ?? 0
       return { a: points[i], b: points[i + 1] ?? points[i] }
     }
+    /** the run a bay's on — for a bay starting at a corner post, the run
+     * it starts, not the one the corner post ends */
+    const runOfBay = (left: number, right: number) => {
+      const seg = profile?.segments.find((g) => left >= g.startPostIndex && right <= g.endPostIndex)
+      const i = seg?.index ?? 0
+      return { a: points[i], b: points[i + 1] ?? points[i] }
+    }
     return (
         <svg
           viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
@@ -426,7 +448,7 @@ const WallPlanView: React.FC<{
               if (!pa || !pb) return null
               const a = pointAtDistance(points, pa.xM)
               const b = pointAtDistance(points, pb.xM)
-              const { a: ra, b: rb } = runOf(bay.leftIndex)
+              const { a: ra, b: rb } = runOfBay(bay.leftIndex, bay.rightIndex)
               const n = sideNormal(ra, rb, retainedSide)
               const near = Math.max(pa.widthM, pb.widthM) / 2
               const far = near + BOARD_THICKNESS_M
@@ -495,9 +517,104 @@ const WallPlanView: React.FC<{
                 {post.fixed && (
                   <circle cx={at.xM} cy={at.yM} r={size * 1.1} className={styles.postFixedRing} strokeWidth={strokeW * 0.5} />
                 )}
+                {measuring && picks.includes(post.index) && (
+                  <circle cx={at.xM} cy={at.yM} r={Math.max(size * 0.8, handleR * 1.1)} className={styles.measurePick} strokeWidth={strokeW * 0.7} />
+                )}
+                {/* measuring, every post's tappable */}
+                {measuring && (
+                  <circle
+                    cx={at.xM}
+                    cy={at.yM}
+                    r={Math.max(size * 0.7, handleR * 1.6)}
+                    className={styles.postHit}
+                    onClick={() => pickPost(post.index)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Post ${post.index + 1} — measure ${picks.length === 1 ? "to" : "from"} here`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        pickPost(post.index)
+                      }
+                    }}
+                  />
+                )}
               </g>
             )
           })}
+
+          {/* close in: running measurements along each wall from its
+              start, post centre by post centre, out past the post tags */}
+          {tagShow > 0 &&
+            profile?.segments.flatMap((seg) => {
+              const a = points[seg.index]
+              const b = points[seg.index + 1]
+              if (!a || !b) return []
+              const n = lowNormal(a, b)
+              let deg = normalizeDeg((Math.atan2(b.yM - a.yM, b.xM - a.xM) * 180) / Math.PI + shownDeg)
+              if (deg > 90) deg -= 180
+              if (deg <= -90) deg += 180
+              return posts.slice(seg.startPostIndex, seg.endPostIndex + 1).map((post) => {
+                const at = pointAtDistance(points, post.xM)
+                const off = Math.max(post.holeDiameterM, postSize(post.widthM)) / 2 + fontSize * 1.9
+                const spot = { xM: at.xM + n.xM * off, yM: at.yM + n.yM * off }
+                const tick = fontSize * 0.45
+                return (
+                  <g key={`run-${seg.index}-${post.index}`} opacity={tagShow} className={styles.runningDim}>
+                    <line
+                      x1={at.xM + n.xM * (off - tick * 1.6)}
+                      y1={at.yM + n.yM * (off - tick * 1.6)}
+                      x2={at.xM + n.xM * (off - tick * 0.6)}
+                      y2={at.yM + n.yM * (off - tick * 0.6)}
+                      strokeWidth={strokeW * 0.25}
+                    />
+                    <text
+                      x={spot.xM}
+                      y={spot.yM}
+                      fontSize={fontSize * 0.7}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      transform={`rotate(${deg - shownDeg} ${spot.xM} ${spot.yM})`}
+                    >
+                      {post.index === seg.startPostIndex ? `${segmentLabel(seg.index)} 0` : Math.round((post.xM - seg.startXM) * 1000)}
+                    </text>
+                  </g>
+                )
+              })
+            })}
+
+          {/* measured: a line between the two picked posts, and how far */}
+          {measuring &&
+            measured &&
+            (() => {
+              const { a, b } = measured
+              const mid = { xM: (a.xM + b.xM) / 2, yM: (a.yM + b.yM) / 2 }
+              const len = Math.hypot(b.xM - a.xM, b.yM - a.yM) || 1
+              const nx = -(b.yM - a.yM) / len
+              const ny = (b.xM - a.xM) / len
+              const tick = handleR * 0.8
+              const at = { xM: mid.xM + up.xM * fontSize * 0.9, yM: mid.yM + up.yM * fontSize * 0.9 }
+              return (
+                <g className={styles.measure}>
+                  <line x1={a.xM} y1={a.yM} x2={b.xM} y2={b.yM} strokeWidth={strokeW * 0.6} strokeDasharray={`${strokeW * 2} ${strokeW * 1.2}`} />
+                  {[a, b].map((p, k) => (
+                    <line key={k} x1={p.xM - nx * tick} y1={p.yM - ny * tick} x2={p.xM + nx * tick} y2={p.yM + ny * tick} strokeWidth={strokeW * 0.6} />
+                  ))}
+                  <text
+                    x={at.xM}
+                    y={at.yM}
+                    fontSize={fontSize * 0.85}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className={styles.measureLabel}
+                    strokeWidth={fontSize * 0.25}
+                    transform={upright(at)}
+                  >
+                    {Math.round(measured.straightM * 1000)} mm
+                  </text>
+                </g>
+              )
+            })()}
 
           {/* close in: each post's number and size on the low side, and
               each bay's post centres along the retained side */}
@@ -530,7 +647,7 @@ const WallPlanView: React.FC<{
               if (!pa || !pb) return null
               const a = pointAtDistance(points, pa.xM)
               const b = pointAtDistance(points, pb.xM)
-              const { a: ra, b: rb } = runOf(bay.leftIndex)
+              const { a: ra, b: rb } = runOfBay(bay.leftIndex, bay.rightIndex)
               const n = sideNormal(ra, rb, retainedSide)
               const off = Math.max(pa.widthM, pb.widthM) / 2 + BOARD_THICKNESS_M + fontSize * 0.75
               const mid = { xM: (a.xM + b.xM) / 2 + n.xM * off, yM: (a.yM + b.yM) / 2 + n.yM * off }
@@ -686,6 +803,37 @@ const WallPlanView: React.FC<{
     )
   }
 
+  const measureBar = profile && profile.posts.length >= 2 && (
+    <div className={styles.measureBar}>
+      <button
+        type="button"
+        className={`${styles.turnText} ${measuring ? styles.measureOn : ""}`}
+        aria-pressed={measuring}
+        onClick={() => {
+          setMeasuring((m) => !m)
+          setMeasurePicks([])
+        }}
+        title="Tap two posts for the distance between their centres"
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true" className={styles.measureIcon}>
+          <path d="M2.5 13.5 13.5 2.5l4 4-11 11zM6 10l1.5 1.5M8.5 7.5l1.5 1.5M11 5l1.5 1.5" />
+        </svg>
+        Measure
+      </button>
+      {measuring && (
+        <span className={styles.measureText} aria-live="polite">
+          {picks.length === 0 && "Tap a post to measure from"}
+          {picks.length === 1 && `From post ${picks[0] + 1} — now tap another`}
+          {measured && (
+            <>
+              Post {measured.pa.index + 1} → {measured.pb.index + 1}: <strong>{Math.round(measured.straightM * 1000)} mm</strong> straight
+              {Math.abs(measured.alongM - measured.straightM) > 0.0005 && <> · {Math.round(measured.alongM * 1000)} mm along the wall</>}
+            </>
+          )}
+        </span>
+      )}
+    </div>
+  )
   const levelSegment = selectedSegment ?? 0
   // holding the level button opens every turn option — under the plan
   // ("page") or full screen ("explore"), each with its own copy
@@ -788,9 +936,16 @@ const WallPlanView: React.FC<{
 
   return (
     <div className={styles.planRoot}>
-      <DiagramExplorer label="Wall plan" editable={!readOnly} turnable toolbar={(ex) => turnControls(ex)}>
+      <DiagramExplorer label="Wall plan" editable={!readOnly} turnable toolbar={(ex) => (
+          <>
+            {measureBar}
+            {turnControls(ex)}
+          </>
+        )}
+      >
         {drawPlan}
       </DiagramExplorer>
+      {measureBar}
       {turnControls()}
 
       <div className={styles.legend}>
