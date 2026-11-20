@@ -13,6 +13,15 @@
 }
 // ============================================================
 
+// a tappable shape inside a drawing (a wall, a post, a handle) takes focus
+// when it's pressed or dragged, and Chrome paints its default focus
+// outline as a solid black blob the size of the shape's stroke until
+// something else is clicked. Pressed with a mouse or finger it needs no
+// focus ring; keyboard focus (:focus-visible) keeps each drawing's own.
+svg :focus:not(:focus-visible) {
+  outline: none;
+}
+
 :root {
   font-size: 15px;
   // Always-light theme, tuned for readability: a warm off-white page
