@@ -93,3 +93,82 @@
     display: none;
   }
 }
+
+// ── live order ──────────────────────────────────────────────────────
+.headActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.material td {
+  padding-top: 0.6rem;
+  border-bottom: none;
+}
+
+.length {
+  padding-left: 0.75rem !important;
+  white-space: nowrap;
+}
+
+.mine {
+  white-space: nowrap;
+
+  input {
+    width: 4.5rem;
+    padding: 0.2rem 0.35rem;
+    font: inherit;
+    font-size: max(0.92rem, 16px);
+    border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+  }
+}
+
+.fixedInput {
+  border-width: 2px !important;
+  border-color: #2a78d6 !important;
+  background-color: rgba(42, 120, 214, 0.08) !important;
+}
+
+.auto,
+.spare {
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  opacity: 0.6;
+}
+
+.clear {
+  margin-left: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sum td {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.warn {
+  color: var(--color-danger);
+  opacity: 1;
+}
+
+@media print {
+  .clear,
+  .auto,
+  .headActions {
+    display: none;
+  }
+
+  .mine input {
+    border: none;
+  }
+}

@@ -15,7 +15,9 @@ import {
   MAIN_PRIVATE,
   MIN_RIP,
   OPEN_RISER_MAX_GAP,
+  SAW_KERF,
   SERVICE,
+  STOCK_LENGTHS_M,
   StairInput,
   TWO_R_PLUS_G,
   calculateStairs,
@@ -26,6 +28,7 @@ import StairRenderView from "@/components/stairs/stairRenderView"
 import { planMixedStock } from "@/components/stairs/stairs"
 import { combineOrder, stairOrder } from "@/components/stairs/stairMaterials"
 import StairOrderCard from "@/components/stairs/stairOrderCard"
+import { planBoardOrderDetailed } from "@/components/retainingWall/calcSettings"
 import LayoutEditor from "./layoutEditor"
 import DraftNumberInput from "./draftNumberInput"
 import StepDetailModal from "./stepDetailModal"
@@ -112,6 +115,16 @@ const StairsPage: React.FC<{
     [input, r, layout, extraTopTread],
   )
 
+  // the decking to buy, planned as the material order plans it (mixing
+  // lengths where that wastes least)
+  const boardBuy = useMemo(
+    () =>
+      planBoardOrderDetailed(
+        Array.from({ length: r.boards.blanks }, () => [(r.boards.pieceLength + SAW_KERF) / 1000]),
+        STOCK_LENGTHS_M,
+      ).lines.filter((l) => l.count > 0),
+    [r.boards.blanks, r.boards.pieceLength],
+  )
   const stacked = input.framing === "stacked-frames"
   const outer = input.framing === "outer-stringers"
   const stringerCount = outer ? 2 : r.supports.count
@@ -905,9 +918,8 @@ const StairsPage: React.FC<{
                   },
                   {
                     label: "Buy",
-                    value: r.boards.stock
-                      ? `${r.boards.stock.lengths} × ${r.boards.stock.lengthM.toFixed(1)} m (${r.boards.stock.piecesPerLength} per length)`
-                      : "—",
+                    // as the material order suggests it
+                    value: boardBuy.length ? boardBuy.map((l) => `${l.count} × ${l.lengthM.toFixed(1)} m`).join(" + ") : "—",
                   },
                   { label: "Screws", value: `~${r.screws}` },
                 ]}
@@ -923,7 +935,9 @@ const StairsPage: React.FC<{
       <StairOrderCard
         lines={order}
         intro="Everything above as stock lengths to order: framing in SG8 H3.2, posts H5, decking at the board size set."
-        note={`Lengths are the cheapest standard length to cut the pieces from (offcuts used where they fit, a 5 mm saw cut each), with no other waste allowance. Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%.${extraTopTread ? " Includes the top tread's frame and boards." : ""} Handrails, barriers, fixings to the deck and bolts aren't included.`}
+        pins={input.orderPins}
+        onPinsChange={(pins) => set("orderPins", pins)}
+        note={`Lengths are planned from every piece cut, mixing lengths where that wastes least (offcuts used where they fit, a 5 mm saw cut each), with no other waste allowance. Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%.${extraTopTread ? " Includes the top tread's frame and boards." : ""} Handrails, barriers, fixings to the deck and bolts aren't included.`}
       />
 
       <p className={styles.disclaimer}>

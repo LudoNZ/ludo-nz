@@ -109,7 +109,8 @@ export const DEFAULT_NOSING = 20
 
 export const STOCK_LENGTHS_M = [2.4, 3.0, 3.6, 4.2, 4.8, 5.4, 6.0]
 
-const SAW_KERF = 5
+/** the saw cut lost cutting a piece off a length (mm) */
+export const SAW_KERF = 5
 
 /** the riser's ripped board: at the top (under the tread above) or the
  * bottom (on the tread below) */
@@ -139,6 +140,10 @@ export interface StairInput {
   /** a last ripped board under SLIVER_MAX on a tread or riser isn't cut:
    * it's left out, the boards before it where they are */
   leaveOutSlivers: boolean
+  /** the material order, pinned to what the supplier has: per material
+   * (`kind|material`), how many of each length (String(lengthM)) — see
+   * StairOrderCard. Not used by the calculation. */
+  orderPins: Record<string, Record<string, number>>
   /** a tread's boards ripped to a width by hand, front to back (null or
    * missing = full width; the last board is always ripped to fit) */
   treadBoardSizes: (number | null)[]
@@ -168,6 +173,7 @@ export const DEFAULT_INPUT: StairInput = {
   riserBoardGap: 0,
   riserRip: "top",
   leaveOutSlivers: true,
+  orderPins: {},
   treadBoardSizes: [],
   riserBoardSizes: [],
   flights: [{ treads: null }],
@@ -214,12 +220,16 @@ export interface StockPlan {
   piecesPerLength: number
   lengths: number
   totalM: number
+  /** the pieces cut (mm), for the live order to re-plan from */
+  pieces: number[]
 }
 
 export interface MixedStockPlan {
   lengthM: number
   lengths: number
   totalM: number
+  /** the pieces cut (mm), for the live order to re-plan from */
+  pieces: number[]
 }
 
 /** One box of the stacked-frames stair: a rectangular frame of timber on
@@ -463,7 +473,7 @@ export function planStock(pieceLength: number, pieces: number, lengthsM = STOCK_
     const per = Math.floor((lengthM * 1000 + SAW_KERF) / (pieceLength + SAW_KERF))
     if (per < 1) continue
     const lengths = Math.ceil(pieces / per)
-    const plan = { lengthM, piecesPerLength: per, lengths, totalM: lengths * lengthM }
+    const plan = { lengthM, piecesPerLength: per, lengths, totalM: lengths * lengthM, pieces: Array<number>(pieces).fill(pieceLength) }
     if (!best || plan.totalM < best.totalM - 1e-9) best = plan
   }
   return best
@@ -484,7 +494,7 @@ export function planMixedStock(pieces: number[], lengthsM = STOCK_LENGTHS_M): Mi
       if (i >= 0) free[i] -= p + SAW_KERF
       else free.push(L - p - SAW_KERF)
     }
-    const plan = { lengthM, lengths: free.length, totalM: free.length * lengthM }
+    const plan = { lengthM, lengths: free.length, totalM: free.length * lengthM, pieces }
     if (!best || plan.totalM < best.totalM - 1e-9) best = plan
   }
   return best

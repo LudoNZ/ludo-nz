@@ -53,7 +53,7 @@ const StairIcon = () => (
 )
 
 const STAIR_ORDER_NOTE =
-  "Each stair is cut from its own lengths (offcuts aren't shared between stairs). Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%. Handrails, barriers, bolts and fixing the stairs to the walls aren't included."
+  "The order plans every stair's pieces together, so offcuts are shared between them (the estimate prices each stair on its own lengths). Post concrete is for 300 mm holes; screws are two per board at each stringer or joist, plus 10%. Handrails, barriers, bolts and fixing the stairs to the walls aren't included."
 
 /** A site project, autosaved a second after each edit and loaded once —
  * last save wins. Two views of it, picked by the URL:

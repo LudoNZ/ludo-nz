@@ -22,6 +22,9 @@ export interface StairOrderLine {
   lengthM: number | null
   unit: string
   detail?: string
+  /** for lengths: the pieces cut from them (mm), so the order can be
+   * re-planned live against what the supplier has (see StairOrderCard) */
+  pieces?: number[]
 }
 
 /** hole for a stair post: this wide, POST_EMBED deep */
@@ -43,8 +46,9 @@ function runLines(r: StairResult, input: StairInput, name: string): StairOrderLi
   const lines: StairOrderLine[] = []
   if (r.treads <= 0) return lines
   const t = input.stringerThickness
-  const push = (use: string, depth: number, plan: { lengthM: number; lengths: number } | null, detail?: string) => {
-    if (plan && plan.lengths > 0) lines.push({ kind: "timber", use: `${name}${use}`, ...framing(depth, t), count: plan.lengths, lengthM: plan.lengthM, unit: "lengths", detail })
+  const push = (use: string, depth: number, plan: { lengthM: number; lengths: number; pieces?: number[] } | null, detail?: string) => {
+    if (plan && plan.lengths > 0)
+      lines.push({ kind: "timber", use: `${name}${use}`, ...framing(depth, t), count: plan.lengths, lengthM: plan.lengthM, unit: "lengths", detail, pieces: plan.pieces })
   }
 
   if (input.framing === "stacked-frames") {
@@ -76,6 +80,7 @@ function runLines(r: StairResult, input: StairInput, name: string): StairOrderLi
         lengthM: plan.lengthM,
         unit: "lengths",
         detail: `${posts} posts up to ${Math.round(r.stringer.postLength)} mm`,
+        pieces: plan.pieces,
       })
     if (r.stringer.bearer) push("Bearers", r.timberDepth, planStock(input.width, r.stringer.posts.length), `${r.stringer.posts.length} × ${input.width} mm`)
     lines.push(concreteLine(`${name}Post holes`, posts))
@@ -85,7 +90,10 @@ function runLines(r: StairResult, input: StairInput, name: string): StairOrderLi
 
 /** a run of board longer than any stock length: whole 6 m lengths and a
  * shorter one to finish */
-const buyRun = (m: number) => ({ lengthM: 6, lengths: Math.ceil(m / 6 - 1e-9) })
+const buyRun = (m: number) => {
+  const lengths = Math.ceil(m / 6 - 1e-9)
+  return { lengthM: 6, lengths, pieces: Array.from({ length: lengths }, (_, i) => Math.min(6000, m * 1000 - i * 6000)) }
+}
 
 const concreteLine = (use: string, posts: number): StairOrderLine => ({
   kind: "concrete",
@@ -133,6 +141,7 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
           lengthM: plan.lengthM,
           unit: "lengths",
           detail: `${(pieces.reduce((a, p) => a + p, 0) / 1000).toFixed(1)} m cut`,
+          pieces,
         })
       if (!turn.onPads && turn.posts.length) {
         const posts = planStock(turn.postLength, turn.posts.length)
@@ -146,6 +155,7 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
             lengthM: posts.lengthM,
             unit: "lengths",
             detail: `${turn.posts.length} posts at ${Math.round(turn.postLength)} mm`,
+            pieces: posts.pieces,
           })
         lines.push(concreteLine(`${name}post holes`, turn.posts.length))
       }
@@ -166,7 +176,7 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
     const joists = Math.max(2, r.supports.count)
     const pieces = [input.width, input.width, ...Array(joists).fill(Math.max(100, r.going - 2 * t))]
     const plan = planMixedStock(pieces)
-    if (plan) lines.push({ kind: "timber", use: "Top tread frame", ...framing(NOG_DEPTH, t), count: plan.lengths, lengthM: plan.lengthM, unit: "lengths", detail: `2 × ${input.width} + ${joists} joists` })
+    if (plan) lines.push({ kind: "timber", use: "Top tread frame", ...framing(NOG_DEPTH, t), count: plan.lengths, lengthM: plan.lengthM, unit: "lengths", detail: `2 × ${input.width} + ${joists} joists`, pieces })
     const topBoards = [...r.treadBoards, ...(input.riserBoards ? r.riserBoardPieces : [])]
     const boards = topBoards.length
     fullBoards += topBoards.filter((b) => !b.ripped).length
@@ -194,6 +204,7 @@ export function stairOrder(input: StairInput, r: StairResult, layout: StairLayou
         lengthM: plan.lengthM,
         unit: "lengths",
         detail: `${laidPieces} pieces${same ? ` at ${Math.round(boardPieces[0])} mm` : ""}${sharedRips > 0 ? ` — ${sharedRips} rip${sharedRips === 1 ? "" : "s"} cut from another's offcut` : ""}`,
+        pieces: boardPieces,
       })
   }
   if (screws > 0) lines.push({ kind: "screws", use: "Decking screws", material: "Stainless decking screws", size: "", count: Math.ceil(screws * 1.1), lengthM: null, unit: "each", detail: `${screws} + 10% spare` })
@@ -209,6 +220,8 @@ export interface CombinedOrderLine {
   count: number
   /** what the lines added up are for */
   uses: string[]
+  /** for lengths: every piece cut from them (mm), all the lines' together */
+  pieces?: number[]
 }
 
 const KIND_ORDER: StairOrderKind[] = ["timber", "posts", "decking", "concrete", "screws"]
@@ -224,7 +237,8 @@ export function combineOrder(lines: { line: StairOrderLine; from: string }[]): C
     if (hit) {
       hit.count += line.count
       if (!hit.uses.includes(use)) hit.uses.push(use)
-    } else map.set(key, { kind: line.kind, material: line.material, size: line.size, lengthM: line.lengthM, unit: line.unit, count: line.count, uses: [use] })
+      if (line.pieces) hit.pieces = [...(hit.pieces ?? []), ...line.pieces]
+    } else map.set(key, { kind: line.kind, material: line.material, size: line.size, lengthM: line.lengthM, unit: line.unit, count: line.count, uses: [use], pieces: line.pieces ? [...line.pieces] : undefined })
   }
   return [...map.values()]
     .map((l) => (l.unit === "m³" ? { ...l, count: Number(l.count.toFixed(3)) } : l))

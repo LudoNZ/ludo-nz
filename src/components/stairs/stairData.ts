@@ -11,6 +11,19 @@ const numOrNull = (v: unknown, fallback: number | null) => (v === null ? null : 
 
 /** A saved StairInput, anything missing or the wrong shape taken from the
  * calculator's defaults. */
+/** the order's pinned counts, read defensively: whole numbers ≥ 0 only */
+const pinsFromData = (raw: unknown): Record<string, Record<string, number>> => {
+  if (typeof raw !== "object" || raw === null) return {}
+  const out: Record<string, Record<string, number>> = {}
+  for (const [key, lengths] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof lengths !== "object" || lengths === null) continue
+    const row: Record<string, number> = {}
+    for (const [len, n] of Object.entries(lengths as Record<string, unknown>)) if (typeof n === "number" && Number.isFinite(n) && n >= 0) row[len] = Math.floor(n)
+    if (Object.keys(row).length) out[key] = row
+  }
+  return out
+}
+
 export const stairInputFromData = (raw: unknown): StairInput => {
   const d = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>
   const D = DEFAULT_INPUT
@@ -43,6 +56,7 @@ export const stairInputFromData = (raw: unknown): StairInput => {
     riserBoardGap: Math.max(0, num(d.riserBoardGap, D.riserBoardGap)),
     riserRip: d.riserRip === "bottom" ? "bottom" : "top",
     leaveOutSlivers: typeof d.leaveOutSlivers === "boolean" ? d.leaveOutSlivers : D.leaveOutSlivers,
+    orderPins: pinsFromData(d.orderPins),
     treadBoardSizes: sizesFromData(d.treadBoardSizes),
     riserBoardSizes: sizesFromData(d.riserBoardSizes),
     // one more flight than turns, always
