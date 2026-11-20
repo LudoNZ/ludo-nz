@@ -1,5 +1,6 @@
 "use client"
 
+import DraftNumberInput from "./draftNumberInput"
 import { DEFAULT_TURN, FlightSpec, TurnSpec } from "@/components/stairs/stairs"
 import styles from "./stairsPage.module.scss"
 
@@ -159,17 +160,13 @@ const LayoutEditor: React.FC<{
                   </div>
                   <div className={styles.turnNumbers}>
                     <div className={styles.numberUnit}>
-                      <input
-                        type="number"
+                      <DraftNumberInput
                         aria-label={`Turn ${i + 1} angle`}
                         min={1}
                         max={180}
                         step={5}
                         value={turn.angle}
-                        onChange={(e) =>
-                          e.target.value !== "" &&
-                          setTurn(i, { angle: Math.min(180, Math.max(1, Number(e.target.value))) })
-                        }
+                        onValue={(v) => setTurn(i, { angle: Math.min(180, Math.max(1, v)) })}
                       />
                       <span>°</span>
                     </div>

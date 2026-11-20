@@ -27,6 +27,7 @@ import { planMixedStock } from "@/components/stairs/stairs"
 import { combineOrder, stairOrder } from "@/components/stairs/stairMaterials"
 import StairOrderCard from "@/components/stairs/stairOrderCard"
 import LayoutEditor from "./layoutEditor"
+import DraftNumberInput from "./draftNumberInput"
 import styles from "./stairsPage.module.scss"
 
 const mm = (v: number) => `${Math.round(v)} mm`
@@ -54,18 +55,7 @@ const NumberField: React.FC<{
     <label htmlFor={id}>{label}</label>
     {hint && <span className={styles.hint}>{hint}</span>}
     <div className={styles.numberUnit}>
-      <input
-        id={id}
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={Number(value.toFixed(1))}
-        onChange={(e) => {
-          const v = Number(e.target.value)
-          if (Number.isFinite(v) && e.target.value !== "") onChange(v)
-        }}
-      />
+      <DraftNumberInput id={id} min={min} max={max} step={step} value={Number(value.toFixed(1))} onValue={onChange} />
       <span>{unit}</span>
     </div>
   </div>
@@ -319,15 +309,14 @@ const StairsPage: React.FC<{
                   </label>
                 </div>
                 <div className={styles.numberUnit}>
-                  <input
+                  <DraftNumberInput
                     id="sDepth"
-                    type="number"
                     min={90}
                     max={300}
                     step={10}
                     value={r.timberDepth}
                     disabled={input.stringerDepth === null}
-                    onChange={(e) => e.target.value !== "" && set("stringerDepth", Math.max(90, Number(e.target.value)))}
+                    onValue={(v) => set("stringerDepth", Math.max(90, v))}
                   />
                   <span>mm</span>
                 </div>
@@ -435,14 +424,13 @@ const StairsPage: React.FC<{
                   : "How far the front board overhangs the riser"}
               </span>
               <div className={styles.numberUnit}>
-                <input
+                <DraftNumberInput
                   id="nosing"
-                  type="number"
                   min={0}
                   max={60}
                   value={Math.round(r.nosing)}
                   disabled={input.nosing === null}
-                  onChange={(e) => e.target.value !== "" && set("nosing", Math.max(0, Number(e.target.value)))}
+                  onValue={(v) => set("nosing", Math.max(0, v))}
                 />
                 <span>mm</span>
               </div>
