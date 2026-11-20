@@ -292,6 +292,8 @@ const StepDetailModal: React.FC<{
               role="img"
               aria-label="Cross-section of one step"
             >
+              {/* the riser under the tread below (its foot runs off the drawing) */}
+              {riser("belowRiser", -G, -R)}
               {tread("below", -G, 0)}
               {riser("riser", 0, 0)}
               {tread("above", 0, R)}

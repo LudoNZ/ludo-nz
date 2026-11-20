@@ -127,7 +127,10 @@ const StairsPage: React.FC<{
         : `Doesn't meet the Building Code even as a service stair: ${r.failures.join("; ")}.`
 
   const notes: string[] = []
-  if (rip && rip.width < MIN_RIP)
+  // a sliver at the back of the tread that the next riser board stands
+  // on is hidden under it, so it doesn't matter how thin it is
+  const ripUnderRiser = !!rip && input.riserBoards && rip.offset >= r.treadDepth - input.boardThickness - 0.5
+  if (rip && rip.width < MIN_RIP && !ripUnderRiser)
     notes.push(
       `The back board on each tread is ripped to only ${mm(rip.width)} — too thin to fix well. Change the nosing or run so boards fit.`,
     )
