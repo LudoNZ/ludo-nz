@@ -1,6 +1,6 @@
 "use client"
 
-import DiagramExplorer, { ExploreState } from "@/components/diagramExplorer/diagramExplorer"
+import DiagramExplorer, { ExploreState, screenPx } from "@/components/diagramExplorer/diagramExplorer"
 import { ReactNode, useRef, useState } from "react"
 import Button from "@/components/button/button"
 import NumField from "@/components/weatherboards/numField"
@@ -316,7 +316,8 @@ const WallPlanView: React.FC<{
    * and boards are real things, drawn at least big enough to see and at
    * their true size once the zoom shows it — with more detail coming in
    * the closer it gets. */
-  const drawPlan = ({ zoom, locked, turn: liveTurn }: ExploreState) => {
+  const drawPlan = (ex: ExploreState) => {
+    const { zoom, locked, turn: liveTurn } = ex
     // full screen, two fingers twist the view on top of the saved turn —
     // about the drawing's middle, and never saved
     const shownDeg = normalizeDeg(rotationDeg + liveTurn)
@@ -324,7 +325,11 @@ const WallPlanView: React.FC<{
     // full-screen with editing off: looked at, not changed — a drag pans
     const fixed = readOnly || locked
     const px = scale / zoom
-    const fontSize = px * 0.028
+    // zoomed in, text keeps a readable size on screen (a phone shows the
+    // plan much smaller than a desktop) — the fitted view's as it was
+    const toPx = screenPx(ex, view.w, view.h)
+    const textZoomedIn = Math.min(1, Math.max(0, (zoom - 1) / 0.4))
+    const fontSize = Math.max(px * 0.028, toPx(17) * textZoomedIn)
     const strokeW = px * 0.008
     const handleR = px * 0.02
     const postSize = (widthM: number) => Math.max(widthM, px * POST_MIN_SCREEN)
@@ -370,7 +375,7 @@ const WallPlanView: React.FC<{
         .join(" · ")
       return { tag: `${post.index + 1} · ${shortPostSize(post.sizeLabel)}`, running }
     }
-    const labelFont = fontSize * 0.7
+    const labelFont = Math.max(fontSize * 0.7, toPx(16) * textZoomedIn)
     const labelLine = labelFont * 1.2
     /** how far the two-line label reaches out from its middle along the
      * plan direction `n` — it's level on screen, so that's half its width

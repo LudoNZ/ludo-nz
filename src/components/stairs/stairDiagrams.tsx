@@ -1,6 +1,6 @@
 "use client"
 
-import DiagramExplorer, { ExploreState } from "@/components/diagramExplorer/diagramExplorer"
+import DiagramExplorer, { ExploreState, screenPx } from "@/components/diagramExplorer/diagramExplorer"
 import { POST_EMBED, POST_SIZE, Pt, StairInput, StairResult } from "./stairs"
 import styles from "./stairDiagrams.module.scss"
 
@@ -60,14 +60,19 @@ export const StairElevation: React.FC<{
 
   // zoomed in, text and lines stay the same size on screen (the stair
   // grows under them), and each step's numbers fade in
-  const draw = ({ zoom }: ExploreState) => {
-    const font = baseFont / zoom
+  const draw = (view: ExploreState) => {
+    const { zoom } = view
+    // zoomed in, text keeps a readable size on screen (a phone shows the
+    // drawing much smaller than a desktop) — the fitted view's as it was
+    const toPx = screenPx(view, maxX - minX, maxY - minY)
+    const zoomedIn = Math.min(1, Math.max(0, (zoom - 1) / 0.4))
+    const font = Math.max(baseFont / zoom, toPx(17) * zoomedIn)
     const stroke = font * 0.07
     const ramp = detailRamp(zoom, maxX - minX)
     const stepShow = ramp(G, STAIR_DETAIL.steps)
     const runShow = ramp(G, STAIR_DETAIL.running)
     const boardShow = ramp(Math.min(...result.treadBoards.map((b) => b.width), G), STAIR_DETAIL.boards)
-    const tagFont = font * 0.8
+    const tagFont = Math.max(font * 0.8, toPx(16))
 
     const treadRects = []
     const boardTags = []
@@ -407,14 +412,19 @@ export const StairPlan: React.FC<{ input: StairInput; result: StairResult }> = (
   const maxX = xTop + 300 + pad * 0.5
   const viewBox = `${minX} ${-pad} ${maxX - minX} ${W + pad * 2.2}`
 
-  const draw = ({ zoom }: ExploreState) => {
-    const font = baseFont / zoom
+  const draw = (view: ExploreState) => {
+    const { zoom } = view
+    // zoomed in, text keeps a readable size on screen (a phone shows the
+    // drawing much smaller than a desktop) — the fitted view's as it was
+    const toPx = screenPx(view, maxX - minX, W + pad * 2.2)
+    const zoomedIn = Math.min(1, Math.max(0, (zoom - 1) / 0.4))
+    const font = Math.max(baseFont / zoom, toPx(17) * zoomedIn)
     const stroke = font * 0.07
     const ramp = detailRamp(zoom, maxX - minX)
     const stepShow = ramp(G, STAIR_DETAIL.steps)
     const runShow = ramp(G, STAIR_DETAIL.running)
     const boardShow = ramp(Math.min(...result.treadBoards.map((b) => b.width), G), STAIR_DETAIL.boards)
-    const tagFont = font * 0.8
+    const tagFont = Math.max(font * 0.8, toPx(16))
 
     const stacked = input.framing === "stacked-frames"
     const outer = input.framing === "outer-stringers"

@@ -1,6 +1,6 @@
 "use client"
 
-import DiagramExplorer, { ExploreState } from "@/components/diagramExplorer/diagramExplorer"
+import DiagramExplorer, { ExploreState, screenPx } from "@/components/diagramExplorer/diagramExplorer"
 import { POST_SIZE, Pt, StairInput } from "./stairs"
 import { StairLayout, Strip } from "./layout"
 import { detailRamp, STAIR_DETAIL } from "./stairDiagrams"
@@ -54,13 +54,18 @@ const TurnedPlan: React.FC<{ input: StairInput; layout: StairLayout }> = ({ inpu
   })
   const typicalGoing = layout.flights.find((f) => f.treads > 0)?.sub.going ?? input.going
 
-  const draw = ({ zoom }: ExploreState) => {
-    const font = baseFont / zoom
+  const draw = (view: ExploreState) => {
+    const { zoom } = view
+    // zoomed in, text keeps a readable size on screen (a phone shows the
+    // drawing much smaller than a desktop) — the fitted view's as it was
+    const toPx = screenPx(view, viewW, bbox.maxY - bbox.minY + pad * 2)
+    const zoomedIn = Math.min(1, Math.max(0, (zoom - 1) / 0.4))
+    const font = Math.max(baseFont / zoom, toPx(17) * zoomedIn)
     const stroke = font * 0.06
     const ramp = detailRamp(zoom, viewW)
     const stepShow = ramp(typicalGoing, STAIR_DETAIL.steps)
     const runShow = ramp(typicalGoing, STAIR_DETAIL.running)
-    const tagFont = font * 0.8
+    const tagFont = Math.max(font * 0.8, toPx(16))
 
     return (
         <svg viewBox={viewBox} className={`${styles.svg} ${styles.turnedSvg}`} role="img" aria-label="Stair plan view, to scale">

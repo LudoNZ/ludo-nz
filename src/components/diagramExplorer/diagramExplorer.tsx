@@ -34,6 +34,17 @@ export interface ExploreState {
   turnBy: (deg: number) => void
   /** turn to `deg` (as `turn`) about the middle of the screen */
   setTurn: (deg: number) => void
+  /** the full-screen drawing area, in px (0 × 0 out of explore mode) */
+  screen: { w: number; h: number }
+}
+
+/** For a drawing given as a function: `n` screen pixels in its own units
+ * (its viewBox `vbW` × `vbH`, fitted to the screen and zoomed) — so text
+ * can be kept readable on a phone however the drawing's sized. 0 out of
+ * explore mode. */
+export const screenPx = (view: ExploreState, vbW: number, vbH: number) => {
+  const k = view.screen.w && vbW && vbH ? Math.min(view.screen.w / vbW, view.screen.h / vbH) * view.zoom : 0
+  return (n: number) => (k ? n / k : 0)
 }
 
 /** A 3D view that flies its own camera: zooming and panning full screen
@@ -106,6 +117,7 @@ const DiagramExplorer: React.FC<{
   const locked = exploring && editable && !editing
   const [mode, setMode] = useState<Mode>(onOrbit ? "rotate" : "pan")
   const [view, setView] = useState<View>(FIT)
+  const [screen, setScreen] = useState({ w: 0, h: 0 })
   const viewRef = useRef(view)
   viewRef.current = view
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -273,6 +285,20 @@ const DiagramExplorer: React.FC<{
     else pinch.current = null
   }
 
+  // the drawing area's size, for drawings that keep text a readable size
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!exploring || !el) {
+      setScreen((s) => (s.w || s.h ? { w: 0, h: 0 } : s))
+      return
+    }
+    const measure = () => setScreen((s) => (s.w === el.clientWidth && s.h === el.clientHeight ? s : { w: el.clientWidth, h: el.clientHeight }))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [exploring])
+
   // the wheel needs a non-passive listener to stop the page zooming
   useEffect(() => {
     const el = viewportRef.current
@@ -326,7 +352,14 @@ const DiagramExplorer: React.FC<{
     requestAnimationFrame(() => enterButtonRef.current?.focus())
   }
 
-  const exploreState: ExploreState = { zoom: exploring ? view.s : 1, locked, turn: exploring ? view.r : 0, turnBy, setTurn }
+  const exploreState: ExploreState = {
+    zoom: exploring ? view.s : 1,
+    locked,
+    turn: exploring ? view.r : 0,
+    turnBy,
+    setTurn,
+    screen: exploring ? screen : { w: 0, h: 0 },
+  }
 
   const hint = onOrbit
     ? mode === "rotate"
