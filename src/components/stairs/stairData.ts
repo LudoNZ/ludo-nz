@@ -4,6 +4,9 @@
 import { calculateStairs, ComplianceLevel, DEFAULT_INPUT, FlightSpec, FRAMING_LABELS, FramingType, StairInput, TurnSpec } from "./stairs"
 
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback)
+/** board widths set by hand: numbers over 0, or null for a full board */
+const sizesFromData = (v: unknown): (number | null)[] =>
+  Array.isArray(v) ? v.slice(0, 50).map((x) => (typeof x === "number" && Number.isFinite(x) && x > 0 ? x : null)) : []
 const numOrNull = (v: unknown, fallback: number | null) => (v === null ? null : typeof v === "number" && Number.isFinite(v) ? v : fallback)
 
 /** A saved StairInput, anything missing or the wrong shape taken from the
@@ -39,6 +42,8 @@ export const stairInputFromData = (raw: unknown): StairInput => {
     riserBoards: typeof d.riserBoards === "boolean" ? d.riserBoards : D.riserBoards,
     riserBoardGap: Math.max(0, num(d.riserBoardGap, D.riserBoardGap)),
     riserRip: d.riserRip === "bottom" ? "bottom" : "top",
+    treadBoardSizes: sizesFromData(d.treadBoardSizes),
+    riserBoardSizes: sizesFromData(d.riserBoardSizes),
     // one more flight than turns, always
     flights: flights.length === turns.length + 1 ? flights : [...turns.map(() => ({ treads: null })), { treads: null }],
     turns,

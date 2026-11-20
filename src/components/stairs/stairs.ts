@@ -132,6 +132,11 @@ export interface StairInput {
   riserBoardGap: number
   /** where the riser's ripped (narrower) board goes */
   riserRip: RiserRip
+  /** a tread's boards ripped to a width by hand, front to back (null or
+   * missing = full width; the last board is always ripped to fit) */
+  treadBoardSizes: (number | null)[]
+  /** the same for a riser's boards, in the order they're laid */
+  riserBoardSizes: (number | null)[]
   /** flights from the ground up; the last always takes whatever risers are
    * left over (treads: null). One flight and no turns = a straight stair. */
   flights: FlightSpec[]
@@ -155,6 +160,8 @@ export const DEFAULT_INPUT: StairInput = {
   riserBoards: false,
   riserBoardGap: 0,
   riserRip: "top",
+  treadBoardSizes: [],
+  riserBoardSizes: [],
   flights: [{ treads: null }],
   turns: [],
 }
@@ -188,6 +195,10 @@ export interface BoardPiece {
   offset: number
   width: number
   ripped: boolean
+  /** which board it is in the order they're laid (front to back on a
+   * tread; from the ripped end's far side on a riser) — the key a width
+   * set by hand is kept under */
+  index: number
 }
 
 export interface StockPlan {
@@ -356,17 +367,28 @@ export interface StairResult {
 /** Fewest risers that keep the rise within a maximum. */
 export const fewestRisers = (totalRise: number, maxRise: number) => Math.max(1, Math.ceil(totalRise / maxRise - 1e-9))
 
-/** Lay boards from the front edge back, full width where they fit, the last
- * one ripped to whatever's left. */
-export function layBoards(depth: number, boardWidth: number, gap: number): BoardPiece[] {
+/** Lay boards from the front edge back, full width where they fit (or
+ * the width a board's been ripped to by hand, `sizes[i]`, never wider
+ * than a full board), the last one ripped to whatever's left. */
+export function layBoards(depth: number, boardWidth: number, gap: number, sizes: (number | null)[] = []): BoardPiece[] {
   const pieces: BoardPiece[] = []
   let pos = 0
-  while (depth - pos > 0.5) {
-    const w = Math.min(boardWidth, depth - pos)
-    pieces.push({ offset: pos, width: w, ripped: w < boardWidth - 0.5 })
+  while (depth - pos > 0.5 && pieces.length < 200) {
+    const set = sizes[pieces.length]
+    const want = set != null && set > 0 ? Math.min(boardWidth, set) : boardWidth
+    const w = Math.min(want, depth - pos)
+    pieces.push({ offset: pos, width: w, ripped: w < boardWidth - 0.5, index: pieces.length })
     pos += w + gap
   }
   return pieces
+}
+
+/** Widths that split `depth` into equal boards no wider than a full one,
+ * with `gap` between — for a tread or riser that presents evenly. */
+export function evenBoardSizes(depth: number, boardWidth: number, gap: number): number[] {
+  const n = Math.max(1, Math.ceil((depth + gap) / (boardWidth + gap) - 1e-9))
+  const w = Math.floor(((depth - gap * (n - 1)) / n) * 10) / 10
+  return Array(n).fill(w)
 }
 
 /** Overhang that makes k whole boards (and their gaps) cover the tread
@@ -476,7 +498,7 @@ export function calculateStairs(input: StairInput): StairResult {
     nosing = Math.max(0, input.nosing ?? 0)
   }
   const treadDepth = G + riserT + nosing
-  const treadBoards = layBoards(treadDepth, input.boardWidth, input.boardGap)
+  const treadBoards = layBoards(treadDepth, input.boardWidth, input.boardGap, input.treadBoardSizes)
   const hasRip = treadBoards.some((b) => b.ripped)
   const fitNosing = wholeBoardNosing(G, riserT, input.boardWidth, input.boardGap)
   const suggestedNosing = hasRip && fitNosing <= AUTO_NOSING_MAX && Math.abs(fitNosing - nosing) > 0.5 ? fitNosing : null
@@ -485,7 +507,7 @@ export function calculateStairs(input: StairInput): StairResult {
   // tread above (offsets from the bottom), the ripped one at the top or
   // the bottom
   const riserHeight = R - t
-  const riserLaid = input.riserBoards ? layBoards(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap)) : []
+  const riserLaid = input.riserBoards ? layBoards(riserHeight, input.boardWidth, Math.max(0, input.riserBoardGap), input.riserBoardSizes) : []
   const riserBoardPieces =
     input.riserRip === "bottom" ? riserLaid.map((b) => ({ ...b, offset: riserHeight - b.offset - b.width })).reverse() : riserLaid
   const openRiserGap = input.riserBoards ? 0 : riserHeight

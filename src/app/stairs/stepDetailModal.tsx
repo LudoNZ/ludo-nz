@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Modal } from "@/app/elements/Modal/modal"
-import { calculateStairs, RiserRip, StairInput } from "@/components/stairs/stairs"
+import { calculateStairs, evenBoardSizes, RiserRip, StairInput } from "@/components/stairs/stairs"
 import DraftNumberInput from "./draftNumberInput"
 import pile from "../retaining-walls/pileSetupModal.module.scss"
 import styles from "./stepDetailModal.module.scss"
@@ -54,6 +54,11 @@ const StepDetailModal: React.FC<{
     live.current = { ...live.current, [key]: v }
     onChange(live.current)
   }
+  // a board picked on the drawing, to rip narrower
+  const [picked, setPicked] = useState<{ kind: "tread" | "riser"; index: number } | null>(null)
+  useEffect(() => {
+    if (!isOpen) setPicked(null)
+  }, [isOpen])
   const changed = opened !== null && JSON.stringify(opened) !== JSON.stringify(value)
 
   const R = r.rise
@@ -85,8 +90,9 @@ const StepDetailModal: React.FC<{
             y={-top}
             width={b.width}
             height={t}
-            className={b.ripped ? styles.boardRipped : styles.board}
-            strokeWidth={unit * 0.25}
+            className={`${b.ripped ? styles.boardRipped : styles.board} ${styles.pickable} ${picked?.kind === "tread" && picked.index === b.index ? styles.picked : ""}`}
+            strokeWidth={unit * (picked?.kind === "tread" && picked.index === b.index ? 0.8 : 0.25)}
+            onClick={() => setPicked({ kind: "tread", index: b.index })}
           />
         ))}
       </g>
@@ -103,8 +109,9 @@ const StepDetailModal: React.FC<{
             y={-(base + b.offset + b.width)}
             width={t}
             height={b.width}
-            className={b.ripped ? styles.boardRipped : styles.board}
-            strokeWidth={unit * 0.25}
+            className={`${b.ripped ? styles.boardRipped : styles.board} ${styles.pickable} ${picked?.kind === "riser" && picked.index === b.index ? styles.picked : ""}`}
+            strokeWidth={unit * (picked?.kind === "riser" && picked.index === b.index ? 0.8 : 0.25)}
+            onClick={() => setPicked({ kind: "riser", index: b.index })}
           />
         ))}
       </g>
@@ -173,6 +180,91 @@ const StepDetailModal: React.FC<{
   )
   const boardsText = (list: { width: number; ripped: boolean }[]) => list.map((b) => (b.ripped ? `${mmText(b.width)} rip` : mmText(b.width))).join(" + ")
 
+  // ---- ripping boards: the picked board's width, or even splits ----
+  const sizesKey = (kind: "tread" | "riser") => (kind === "tread" ? "treadBoardSizes" : "riserBoardSizes")
+  const setBoardWidth = (kind: "tread" | "riser", index: number, width: number | null) => {
+    const sizes = [...draft[sizesKey(kind)]]
+    while (sizes.length <= index) sizes.push(null)
+    sizes[index] = width === null || width >= draft.boardWidth - 0.05 ? null : width
+    while (sizes.length && sizes[sizes.length - 1] === null) sizes.pop()
+    set(sizesKey(kind), sizes)
+  }
+  const pieces = picked ? (picked.kind === "tread" ? r.treadBoards : r.riserBoardPieces) : []
+  const pickedPiece = picked ? pieces.find((b) => b.index === picked.index) : undefined
+  const pickedSet = picked ? (draft[sizesKey(picked.kind)][picked.index] ?? null) !== null : false
+  // a board picked and then laid away (a narrower board before it made
+  // room for one less) is let go
+  useEffect(() => {
+    if (picked && !pickedPiece) setPicked(null)
+  }, [picked, pickedPiece])
+  const position = (kind: "tread" | "riser", index: number, count: number) =>
+    kind === "tread"
+      ? `${index + 1} of ${count}, from the front`
+      : `${index + 1} of ${count}, from the ${draft.riserRip === "bottom" ? "top" : "bottom"}`
+
+  const boardPanel = (
+    <div className={styles.boardPanel}>
+      {picked && pickedPiece ? (
+        <>
+          <div className={styles.boardPanelHead}>
+            <strong>
+              {picked.kind === "tread" ? "Tread" : "Riser"} board {position(picked.kind, picked.index, pieces.length)}
+            </strong>
+            <button type="button" className={pile.autoBtn} onClick={() => setPicked(null)}>
+              Done
+            </button>
+          </div>
+          <div className={pile.row}>
+            <label>
+              <span className={pile.rowLabel}>Width</span>
+              <span className={pile.inputWrap}>
+                <DraftNumberInput
+                  value={Math.round(pickedPiece.width * 10) / 10}
+                  step={1}
+                  min={10}
+                  max={draft.boardWidth}
+                  onValue={(v) => setBoardWidth(picked.kind, picked.index, v)}
+                />
+                mm
+              </span>
+            </label>
+            {pickedSet && (
+              <button type="button" className={pile.autoBtn} onClick={() => setBoardWidth(picked.kind, picked.index, null)}>
+                Full width
+              </button>
+            )}
+            <span className={pile.rowHint}>
+              Up to {draft.boardWidth} mm, the decking board&apos;s width. The boards after it lay on from there, the
+              last ripped to fit.
+            </span>
+          </div>
+        </>
+      ) : (
+        <p className={pile.rowHint}>Tap a board on the drawing to rip it narrower.</p>
+      )}
+      <div className={styles.boardButtons}>
+        <button type="button" className={pile.autoBtn} onClick={() => set("treadBoardSizes", evenBoardSizes(r.treadDepth, draft.boardWidth, draft.boardGap))}>
+          Split tread boards evenly
+        </button>
+        {draft.treadBoardSizes.length > 0 && (
+          <button type="button" className={pile.autoBtn} onClick={() => set("treadBoardSizes", [])}>
+            Tread boards back to automatic
+          </button>
+        )}
+        {draft.riserBoards && (
+          <button type="button" className={pile.autoBtn} onClick={() => set("riserBoardSizes", evenBoardSizes(r.riserHeight, draft.boardWidth, Math.max(0, draft.riserBoardGap)))}>
+            Split riser boards evenly
+          </button>
+        )}
+        {draft.riserBoards && draft.riserBoardSizes.length > 0 && (
+          <button type="button" className={pile.autoBtn} onClick={() => set("riserBoardSizes", [])}>
+            Riser boards back to automatic
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
   const frontX = -riserT - nosing
   return (
     <Modal isActive={isOpen} closeModal={onClose}>
@@ -237,6 +329,7 @@ const StepDetailModal: React.FC<{
                 <i className={styles.swatchHandle} /> Drag to change
               </span>
             </div>
+            {boardPanel}
           </div>
 
           <div className={styles.fields}>

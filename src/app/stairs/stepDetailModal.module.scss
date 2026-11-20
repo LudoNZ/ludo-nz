@@ -87,3 +87,40 @@
   background: #2a78d6;
   border-color: #1c5cab;
 }
+
+// a board on the drawing can be tapped to pick it
+.pickable {
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.12);
+  }
+}
+
+.picked {
+  stroke: #2a78d6;
+}
+
+.boardPanel {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: var(--borderRadius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.boardPanelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.boardButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
