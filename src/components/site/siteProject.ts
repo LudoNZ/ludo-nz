@@ -10,7 +10,7 @@
  * The stairs calculator works in mm with its own origin (see
  * stairs/layout.ts); `placeStair` maps one onto the other. */
 
-import { DEFAULT_INPUT, FlightSpec, FramingType, FRAMING_LABELS, StairInput, StairResult, TurnSpec, calculateStairs } from "../stairs/stairs"
+import { DEFAULT_INPUT, StairInput, StairResult, calculateStairs } from "../stairs/stairs"
 import { StairLayout, calculateLayout } from "../stairs/layout"
 import { profileForWall, wallFromData, WallProject } from "../retainingWall/wallProject"
 import { WallProfile } from "../retainingWall/postProfile"
@@ -20,6 +20,7 @@ import { StairMember, stairSolids } from "../stairs/stairRender3d"
 import type { RenderExtra } from "../retainingWall/wallRender3d"
 import type { ElevationExtra } from "../retainingWall/wallProfileDiagram"
 import { DEFAULT_ESTIMATE_SETTINGS, estimateSettingsFromData, type AddedMaterial, type EstimateSettings } from "../retainingWall/pricing"
+import { stairInputFromData } from "../stairs/stairData"
 import { combineOrder, CombinedOrderLine, stairLabourHours, stairOrder, StairOrderLine } from "../stairs/stairMaterials"
 
 export const MIN_STAIR_ANGLE_DEG = 30
@@ -131,44 +132,8 @@ export const newSiteStair = (wallId: string, segmentIndex: number, segLengthM: n
 })
 
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback)
-const numOrNull = (v: unknown, fallback: number | null) => (v === null ? null : typeof v === "number" && Number.isFinite(v) ? v : fallback)
 
-/** A saved StairInput, anything missing or the wrong shape taken from the
- * calculator's defaults. */
-export const stairInputFromData = (raw: unknown): StairInput => {
-  const d = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>
-  const D = DEFAULT_INPUT
-  const flights: FlightSpec[] =
-    Array.isArray(d.flights) && d.flights.length > 0 ? d.flights.map((f) => ({ treads: numOrNull((f as Record<string, unknown>)?.treads, null) })) : D.flights
-  const turns: TurnSpec[] = Array.isArray(d.turns)
-    ? d.turns
-        .filter((t) => typeof t === "object" && t !== null)
-        .map((t) => ({
-          kind: t.kind === "winders" ? "winders" : "landing",
-          direction: t.direction === "right" ? "right" : "left",
-          angle: num(t.angle, 90),
-          winders: num(t.winders, 3),
-        }))
-    : D.turns
-  return {
-    totalRise: num(d.totalRise, D.totalRise),
-    risers: numOrNull(d.risers, D.risers),
-    going: num(d.going, D.going),
-    width: num(d.width, D.width),
-    framing: typeof d.framing === "string" && d.framing in FRAMING_LABELS ? (d.framing as FramingType) : D.framing,
-    stringerDepth: numOrNull(d.stringerDepth, D.stringerDepth),
-    stringerThickness: num(d.stringerThickness, D.stringerThickness),
-    maxStringerSpacing: num(d.maxStringerSpacing, D.maxStringerSpacing),
-    boardWidth: num(d.boardWidth, D.boardWidth),
-    boardGap: num(d.boardGap, D.boardGap),
-    boardThickness: num(d.boardThickness, D.boardThickness),
-    nosing: numOrNull(d.nosing, D.nosing),
-    riserBoards: typeof d.riserBoards === "boolean" ? d.riserBoards : D.riserBoards,
-    // one more flight than turns, always
-    flights: flights.length === turns.length + 1 ? flights : [...turns.map(() => ({ treads: null })), { treads: null }],
-    turns,
-  }
-}
+export { stairInputFromData }
 
 const wallFromSiteData = (raw: unknown, n: number): SiteWall | null => {
   if (typeof raw !== "object" || raw === null) return null

@@ -355,6 +355,33 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.token.admin == true;
     }
 
+    // Saved stairs: the stairs calculator's inputs. Same private / public
+    // split as retaining wall projects. `stair` is the whole stair;
+    // `summary` is what the stairs list shows.
+    match /users/{userId}/stairProjects/{projectId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'stair', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.stair is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /publicStairProjects/{projectId} {
+      allow get, list: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'stair', 'summary', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.stair is map
+        && request.resource.data.summary is map
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if request.auth != null && request.auth.token.admin == true;
+    }
+
     match /{path=**}/retainingWallProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/auth"
 import { StairInput } from "@/components/stairs/stairs"
 import { loadSiteProject, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
 import StairsPage from "./stairsPage"
+import StairProjectsPage from "./stairProjectsPage"
 import styles from "./stairsPage.module.scss"
 
 const SAVE_DELAY_MS = 1000
@@ -99,7 +100,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string }> = ({ projec
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "3rem 1rem", textAlign: "center" }}>
         <p style={{ opacity: 0.75, marginBottom: "1rem" }}>{state.kind === "loading" ? "Loading…" : state.text}</p>
-        {state.kind !== "loading" && <Link href="/stairs">The stairs calculator on its own →</Link>}
+        {state.kind !== "loading" && <Link href="/stairs">All stairs →</Link>}
       </div>
     )
 
@@ -143,7 +144,7 @@ const StairsRoute = () => {
   const site = params.get("site")
   const stair = params.get("stair")
   if (site && stair) return <LinkedStairs key={`${site}/${stair}`} projectId={site} stairId={stair} />
-  return <StairsPage />
+  return <StairProjectsPage />
 }
 
 export default StairsRoute
