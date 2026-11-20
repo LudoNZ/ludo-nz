@@ -6,7 +6,7 @@ import { usePriceLibrary } from "@/components/retainingWall/usePriceLibrary"
 import EstimateCard from "@/components/retainingWall/estimateCard"
 import { finishScope, ProposalContent, ProposalDocument, wallScopeItems } from "@/components/retainingWall/proposalView"
 import { totalLength } from "@/components/retainingWall/wallPlan"
-import { SiteProject, siteEstimateSettings, siteStairEstimate, siteStairScope, SiteWall, siteWallProfile, StairPlacement } from "@/components/site/siteProject"
+import { siteDeckEstimate, siteDeckScope, SitePlaced, SiteProject, siteEstimateSettings, siteStairEstimate, siteStairScope, siteWallProfile } from "@/components/site/siteProject"
 import { buildSiteScene } from "@/components/site/siteRender3d"
 import PriceLibraryModal from "../retaining-walls/priceLibraryModal"
 import styles from "./siteView.module.scss"
@@ -18,7 +18,7 @@ const lowerFirst = (s: string) => s.slice(0, 1).toLowerCase() + s.slice(1)
  * extra lines and proposal — kept with the site project. */
 const SiteEstimate: React.FC<{
   site: SiteProject
-  placements: { wall: SiteWall; placement: StairPlacement }[]
+  placements: SitePlaced[]
   projectName: string
   onChange: (next: EstimateSettings) => void
 }> = ({ site, placements, projectName, onChange }) => {
@@ -39,16 +39,17 @@ const SiteEstimate: React.FC<{
     hasGravel: w.wall.calcSettings.gravelBaseAllowanceM > 0,
   }))
   const stairPlacements = placements.map((p) => p.placement)
+  const decks = site.decks
   const estimate =
-    estimateWalls.length || stairPlacements.length
-      ? buildSiteEstimate(estimateWalls, priceLibrary.library.items, settings, Date.now(), siteStairEstimate(stairPlacements))
+    estimateWalls.length || stairPlacements.length || decks.length
+      ? buildSiteEstimate(estimateWalls, priceLibrary.library.items, settings, Date.now(), [...siteStairEstimate(stairPlacements), ...siteDeckEstimate(decks)])
       : null
 
   // the proposal's render, worked out once each time it's opened on a
   // new version of the site
   const scene = useMemo(
-    () => (proposalOpen ? buildSiteScene(site.walls, placements, { azimuthDeg: -30, elevationDeg: 28 }) : null),
-    [proposalOpen, site.walls, placements],
+    () => (proposalOpen ? buildSiteScene(site.walls, placements, { azimuthDeg: -30, elevationDeg: 28 }, site.decks) : null),
+    [proposalOpen, site.walls, placements, site.decks],
   )
 
   if (!estimate) return null
@@ -58,18 +59,40 @@ const SiteEstimate: React.FC<{
     built.flatMap(({ w, profile }) => {
       const items = wallScopeItems(profile, profile, w.wall.planPoints, w.wall.topCapEnabled)
       if (many) items[0] = `${w.name}: ${lowerFirst(items[0])}`
-      const mine = placements.filter((p) => p.wall.id === w.id).map((p) => p.placement)
+      const mine = placements.filter((p) => p.wall?.id === w.id).map((p) => p.placement)
       return [...items, ...siteStairScope(mine, profile.segments.length, many ? w.name : undefined)]
-    }),
+    }).concat(
+      decks.flatMap((d) => [
+        ...siteDeckScope([d]),
+        ...siteStairScope(
+          placements.filter((p) => p.deck?.id === d.id).map((p) => p.placement),
+          1,
+          d.name,
+        ),
+      ]),
+    ),
     settings,
   )
   const lengthM = estimateWalls.reduce((a, w) => a + w.lengthM, 0)
   const stairs = stairPlacements.length
+  const parts = [
+    built.length ? (many ? `${built.length} timber pole retaining walls` : "a timber pole retaining wall") : "",
+    decks.length ? (decks.length === 1 ? "a timber deck" : `${decks.length} timber decks`) : "",
+    stairs ? (stairs === 1 ? "a timber stair" : `${stairs} timber stairs`) : "",
+  ].filter(Boolean)
+  const titleParts = [built.length ? `Timber retaining wall${many ? "s" : ""}` : "", decks.length ? `deck${decks.length > 1 ? "s" : ""}` : "", stairs ? "stairs" : ""].filter(Boolean)
+  const captionParts = [
+    built.length ? (many ? `${built.length} walls, ${lengthM.toFixed(1)} m in all` : `${lengthM.toFixed(1)} m of wall`) : "",
+    decks.length ? `${decks.length} deck${decks.length > 1 ? "s" : ""}` : "",
+    stairs ? `${stairs} stair${stairs > 1 ? "s" : ""}` : "",
+  ].filter(Boolean)
+  const joinAnd = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : xs[0] ?? "")
+  const title = joinAnd(titleParts)
   const content: ProposalContent = {
-    title: `Timber retaining wall${many ? "s" : ""}${stairs ? " and stairs" : ""}`,
-    work: `${many ? `${built.length} timber pole retaining walls` : "a timber pole retaining wall"}${stairs ? ` and ${stairs === 1 ? "a timber stair" : `${stairs} timber stairs`}` : ""}`,
+    title: title.slice(0, 1).toUpperCase() + title.slice(1),
+    work: joinAnd(parts),
     scene,
-    caption: `Proposed work: ${many ? `${built.length} walls, ${lengthM.toFixed(1)} m in all` : `${lengthM.toFixed(1)} m of wall`}${stairs ? `, ${stairs} stair${stairs > 1 ? "s" : ""}` : ""}. Illustration only — not to scale for setting out.`,
+    caption: `Proposed work: ${captionParts.join(", ")}. Illustration only — not to scale for setting out.`,
     scope,
     obstructions: built.filter(({ profile }) => profile.obstructions.length).map(({ w, profile }) => ({ wallName: many ? w.name : null, profile })),
   }
@@ -77,7 +100,7 @@ const SiteEstimate: React.FC<{
   return (
     <>
       <p className={styles.hint}>
-        The whole job priced together: every wall and every stair, with the site&apos;s own markup, extra lines and
+        The whole job priced together: every wall, deck and stair, with the site&apos;s own markup, extra lines and
         proposal. (Each wall&apos;s own estimate, inside the wall, still prices that wall and its stairs on their own.)
       </p>
       <EstimateCard

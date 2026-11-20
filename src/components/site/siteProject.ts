@@ -22,6 +22,10 @@ import type { ElevationExtra } from "../retainingWall/wallProfileDiagram"
 import { DEFAULT_ESTIMATE_SETTINGS, estimateSettingsFromData, type AddedMaterial, type EstimateSettings } from "../retainingWall/pricing"
 import { stairInputFromData } from "../stairs/stairData"
 import { combineOrder, CombinedOrderLine, stairLabourHours, stairOrder, StairOrderLine } from "../stairs/stairMaterials"
+import { planMixedStock } from "../stairs/stairs"
+import { buildFrame, DEFAULT_DECK_FRAME, FrameInput, frameInputFromData, FrameLayout, pinsFromData, rectangleOutline, splitRun } from "../floorFraming/frame"
+import { frameOrder } from "../floorFraming/frameOrder"
+import type { RenderBoard } from "../floorFraming/frameRender3d"
 
 export const MIN_STAIR_ANGLE_DEG = 30
 export const MAX_STAIR_ANGLE_DEG = 150
@@ -45,8 +49,11 @@ export const STAIR_TOP_LABELS: Record<StairTop, string> = {
 
 export interface SiteStair {
   id: string
-  /** the site wall it comes down from */
+  /** the site wall it comes down from ("" when it's off a deck) */
   wallId: string
+  /** or the site deck it comes down from; `segmentIndex` is then the
+   * deck's edge (0 top, 1 right, 2 bottom, 3 left, as first placed) */
+  deckId: string | null
   /** e.g. "Steps to the lawn" */
   label: string
   /** the wall (run) it comes down from */
@@ -88,15 +95,39 @@ export interface SiteWall {
   wall: WallProject
 }
 
+/** A deck — or a floor under sheets — on the site: a rectangle of the
+ * Floor Framing engine's frame, `lengthM` along its joists and `widthM`
+ * across, placed like a wall: turned `rotationDeg` (clockwise on screen)
+ * about its first corner, which sits at xM, yM. Its own plan has x
+ * across the joists and y along them, from that corner. The ground
+ * under it is at RL `groundLevelM`; its top is `frame.heightMm` above. */
+export interface SiteDeck {
+  id: string
+  name: string
+  xM: number
+  yM: number
+  rotationDeg: number
+  lengthM: number
+  widthM: number
+  groundLevelM: number
+  /** mm, decking boards (when it's decked) */
+  boardWidth: number
+  boardGap: number
+  frame: FrameInput
+}
+
 export interface SiteProject {
   walls: SiteWall[]
   stairs: SiteStair[]
+  decks: SiteDeck[]
+  /** what's typed into the decks' live order */
+  deckOrderPins: Record<string, Record<string, number>>
   /** pricing for the whole job (markup, extra lines, the proposal's
    * details); null until it's first changed — see siteEstimateSettings */
   estimate: EstimateSettings | null
 }
 
-export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [], estimate: null })
+export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [], decks: [], deckOrderPins: {}, estimate: null })
 
 /** The site's pricing, or until it's been set, the first wall's (with
  * every wall's extra lines). */
@@ -115,9 +146,10 @@ export const newSiteWall = (wall: WallProject, name: string, source: string, at:
   wall,
 })
 
-export const newSiteStair = (wallId: string, segmentIndex: number, segLengthM: number): SiteStair => ({
+export const newSiteStair = (wallId: string, segmentIndex: number, segLengthM: number, deckId: string | null = null): SiteStair => ({
   id: randomId(),
-  wallId,
+  wallId: deckId ? "" : wallId,
+  deckId,
   label: "",
   segmentIndex,
   from: "start",
@@ -132,6 +164,41 @@ export const newSiteStair = (wallId: string, segmentIndex: number, segLengthM: n
 })
 
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback)
+
+export const newSiteDeck = (name: string, at: { xM: number; yM: number }, groundLevelM = 0): SiteDeck => ({
+  id: randomId(),
+  name,
+  xM: at.xM,
+  yM: at.yM,
+  rotationDeg: 0,
+  lengthM: 3,
+  widthM: 4,
+  groundLevelM,
+  boardWidth: 140,
+  boardGap: 5,
+  frame: { ...DEFAULT_DECK_FRAME },
+})
+
+const deckFromSiteData = (raw: unknown, n: number): SiteDeck | null => {
+  if (typeof raw !== "object" || raw === null) return null
+  const d = raw as Record<string, unknown>
+  const pos = (v: unknown, fallback: number) => Math.max(0.3, num(v, fallback))
+  const frame = frameInputFromData(d.frame, DEFAULT_DECK_FRAME)
+  return {
+    id: typeof d.id === "string" && d.id ? d.id : randomId(),
+    name: typeof d.name === "string" && d.name ? d.name : `Deck ${n + 1}`,
+    xM: num(d.xM, 0),
+    yM: num(d.yM, 0),
+    rotationDeg: num(d.rotationDeg, 0),
+    lengthM: pos(d.lengthM, 3),
+    widthM: pos(d.widthM, 4),
+    groundLevelM: num(d.groundLevelM, 0),
+    boardWidth: Math.max(40, num(d.boardWidth, 140)),
+    boardGap: Math.max(0, num(d.boardGap, 5)),
+    // on a site, a frame stands on the ground (not between walls)
+    frame: { ...frame, support: frame.support === "walls" ? "bearers" : frame.support },
+  }
+}
 
 export { stairInputFromData }
 
@@ -163,12 +230,14 @@ export const siteFromData = (raw: unknown): SiteProject => {
         })()
       : []
   const firstWall = walls[0]?.id ?? ""
+  const decks = (Array.isArray(d.decks) ? d.decks : []).map(deckFromSiteData).filter((x): x is SiteDeck => x !== null)
   const stairs = (Array.isArray(d.stairs) ? d.stairs : [])
     .filter((s) => typeof s === "object" && s !== null)
     .map(
       (s): SiteStair => ({
         id: typeof s.id === "string" && s.id ? s.id : randomId(),
-        wallId: typeof s.wallId === "string" && s.wallId ? s.wallId : firstWall,
+        deckId: typeof s.deckId === "string" && s.deckId ? s.deckId : null,
+        wallId: typeof s.deckId === "string" && s.deckId ? "" : typeof s.wallId === "string" && s.wallId ? s.wallId : firstWall,
         label: typeof s.label === "string" ? s.label : "",
         segmentIndex: typeof s.segmentIndex === "number" && s.segmentIndex >= 0 ? Math.round(s.segmentIndex) : 0,
         from: s.from === "end" ? "end" : "start",
@@ -182,7 +251,7 @@ export const siteFromData = (raw: unknown): SiteProject => {
         input: stairInputFromData(s.input),
       }),
     )
-  return { walls, stairs, estimate: typeof d.estimate === "object" && d.estimate !== null ? estimateSettingsFromData(d.estimate) : null }
+  return { walls, stairs, decks, deckOrderPins: pinsFromData(d.deckOrderPins), estimate: typeof d.estimate === "object" && d.estimate !== null ? estimateSettingsFromData(d.estimate) : null }
 }
 
 /** A wall's own plan point → the site plan. */
@@ -205,14 +274,116 @@ export const siteWallProfile = (wall: WallProject): WallProfile | null => {
   return profiles.get(wall) ?? null
 }
 
-/** Every stair placed on its wall (in the wall's own plan), with the wall. */
-export const sitePlacements = (site: SiteProject): { wall: SiteWall; placement: StairPlacement }[] =>
-  site.stairs.flatMap((st) => {
+/** A stair placed on what it comes off, and how to put that on the site. */
+export interface SitePlaced {
+  wall: SiteWall | null
+  deck: SiteDeck | null
+  placement: StairPlacement
+  /** the host's own plan (where the placement is) → the site */
+  place: (p: PlanPoint) => PlanPoint
+}
+
+/** Every stair placed on its wall or deck (in that one's own plan). */
+export const sitePlacements = (site: SiteProject): SitePlaced[] =>
+  site.stairs.flatMap((st): SitePlaced[] => {
+    if (st.deckId) {
+      const deck = site.decks.find((d) => d.id === st.deckId)
+      if (!deck) return []
+      const placement = placeStairOn(st, deckStairHost(deck))
+      return placement ? [{ wall: null, deck, placement, place: deckToSite(deck) }] : []
+    }
     const wall = site.walls.find((w) => w.id === st.wallId)
     if (!wall) return []
     const placement = placeStair(st, wall.wall.planPoints, wall.wall.retainedSide, siteWallProfile(wall.wall))
-    return placement ? [{ wall, placement }] : []
+    return placement ? [{ wall, deck: null, placement, place: toSite(wall) }] : []
   })
+
+// ── decks ──────────────────────────────────────────────────────────────
+
+/** A deck's own plan point (m) → the site. */
+export const deckToSite = (d: Pick<SiteDeck, "xM" | "yM" | "rotationDeg">) => {
+  const a = (d.rotationDeg * Math.PI) / 180
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  return (p: PlanPoint): PlanPoint => ({ xM: d.xM + p.xM * c - p.yM * s, yM: d.yM + p.xM * s + p.yM * c })
+}
+
+/** its corners in its own plan, round it clockwise on screen from the first */
+export const deckCorners = (d: Pick<SiteDeck, "lengthM" | "widthM">): PlanPoint[] => [
+  { xM: 0, yM: 0 },
+  { xM: d.widthM, yM: 0 },
+  { xM: d.widthM, yM: d.lengthM },
+  { xM: 0, yM: d.lengthM },
+]
+
+export const DECK_EDGE_NAMES = ["Top edge", "Right edge", "Bottom edge", "Left edge"]
+
+/** m, RL of the top of the deck */
+export const deckTopLevelM = (d: SiteDeck) => d.groundLevelM + d.frame.heightMm / 1000
+
+const deckFrames = new WeakMap<SiteDeck, FrameLayout>()
+/** The deck's frame, worked out once per version of the deck (its own
+ * plan, mm: joists along y). */
+export const siteDeckFrame = (d: SiteDeck): FrameLayout => {
+  let f = deckFrames.get(d)
+  if (!f) {
+    f = buildFrame(rectangleOutline(d.lengthM * 1000, d.widthM * 1000), "y", d.frame)
+    deckFrames.set(d, f)
+  }
+  return f
+}
+
+/** The deck's boards, rows across the joists, each row joined over a
+ * joist where it's longer than a board (its own plan, mm). */
+export function siteDeckBoards(d: SiteDeck): { boards: RenderBoard[]; pieces: number[] } {
+  if (d.frame.covering !== "decking") return { boards: [], pieces: [] }
+  const f = siteDeckFrame(d)
+  const W = d.widthM * 1000
+  const L = d.lengthM * 1000
+  const pitch = d.boardWidth + d.boardGap
+  const boards: RenderBoard[] = []
+  const pieces: number[] = []
+  for (let y = 0, row = 0; y < L - 1; y += pitch, row++) {
+    const run = splitRun(0, W, 6000, f.joistPositions)
+    // every other row starts from the far end, so the joins stagger
+    let x = row % 2 ? W : 0
+    for (const len of row % 2 ? [...run].reverse() : run) {
+      const [a, b] = row % 2 ? [x - len, x] : [x, x + len]
+      boards.push({ start: a, end: b, rowStart: y, rowEnd: Math.min(y + d.boardWidth, L) })
+      pieces.push(len)
+      x = row % 2 ? a : b
+    }
+  }
+  return { boards, pieces }
+}
+
+/** The edges of a deck as somewhere stairs come down from: level all
+ * round, the ground at its ground, the top at its top. */
+export function deckStairHost(d: SiteDeck): StairHost {
+  const c = deckCorners(d)
+  const points = [...c, c[0]]
+  let at = 0
+  const segments = c.map((a, i) => {
+    const b = points[i + 1]
+    const lengthM = Math.hypot(b.xM - a.xM, b.yM - a.yM)
+    const seg = { index: i, startXM: at, endXM: at + lengthM, lengthM }
+    at += lengthM
+    return seg
+  })
+  const levels = { groundLevelM: d.groundLevelM, topLevelM: deckTopLevelM(d), postWidthM: 0 }
+  return {
+    points,
+    segments,
+    outward: (i) => {
+      const a = points[i]
+      const b = points[i + 1]
+      const len = Math.hypot(b.xM - a.xM, b.yM - a.yM) || 1
+      // round clockwise on screen (y down), outside is to the left
+      return { xM: (b.yM - a.yM) / len, yM: -(b.xM - a.xM) / len }
+    },
+    levelsAt: () => levels,
+  }
+}
 
 /** The wall's levels at a point along it (m), straight-line between the
  * posts either side. */
@@ -231,6 +402,28 @@ export const levelsAt = (profile: WallProfile, xM: number): { groundLevelM: numb
   }
   const last = posts[posts.length - 1]
   return { groundLevelM: last.groundLevelM, topLevelM: last.topLevelM, postWidthM: last.widthM }
+}
+
+/** Somewhere a stair comes down from: a line of runs (a wall's plan, or
+ * a deck's edges), the way out from each run (the low side), and the
+ * levels along it. */
+export interface StairHost {
+  points: PlanPoint[]
+  segments: { index: number; startXM: number; endXM: number; lengthM: number }[]
+  outward: (segmentIndex: number) => PlanPoint
+  /** at m along the unfolded line: the ground and the top, and how far
+   * its face stands out from the line (half a post) */
+  levelsAt: (xM: number) => { groundLevelM: number; topLevelM: number; postWidthM: number } | null
+}
+
+export const wallStairHost = (points: PlanPoint[], retainedSide: RetainedSide, profile: WallProfile): StairHost => {
+  const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
+  return {
+    points,
+    segments: profile.segments,
+    outward: (i) => sideNormal(points[i], points[i + 1], lowSide),
+    levelsAt: (x) => levelsAt(profile, x),
+  }
 }
 
 /** A stair worked out where it sits on the wall. */
@@ -271,7 +464,13 @@ const clampAngle = (deg: number) => Math.min(MAX_STAIR_ANGLE_DEG, Math.max(MIN_S
  * while the wall isn't worked out, or the stair's wall is gone. */
 export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: RetainedSide, profile: WallProfile | null): StairPlacement | null {
   if (!profile) return null
-  const seg = profile.segments[stair.segmentIndex]
+  return placeStairOn(stair, wallStairHost(points, retainedSide, profile))
+}
+
+/** placeStair on any host: a wall, or a deck's edge */
+export function placeStairOn(stair: SiteStair, host: StairHost): StairPlacement | null {
+  const { points } = host
+  const seg = host.segments[stair.segmentIndex]
   const a = points[stair.segmentIndex]
   const b = points[stair.segmentIndex + 1]
   if (!seg || !a || !b) return null
@@ -291,9 +490,9 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
   const fixedXM = seg.startXM + along
 
   if (centreAlong - halfAlongM < -1e-6 || centreAlong + halfAlongM > seg.lengthM + 1e-6)
-    problems.push("It runs past the end of its wall — move it in, or make it narrower.")
+    problems.push(stair.deckId ? "It runs past the corner of the deck — move it in, or make it narrower." : "It runs past the end of its wall — move it in, or make it narrower.")
 
-  const levels = levelsAt(profile, Math.min(seg.endXM, Math.max(seg.startXM, centreXM)))
+  const levels = host.levelsAt(Math.min(seg.endXM, Math.max(seg.startXM, centreXM)))
   if (!levels) return null
   const bottomLevelM = levels.groundLevelM + stair.bottomOffsetMm / 1000
   const stairTopLevelM = levels.topLevelM + stair.topOffsetMm / 1000
@@ -304,10 +503,9 @@ export function placeStair(stair: SiteStair, points: PlanPoint[], retainedSide: 
   const layout = calculateLayout(input, result)
 
   // the wall's frame there: along it, and out toward the low ground
-  const lowSide: RetainedSide = retainedSide === "left" ? "right" : "left"
   const len = Math.hypot(b.xM - a.xM, b.yM - a.yM) || 1
   const u = { xM: (b.xM - a.xM) / len, yM: (b.yM - a.yM) / len }
-  const n = sideNormal(a, b, lowSide)
+  const n = host.outward(stair.segmentIndex)
   // the way down the stair, and the way up
   const down = { xM: Math.cos(theta) * u.xM + Math.sin(theta) * n.xM, yM: Math.cos(theta) * u.yM + Math.sin(theta) * n.yM }
   const up = { x: -down.xM, y: -down.yM }
@@ -527,5 +725,104 @@ export function siteStairScope(placements: StairPlacement[], wallCount: number, 
     const top = st.top === "wallRiser" ? ", the wall being the top riser" : ", with its top tread level with the top of the wall"
     const posts = r.stringer.posts.length > 0 || p.layout.turns.some((t) => !t.onPads && t.posts.length) ? " Support posts concreted in." : ""
     return `${name} a timber stair down from ${wall}, ${i.width} mm wide: ${r.risers} risers of ${Math.round(r.rise)} mm and runs of ${Math.round(r.going)} mm${turns ? `, with ${turns} turn${turns > 1 ? "s" : ""}` : ""}${top}${fill}. Framed in H3.2 ${framing}, with ${i.boardWidth} × ${i.boardThickness} decking treads${i.riserBoards ? " and riser boards" : ""}.${posts}`
+  })
+}
+
+// ── what the decks need: the order, the estimate, the proposal ────────
+
+/** decking boards laid, hours a square metre */
+const DECK_BOARD_HOURS_PER_M2 = 0.5
+
+/** Everything to buy for one deck: its frame's order, and its boards. */
+export function siteDeckOrderLines(d: SiteDeck): StairOrderLine[] {
+  const f = siteDeckFrame(d)
+  if (f.needsEngineer) return []
+  const { boards, pieces } = siteDeckBoards(d)
+  const crossings = boards.reduce((a, b) => a + f.joistPositions.filter((j) => j >= b.start - 1 && j <= b.end + 1).length, 0)
+  const lines = frameOrder(f, { boardCrossings: crossings })
+  if (pieces.length) {
+    const plan = planMixedStock(pieces)
+    const t = d.frame.boardThicknessMm
+    lines.push({
+      kind: "decking",
+      use: "Decking boards",
+      material: `${d.boardWidth} × ${t} decking`,
+      size: `${d.boardWidth} x ${t}`,
+      count: plan ? plan.lengths : pieces.length,
+      lengthM: plan ? plan.lengthM : 6,
+      unit: "lengths",
+      detail: `${pieces.length} pieces`,
+      pieces: plan ? pieces : undefined,
+    })
+  }
+  return lines
+}
+
+/** hours to build a deck: its frame, and its boards */
+export const siteDeckHours = (d: SiteDeck) => {
+  const f = siteDeckFrame(d)
+  const boards = d.frame.covering === "decking" ? d.lengthM * d.widthM * DECK_BOARD_HOURS_PER_M2 : 0
+  return Math.round((f.labour.totalHours + boards) * 2) / 2
+}
+
+/** Every deck's order added up, with which deck each line is for. */
+export const siteDeckOrder = (decks: SiteDeck[]): CombinedOrderLine[] =>
+  combineOrder(decks.flatMap((d) => siteDeckOrderLines(d).map((line) => ({ line, from: decks.length > 1 ? d.name : "" }))))
+
+/** The decks as estimate lines, the same way as the stairs: timber and
+ * decking by the metre a size, piles by the metre, concrete with 10%
+ * over, sheets and fixings each, and labour. */
+export function siteDeckEstimate(decks: SiteDeck[]): AddedMaterial[] {
+  const priced = decks.filter((d) => !siteDeckFrame(d).needsEngineer)
+  if (!priced.length) return []
+  const order = siteDeckOrder(priced)
+  const out: AddedMaterial[] = []
+  const byMaterial = new Map<string, CombinedOrderLine[]>()
+  for (const l of order) if (l.lengthM !== null) byMaterial.set(`${l.kind}|${l.material}`, [...(byMaterial.get(`${l.kind}|${l.material}`) ?? []), l])
+  for (const lines of byMaterial.values()) {
+    const first = lines[0]
+    const metres = lines.reduce((a, l) => a + l.count * (l.lengthM ?? 0), 0)
+    out.push({
+      key: `decks:${first.kind}:${normSize(first.size)}`,
+      category: first.kind === "posts" ? "posts" : "timber",
+      description: `Decks — ${first.material}`,
+      detail: stockText(lines),
+      quantity: Number(metres.toFixed(2)),
+      unit: "m",
+      size: first.size,
+    })
+  }
+  const concrete = order.filter((l) => l.kind === "concrete").reduce((a, l) => a + l.count, 0)
+  if (concrete > 0)
+    out.push({ key: "decks:concrete", category: "concrete", description: "Decks — concrete for piles", detail: `${concrete.toFixed(3)} m³ + 10% waste`, quantity: Number((concrete * 1.1).toFixed(3)), unit: "m³" })
+  for (const l of order.filter((x) => x.kind === "sheets"))
+    out.push({ key: `decks:sheets:${normSize(l.material)}`, category: "other", description: `Floors — ${l.material}`, quantity: l.count, unit: "each", priceUnit: "each" })
+  for (const l of order.filter((x) => x.kind === "screws"))
+    out.push({ key: `decks:fixings:${normSize(l.material)}`, category: "fixings", description: `Decks — ${l.material}`, quantity: l.count, unit: "each", priceUnit: "each" })
+  const hours = priced.reduce((a, d) => a + siteDeckHours(d), 0)
+  if (hours > 0)
+    out.push({
+      key: "decks:labour",
+      category: "labour",
+      description: "Labour — decks",
+      detail: priced.map((d) => `${d.name}: ${siteDeckHours(d)} h`).join(", "),
+      quantity: Number(hours.toFixed(1)),
+      unit: "hours",
+    })
+  return out
+}
+
+/** The decks in the proposal's scope of works, one item each. */
+export function siteDeckScope(decks: SiteDeck[]): string[] {
+  return decks.map((d) => {
+    const f = siteDeckFrame(d)
+    const decked = d.frame.covering === "decking"
+    const what = decked ? "timber deck" : "timber floor"
+    const held =
+      d.frame.support === "ledger"
+        ? `hung off a ledger bolted to the house and carried on ${f.members.filter((m) => m.kind === "bearer").length} bearer line${f.members.filter((m) => m.kind === "bearer").length === 1 ? "" : "s"}`
+        : `on ${f.members.filter((m) => m.kind === "bearer").length} bearer lines`
+    const top = decked ? `${d.boardWidth} × ${d.frame.boardThicknessMm} decking` : `${d.frame.sheet.thicknessMm} mm ${d.frame.sheet.kind === "ply" ? "ply" : "particleboard"} flooring`
+    return `${d.name}: build a ${d.lengthM.toFixed(2)} × ${d.widthM.toFixed(2)} m ${what}, ${d.frame.heightMm} mm off the ground — ${f.joistSize.replace("mm", "").replace(" x ", " × ")} ${f.treatment} joists at ${f.actualSpacingMm} mm ${held}, on ${f.piles.length} H5 piles concreted in, finished in ${top}.`
   })
 }

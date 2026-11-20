@@ -22,6 +22,35 @@ import { UnitField } from "../retaining-walls/obstructionsCard"
 import StairsPage from "../stairs/stairsPage"
 import styles from "../retaining-walls/obstructionsCard.module.scss"
 
+/** What the stairs come down from — a wall, or a deck's edges — as the
+ * card needs it. */
+export interface StairHostInfo {
+  noun: "wall" | "deck"
+  segments: { index: number; lengthM: number }[]
+  locked: boolean
+  /** where a new stair goes */
+  shownSegment: number
+  endName: (segmentIndex: number, which: "start" | "end") => string
+  /** e.g. "Wall B", "Top edge" */
+  segmentName: (segmentIndex: number) => string
+}
+
+/** a retaining wall, from its editor */
+export const wallHostInfo = (ctx: EditorAddOnContext): StairHostInfo => {
+  const segments = ctx.profile?.segments ?? []
+  return {
+    noun: "wall",
+    segments,
+    locked: ctx.locked,
+    shownSegment: ctx.shownSegment,
+    endName: ctx.endName,
+    segmentName: (i) => (segments.length > 1 ? `Wall ${segmentLabel(i)}` : "The wall"),
+  }
+}
+
+const topLabel = (t: StairTop, noun: string) =>
+  noun === "wall" ? STAIR_TOP_LABELS[t] : t === "wallRiser" ? "The deck is the last step — the top tread stops at its edge" : "The top tread is level with the deck — the stair has its own last riser"
+
 export const STAIR_COLOR = "#4f6378"
 
 const complianceText = (p: StairPlacement) =>
@@ -36,7 +65,7 @@ const complianceText = (p: StairPlacement) =>
  * wall's height there. Folded to a line each, except the one being
  * edited. */
 const StairsCard: React.FC<{
-  ctx: EditorAddOnContext
+  host: StairHostInfo
   stairs: SiteStair[]
   placements: Map<string, StairPlacement>
   onChange: (next: SiteStair[]) => void
@@ -46,9 +75,10 @@ const StairsCard: React.FC<{
   calculatorHref: (stairId: string) => string
   /** the site wall these stairs come off */
   wallId: string
-}> = ({ ctx, stairs, placements, onChange, selectedId, onSelect, calculatorHref, wallId }) => {
-  const { profile, locked, endName } = ctx
-  const segments = profile?.segments ?? []
+  /** …or the site deck */
+  deckId?: string | null
+}> = ({ host, stairs, placements, onChange, selectedId, onSelect, calculatorHref, wallId, deckId = null }) => {
+  const { locked, endName, segments, noun } = host
   const update = (id: string, patch: Partial<SiteStair>) => onChange(stairs.map((s) => (s.id === id ? { ...s, ...patch } : s)))
 
   return (
@@ -60,8 +90,8 @@ const StairsCard: React.FC<{
           variant="secondary"
           disabled={locked || segments.length === 0}
           onClick={() => {
-            const seg = segments[Math.min(ctx.shownSegment, segments.length - 1)]
-            const s = newSiteStair(wallId, seg.index, seg.lengthM)
+            const seg = segments[Math.min(host.shownSegment, segments.length - 1)]
+            const s = newSiteStair(wallId, seg.index, seg.lengthM, deckId)
             onChange([...stairs, s])
             onSelect(s.id)
           }}
@@ -71,10 +101,9 @@ const StairsCard: React.FC<{
       </div>
       {(stairs.length === 0 || stairs.some((s) => s.id === selectedId)) && (
         <p className={styles.hint}>
-          Stairs from the top of the wall down to the ground in front of it. Pin the top tread to a point along the wall,
-          measured from a corner or wall end. The rise comes off the wall there — from its ground, raised by any fill
-          where the stair finishes, up to its top, plus or minus what you set. The wall can be the last riser, or the top
-          tread can sit level with the top.
+          {noun === "wall"
+            ? "Stairs from the top of the wall down to the ground in front of it. Pin the top tread to a point along the wall, measured from a corner or wall end. The rise comes off the wall there — from its ground, raised by any fill where the stair finishes, up to its top, plus or minus what you set. The wall can be the last riser, or the top tread can sit level with the top."
+            : "Stairs from the deck down to the ground. Pin the top tread to a point along one of the deck's edges, measured from a corner. The rise is the deck's height — from its ground, raised by any fill where the stair finishes, up to the top of the decking, plus or minus what you set. The deck can be the top step, or the top tread can sit level with it."}
         </p>
       )}
 
@@ -135,11 +164,11 @@ const StairsCard: React.FC<{
               </div>
 
               <p className={styles.summary}>
-                {segments.length > 1 ? `Wall ${segmentLabel(st.segmentIndex)} · ` : ""}
+                {segments.length > 1 ? `${host.segmentName(st.segmentIndex)} · ` : ""}
                 {STAIR_ANCHOR_LABELS[st.anchor].replace("Its ", "")} {st.distanceM.toFixed(2)} m from {endName(st.segmentIndex, st.from)}
                 {p
                   ? ` · ${p.result.risers} risers of ${Math.round(p.result.rise)} (${p.input.totalRise} total) · ${Math.round(p.result.going)} run · ${(p.result.totalRun / 1000).toFixed(2)} m out · ${complianceText(p)}`
-                  : " · the wall needs a height first"}
+                  : ` · the ${noun} needs a height first`}
               </p>
               {p?.problems.map((msg) => (
                 <p key={msg} className={styles.warn}>
@@ -162,7 +191,7 @@ const StairsCard: React.FC<{
                       />
                     </div>
                     <div className={styles.field}>
-                      <label htmlFor={key("wall")}>Comes off wall</label>
+                      <label htmlFor={key("wall")}>Comes off</label>
                       <select
                         id={key("wall")}
                         value={st.segmentIndex}
@@ -173,10 +202,10 @@ const StairsCard: React.FC<{
                       >
                         {segments.map((s) => (
                           <option key={s.index} value={s.index}>
-                            {segments.length > 1 ? `Wall ${segmentLabel(s.index)}` : "The wall"} · {s.lengthM.toFixed(2)} m
+                            {host.segmentName(s.index)} · {s.lengthM.toFixed(2)} m
                           </option>
                         ))}
-                        {!seg && <option value={st.segmentIndex}>A wall that&apos;s gone</option>}
+                        {!seg && <option value={st.segmentIndex}>{noun === "wall" ? "A wall that's gone" : "An edge that's gone"}</option>}
                       </select>
                     </div>
                     <div className={styles.field}>
@@ -228,7 +257,7 @@ const StairsCard: React.FC<{
                     />
                     <UnitField
                       id={key("bottom")}
-                      label="Bottom: finished ground above the wall's ground (mm)"
+                      label={`Bottom: finished ground above the ${noun}'s ground (mm)`}
                       value={st.bottomOffsetMm}
                       scale={1}
                       step={10}
@@ -238,7 +267,7 @@ const StairsCard: React.FC<{
                     />
                     <UnitField
                       id={key("topOffset")}
-                      label="Top: finishes above the top of the wall (mm, − for below)"
+                      label={`Top: finishes above the top of the ${noun} (mm, − for below)`}
                       value={st.topOffsetMm}
                       scale={1}
                       step={10}
@@ -251,7 +280,7 @@ const StairsCard: React.FC<{
                       <select id={key("top")} value={st.top} onChange={(e) => update(st.id, { top: e.target.value as StairTop })}>
                         {(Object.keys(STAIR_TOP_LABELS) as StairTop[]).map((t) => (
                           <option key={t} value={t}>
-                            {STAIR_TOP_LABELS[t]}
+                            {topLabel(t, noun)}
                           </option>
                         ))}
                       </select>
@@ -259,10 +288,10 @@ const StairsCard: React.FC<{
                   </div>
                   {p && (
                     <p className={styles.status}>
-                      From the wall there: top RL {p.topLevelM.toFixed(3)}, ground RL {p.groundLevelM.toFixed(3)}. The stair runs from RL{" "}
+                      From the {noun} there: top RL {p.topLevelM.toFixed(3)}, ground RL {p.groundLevelM.toFixed(3)}. The stair runs from RL{" "}
                       {p.bottomLevelM.toFixed(3)} at the bottom{st.bottomOffsetMm ? ` (${st.bottomOffsetMm > 0 ? "+" : ""}${Math.round(st.bottomOffsetMm)} fill)` : ""} up to RL{" "}
                       {p.stairTopLevelM.toFixed(3)}
-                      {st.topOffsetMm ? ` (${st.topOffsetMm > 0 ? "+" : ""}${Math.round(st.topOffsetMm)} on the top of the wall)` : ""} —{" "}
+                      {st.topOffsetMm ? ` (${st.topOffsetMm > 0 ? "+" : ""}${Math.round(st.topOffsetMm)} on the top of the ${noun})` : ""} —{" "}
                       {p.input.totalRise} mm of rise.
                       {st.top === "onWall" && " The top tread, level with the top, is in the material order (its own frame and boards)."}
                     </p>
@@ -293,7 +322,7 @@ const StairsCard: React.FC<{
                       <StairsPage
                         value={p.input}
                         onChange={(input) => update(st.id, { input: { ...input, totalRise: st.input.totalRise } })}
-                        riseNote="From the wall: the bottom to the top levels set above"
+                        riseNote={`From the ${noun}: the bottom to the top levels set above`}
                         extraTopTread={st.top === "onWall"}
                       />
                     </div>

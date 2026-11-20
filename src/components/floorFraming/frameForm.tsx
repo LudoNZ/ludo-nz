@@ -19,10 +19,14 @@ const FrameForm: React.FC<{
   mode: "floor" | "deck"
   /** names for the two ends of the joists, for where the ledger goes */
   endLabels?: { start: string; end: string }
+  /** what it can stand on (default: walls too, under a floor) */
+  supports?: FrameSupport[]
+  /** joist spacing set here (default: under a floor) */
+  showSpacing?: boolean
   children?: React.ReactNode
-}> = ({ value, onChange, mode, endLabels = { start: "Top edge", end: "Bottom edge" }, children }) => {
+}> = ({ value, onChange, mode, endLabels = { start: "Top edge", end: "Bottom edge" }, supports: supportsProp, showSpacing = mode === "floor", children }) => {
   const set = <K extends keyof FrameInput>(k: K, v: FrameInput[K]) => onChange({ ...value, [k]: v })
-  const supports: FrameSupport[] = mode === "deck" ? ["bearers", "ledger"] : ["walls", "bearers", "ledger"]
+  const supports: FrameSupport[] = supportsProp ?? (mode === "deck" ? ["bearers", "ledger"] : ["walls", "bearers", "ledger"])
   const walls = value.support === "walls"
   const sheetIndex = SHEET_PRESETS.findIndex((p) => p.sheet.kind === value.sheet.kind && p.sheet.lengthMm === value.sheet.lengthMm && p.sheet.thicknessMm === value.sheet.thicknessMm)
 
@@ -39,7 +43,7 @@ const FrameForm: React.FC<{
           ))}
         </select>
       </div>
-      {mode === "floor" && (
+      {showSpacing && (
         <div className={styles.field}>
           <label htmlFor="frame-spacing">Joist spacing</label>
           <select id="frame-spacing" value={value.joistSpacing} onChange={(e) => set("joistSpacing", Number(e.target.value))}>

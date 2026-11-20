@@ -16,7 +16,7 @@ const SAVE_DELAY_MS = 1000
 type State =
   | { kind: "loading" }
   | { kind: "missing"; text: string }
-  | { kind: "ready"; location: ProjectLocation; projectName: string; stairName: string; onWall: boolean; input: StairInput }
+  | { kind: "ready"; location: ProjectLocation; projectName: string; stairName: string; onWall: boolean; host: "wall" | "deck"; input: StairInput }
 
 /** The stairs calculator on one stair of a site project
  * (/stairs?site=…&stair=…): the same stair as in the project, and every
@@ -48,7 +48,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string; owner: string
           }
           const st = found.site.stairs[n]
           locationRef.current = loc
-          setState({ kind: "ready", location: loc, projectName: found.name, stairName: st.label || `Stairs ${n + 1}`, onWall: st.top === "onWall", input: st.input })
+          setState({ kind: "ready", location: loc, projectName: found.name, stairName: st.label || `Stairs ${n + 1}`, onWall: st.top === "onWall", host: st.deckId ? "deck" : "wall", input: st.input })
           return
         } catch (err) {
           if (cancelled) return
@@ -117,7 +117,7 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string; owner: string
     <StairsPage
       value={state.input}
       onChange={change}
-      riseNote="Set by the site project: from where the stair finishes at the bottom to the top of the wall"
+      riseNote={`Set by the site project: from where the stair finishes at the bottom to the top of the ${state.host}`}
       extraTopTread={state.onWall}
       header={
         <div className={styles.linked}>
@@ -127,8 +127,8 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string; owner: string
             <Link href={withOwner(siteProjectHref(projectId), owner, auth?.currentUser?.uid)}>
               <strong>{state.projectName}</strong>
             </Link>
-            . Changes here save to that stair in the project. Where it sits on the wall, and so its rise, is set in the
-            project.
+            . Changes here save to that stair in the project. Where it sits on the {state.host}, and so its rise, is set in
+            the project.
             <span className={styles.linkedStatus}>
               {status === "failed" ? "Couldn't save — it'll try again on the next change" : status === "unsaved" ? "Unsaved changes…" : status === "saving" ? "Saving…" : "All changes saved"}
               {state.location.kind === "public" && " · a public project: anyone with the link can edit it"}

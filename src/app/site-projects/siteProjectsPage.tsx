@@ -85,7 +85,7 @@ const SiteProjectsPage = () => {
       <WallProjectCard
         href={siteProjectHref(p.id)}
         name={p.name}
-        badge={`${p.location.kind === "public" ? "Public" : "Private"} · ${plural(p.summary?.wallCount ?? (p.summary?.wall ? 1 : 0), "wall")} · ${plural(p.summary?.stairs ?? 0, "stair")}`}
+        badge={`${p.location.kind === "public" ? "Public" : "Private"} · ${plural(p.summary?.wallCount ?? (p.summary?.wall ? 1 : 0), "wall")} · ${plural(p.summary?.stairs ?? 0, "stair")}${p.summary?.decks ? ` · ${plural(p.summary.decks, "deck")}` : ""}`}
         summary={(p.summary?.wallCount ?? 1) > 0 ? (p.summary?.wall ?? null) : null}
         updatedAt={p.updatedAt}
       />
@@ -146,7 +146,7 @@ const SiteProjectsPage = () => {
           column="Site"
           subscribe={subscribeToAllSiteProjects}
           hrefFor={siteProjectHref}
-          describe={(s: SiteSummary) => `${plural(s.wallCount ?? 0, "wall")} · ${plural(s.stairs ?? 0, "stair")} · ${s.wall?.wallLengthM ?? 0} m of wall`}
+          describe={(s: SiteSummary) => `${plural(s.wallCount ?? 0, "wall")} · ${plural(s.stairs ?? 0, "stair")}${s.decks ? ` · ${plural(s.decks, "deck")}` : ""} · ${s.wall?.wallLengthM ?? 0} m of wall`}
         />
       )}
     </div>

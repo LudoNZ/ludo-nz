@@ -9,6 +9,10 @@ import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
 import {
+  deckCorners,
+  deckToSite,
+  newSiteDeck,
+  siteDeckOrder,
   newSiteWall,
   placeStair,
   SiteProject,
@@ -28,11 +32,12 @@ import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
 import type { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
 import { deleteSiteProject, loadSiteProject, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
 import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../retaining-walls/retainingWallEditor"
-import StairsCard, { StairsPlanOverlay } from "../stairsCard"
+import StairsCard, { StairsPlanOverlay, wallHostInfo } from "../stairsCard"
 import { stairCalculatorHref } from "../stairLink"
 import { SitePlan, WallsCard } from "../siteView"
 import SiteRenderView from "../siteRenderView"
 import SiteEstimate from "../siteEstimate"
+import DecksCard from "../decksCard"
 import styles from "../siteView.module.scss"
 
 const SAVE_DELAY_MS = 1000
@@ -78,6 +83,7 @@ const SiteProjectEditor = () => {
   const [failed, setFailed] = useState(false)
   const [selectedStair, setSelectedStair] = useState<string | null>(null)
   const [selectedWall, setSelectedWall] = useState<string | null>(null)
+  const [selectedDeck, setSelectedDeck] = useState<string | null>(null)
   // the project lives in `latest` (so the wall editor's own changes don't
   // re-render the page round it); this re-renders when the page needs it
   const [, setVersion] = useState(0)
@@ -191,6 +197,11 @@ const SiteProjectEditor = () => {
   }
   const changeStairsRef = useRef(changeStairs)
   changeStairsRef.current = changeStairs
+  const changeDeckStairs = (deckId: string, next: SiteStair[]) => {
+    const site = latest.current.site
+    if (!site) return
+    commit({ ...site, stairs: [...site.stairs.filter((s) => s.deckId !== deckId), ...next] })
+  }
 
   // a stair edited in the calculator on its own (another tab) saves
   // straight to the project: pick that up on coming back, unless there's
@@ -277,12 +288,30 @@ const SiteProjectEditor = () => {
 
   const site = latest.current.site
   // every stair placed, worked out once per change of the walls or stairs
-  const sitePlacementCache = useRef<{ walls: unknown; stairs: unknown; value: ReturnType<typeof sitePlacements> } | null>(null)
+  const sitePlacementCache = useRef<{ walls: unknown; stairs: unknown; decks: unknown; value: ReturnType<typeof sitePlacements> } | null>(null)
   const placedOnSite = (s: SiteProject) => {
     const hit = sitePlacementCache.current
-    if (hit && hit.walls === s.walls && hit.stairs === s.stairs) return hit.value
+    if (hit && hit.walls === s.walls && hit.stairs === s.stairs && hit.decks === s.decks) return hit.value
     const value = sitePlacements(s)
-    sitePlacementCache.current = { walls: s.walls, stairs: s.stairs, value }
+    sitePlacementCache.current = { walls: s.walls, stairs: s.stairs, decks: s.decks, value }
+    // keep a deck stair's saved rise in step with the deck (as the wall
+    // editor does for a wall's), after this render
+    const stale = value.filter((p) => p.deck && p.placement.stair.input.totalRise !== p.placement.input.totalRise)
+    if (stale.length) {
+      const rises = new Map(stale.map((p) => [p.placement.stair.id, p.placement.input.totalRise]))
+      setTimeout(() => {
+        const cur = latest.current.site
+        if (!cur) return
+        let changed = false
+        const stairs = cur.stairs.map((st) => {
+          const r = rises.get(st.id)
+          if (r === undefined || st.input.totalRise === r) return st
+          changed = true
+          return { ...st, input: { ...st.input, totalRise: r } }
+        })
+        if (changed) commit({ ...cur, stairs })
+      }, 0)
+    }
     return value
   }
   const wallStairs = site?.stairs.filter((s) => s.wallId === wallParam) ?? []
@@ -303,7 +332,7 @@ const SiteProjectEditor = () => {
       return (
         <>
           <StairsCard
-            ctx={ctx}
+            host={wallHostInfo(ctx)}
             wallId={wallParam ?? ""}
             stairs={wallStairs}
             placements={placements}
@@ -407,6 +436,16 @@ const SiteProjectEditor = () => {
     commit({ ...site, walls: [...site.walls, added] })
     setSelectedWall(added.id)
   }
+  const addDeck = () => {
+    // to the right of whatever's there, on the lowest ground there is
+    const pts = [...site.walls.flatMap((w) => w.wall.planPoints.map(toSite(w))), ...site.decks.flatMap((d) => deckCorners(d).map(deckToSite(d)))]
+    const at = pts.length ? { xM: Math.ceil(Math.max(...pts.map((p) => p.xM)) + 2), yM: Math.floor(Math.min(...pts.map((p) => p.yM))) } : { xM: 0, yM: 0 }
+    const grounds = placements.map((p) => p.placement.groundLevelM)
+    const added = newSiteDeck(`Deck ${site.decks.length + 1}`, at, grounds.length ? Math.min(...grounds) : 0)
+    commit({ ...site, decks: [...site.decks, added] })
+    setSelectedDeck(added.id)
+  }
+  const deckOrder = siteDeckOrder(site.decks)
 
   return (
     <div className={styles.page}>
@@ -427,8 +466,18 @@ const SiteProjectEditor = () => {
       <SitePlan
         walls={site.walls}
         placements={placements}
+        decks={site.decks}
+        selectedDeckId={selectedDeck}
+        onSelectDeck={(id) => {
+          setSelectedDeck(id)
+          setSelectedWall(null)
+          document.getElementById("site-decks")?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }}
         selectedId={selectedWall}
-        onSelect={setSelectedWall}
+        onSelect={(id) => {
+          setSelectedWall(id)
+          if (id) setSelectedDeck(null)
+        }}
         onOpen={openWall}
         onMove={(id, xM, yM, done) => {
           const s = latest.current.site
@@ -456,13 +505,39 @@ const SiteProjectEditor = () => {
         }}
         onOpen={openWall}
       />
-      <SiteRenderView walls={site.walls} placements={placements} />
+      <DecksCard
+        decks={site.decks}
+        stairs={site.stairs}
+        placements={placements}
+        selectedId={selectedDeck}
+        onSelect={setSelectedDeck}
+        onChange={(decks) => commit({ ...site, decks })}
+        onAdd={addDeck}
+        onRemove={(id) => {
+          commit({ ...site, decks: site.decks.filter((d) => d.id !== id), stairs: site.stairs.filter((s) => s.deckId !== id) })
+          if (selectedDeck === id) setSelectedDeck(null)
+        }}
+        onChangeStairs={changeDeckStairs}
+        selectedStair={selectedStair}
+        onSelectStair={setSelectedStair}
+        calculatorHref={(stairId) => withOwner(stairCalculatorHref(projectId, stairId), owner, auth?.currentUser?.uid)}
+      />
+      <SiteRenderView walls={site.walls} placements={placements} decks={site.decks} />
       {placements.length > 0 && (
         <StairOrderCard
           title="Stair material order — the whole site"
           lines={siteStairOrder(placements.map((p) => p.placement))}
-          intro="Every stair on every wall, as stock lengths to order. Stairs are added and changed in their wall (Edit wall & stairs)."
+          intro="Every stair on every wall and deck, as stock lengths to order. A wall's stairs are added and changed in the wall (Edit wall & stairs); a deck's, in the deck above."
           note={STAIR_ORDER_NOTE}
+        />
+      )}
+      {deckOrder.length > 0 && (
+        <StairOrderCard
+          title="Deck and floor order — the whole site"
+          lines={deckOrder}
+          intro="Every deck's framing, piles, concrete, boards or sheets, and fixings. Framing timber is planned from every deck's cut pieces together."
+          pins={site.deckOrderPins}
+          onPinsChange={(deckOrderPins) => commit({ ...site, deckOrderPins })}
         />
       )}
       <div id="site-estimate">

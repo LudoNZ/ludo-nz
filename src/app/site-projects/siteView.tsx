@@ -5,13 +5,14 @@ import Button from "@/components/button/button"
 import { PlanPoint, sideNormal, totalLength } from "@/components/retainingWall/wallPlan"
 import { newBlankWall, WallProject } from "@/components/retainingWall/wallProject"
 import { StoredWallProject, subscribeToProjects } from "@/components/retainingWall/wallProjectStore"
-import { newSiteStair, SiteStair, SiteWall, StairPlacement, toSite } from "@/components/site/siteProject"
+import { deckCorners, deckToSite, newSiteStair, SiteDeck, SitePlaced, siteDeckFrame, SiteStair, SiteWall, toSite } from "@/components/site/siteProject"
 import { StoredStairProject, subscribeToStairProjects } from "@/components/stairs/stairProjectStore"
 import { UnitField } from "../retaining-walls/obstructionsCard"
 import { STAIR_COLOR } from "./stairsCard"
 import styles from "./siteView.module.scss"
 
 const WALL_COLOR = "#7a5a3a"
+export const DECK_COLOR = "#a8693f"
 const PICKED_COLOR = "#1e6b3a"
 /** a dragged wall's end snaps to another wall's end within this */
 const SNAP_M = 0.25
@@ -28,20 +29,27 @@ const sitePoints = (w: SiteWall) => w.wall.planPoints.map(toSite(w))
  * ends snap to the other walls' ends — tap one to pick it. */
 export const SitePlan: React.FC<{
   walls: SiteWall[]
-  placements: { wall: SiteWall; placement: StairPlacement }[]
+  placements: SitePlaced[]
+  decks?: SiteDeck[]
   selectedId: string | null
   onSelect: (id: string | null) => void
+  selectedDeckId?: string | null
+  onSelectDeck?: (id: string) => void
   /** live while dragging; `done` once it's let go */
   onMove: (id: string, xM: number, yM: number, done: boolean) => void
   onOpen: (id: string) => void
-}> = ({ walls, placements, selectedId, onSelect, onMove, onOpen }) => {
+}> = ({ walls, placements, decks = [], selectedId, onSelect, selectedDeckId = null, onSelectDeck, onMove, onOpen }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ id: string; start: PlanPoint; from: { xM: number; yM: number }; at: { xM: number; yM: number } | null } | null>(null)
   // the view is fitted to what's there when a drag starts, and held while it
   // goes on (a moving view under the pointer would fight the drag)
   const [heldView, setHeldView] = useState<string | null>(null)
 
-  const all = [...walls.flatMap(sitePoints), ...placements.flatMap(({ wall, placement }) => placement.treads.flat().map(toSite(wall)))]
+  const all = [
+    ...walls.flatMap(sitePoints),
+    ...decks.flatMap((d) => deckCorners(d).map(deckToSite(d))),
+    ...placements.flatMap(({ place, placement }) => placement.treads.flat().map(place)),
+  ]
   const xs = all.map((p) => p.xM)
   const ys = all.map((p) => p.yM)
   const pad = 2
@@ -190,8 +198,35 @@ export const SitePlan: React.FC<{
             </g>
           )
         })}
-        {placements.map(({ wall, placement }) => {
-          const t = toSite(wall)
+        {decks.map((d) => {
+          const t = deckToSite(d)
+          const picked = d.id === selectedDeckId
+          const f = siteDeckFrame(d)
+          const corners = deckCorners(d).map(t)
+          const mid = t({ xM: d.widthM / 2, yM: d.lengthM / 2 })
+          return (
+            <g key={d.id} className={styles.wall} onPointerDown={() => onSelectDeck?.(d.id)}>
+              <polygon
+                points={corners.map((q) => `${q.xM},${q.yM}`).join(" ")}
+                fill={DECK_COLOR}
+                fillOpacity={picked ? 0.3 : 0.16}
+                stroke={picked ? PICKED_COLOR : DECK_COLOR}
+                strokeWidth={stroke * (picked ? 1.4 : 0.9)}
+                strokeLinejoin="round"
+              />
+              {f.joistPositions.map((v) => {
+                const a = t({ xM: v / 1000, yM: 0 })
+                const b = t({ xM: v / 1000, yM: d.lengthM })
+                return <line key={v} x1={a.xM} y1={a.yM} x2={b.xM} y2={b.yM} stroke={DECK_COLOR} strokeOpacity={0.5} strokeWidth={stroke * 0.25} pointerEvents="none" />
+              })}
+              <circle cx={corners[0].xM} cy={corners[0].yM} r={stroke * 1.1} fill={picked ? PICKED_COLOR : DECK_COLOR} />
+              <text x={mid.xM} y={mid.yM} fontSize={font} textAnchor="middle" dominantBaseline="middle" fill={picked ? PICKED_COLOR : DECK_COLOR} fontWeight={600} pointerEvents="none">
+                {d.name}
+              </text>
+            </g>
+          )
+        })}
+        {placements.map(({ place: t, placement }) => {
           return (
             <g key={placement.stair.id} pointerEvents="none">
               {placement.treads.map((poly, i) => (
@@ -216,7 +251,7 @@ export const SitePlan: React.FC<{
           </text>
         </g>
       </svg>
-      {walls.length === 0 && <p className={styles.empty}>No walls yet — import one of your retaining walls below, or add a blank one.</p>}
+      {walls.length === 0 && decks.length === 0 && <p className={styles.empty}>Nothing on the site yet — import one of your retaining walls below, add a blank one, or add a deck.</p>}
     </div>
   )
 }

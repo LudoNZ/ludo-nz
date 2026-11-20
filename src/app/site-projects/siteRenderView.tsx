@@ -5,16 +5,17 @@ import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { useFlyCamera } from "@/components/render3d/useFlyCamera"
 import type { CameraFrame } from "@/components/render3d/perspective"
 import { buildSiteScene } from "@/components/site/siteRender3d"
-import type { SiteWall, StairPlacement } from "@/components/site/siteProject"
+import type { SiteDeck, SitePlaced, SiteWall } from "@/components/site/siteProject"
 import renderStyles from "@/components/retainingWall/wallRenderView.module.scss"
 import styles from "./siteView.module.scss"
 
-/** Every wall and stair on the site in 3D, from a camera you can swing
+/** Every wall, deck and stair on the site in 3D, from a camera you can swing
  * all the way round and tilt (drag it, or use the sliders). */
 const SiteRenderView: React.FC<{
   walls: SiteWall[]
-  placements: { wall: SiteWall; placement: StairPlacement }[]
-}> = ({ walls, placements }) => {
+  placements: SitePlaced[]
+  decks: SiteDeck[]
+}> = ({ walls, placements, decks }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-30)
   const [elevationDeg, setElevationDeg] = useState(30)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -32,7 +33,11 @@ const SiteRenderView: React.FC<{
   // a wall being dragged on the plan catches up here when there's time
   const shownWalls = useDeferredValue(walls)
   const shownPlacements = useDeferredValue(placements)
-  const scene = useMemo(() => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg, camera }), [shownWalls, shownPlacements, azimuthDeg, elevationDeg, camera])
+  const shownDecks = useDeferredValue(decks)
+  const scene = useMemo(
+    () => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg, camera }, shownDecks),
+    [shownWalls, shownPlacements, shownDecks, azimuthDeg, elevationDeg, camera],
+  )
   frameRef.current = scene?.frame ?? null
 
   return (

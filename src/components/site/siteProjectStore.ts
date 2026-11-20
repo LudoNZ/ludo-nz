@@ -18,6 +18,8 @@ export interface SiteSummary {
   /** how many retaining walls (site walls, not runs) */
   wallCount: number
   stairs: number
+  /** decks and floors (missing on projects saved before they existed) */
+  decks?: number
 }
 
 export interface StoredSiteProject {
@@ -84,6 +86,7 @@ export const summariseSite = (site: SiteProject): SiteSummary => {
     },
     wallCount: site.walls.length,
     stairs: site.stairs.length,
+    decks: site.decks.length,
   }
 }
 

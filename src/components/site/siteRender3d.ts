@@ -16,8 +16,10 @@ import { orderSolids, Solid, V3 } from "../stairs/stairRender3d"
 import { CameraState, FIT_CAMERA, makeCamera, surfaceAtCentre } from "../render3d/perspective"
 import type { RenderScene } from "../retainingWall/wallRender3d"
 import { sideNormal } from "../retainingWall/wallPlan"
-import type { StairPlacement } from "./siteProject"
-import { SiteWall, siteWallProfile, stairRenderExtra, toSite } from "./siteProject"
+import { deckToSite, SiteDeck, siteDeckBoards, siteDeckFrame, SitePlaced, SiteWall, siteWallProfile, stairRenderExtra, toSite } from "./siteProject"
+import { frameSolids } from "../floorFraming/frameRender3d"
+
+const NOTHING_HIDDEN = new Set<never>()
 
 export interface SiteRenderOptions {
   /** degrees, how far the camera swings round from looking at the walls' faces */
@@ -95,15 +97,15 @@ const extrude = (at: (u: number, n: number, z: number) => V3, profile: [number, 
 }
 
 /** Builds and projects the site. Null when there's nothing to draw. */
-export function buildSiteScene(walls: SiteWall[], placements: { wall: SiteWall; placement: StairPlacement }[], options: SiteRenderOptions): RenderScene | null {
+export function buildSiteScene(walls: SiteWall[], placements: SitePlaced[], options: SiteRenderOptions, decks: SiteDeck[] = []): RenderScene | null {
   const built = walls.flatMap((w) => {
     const profile = siteWallProfile(w.wall)
     if (!profile || profile.posts.length < 2 || w.wall.planPoints.length < 2) return []
     return [{ w, profile, pts: w.wall.planPoints.map(toSite(w)) }]
   })
-  if (!built.length) return null
-  // the ground everything stands on: the lowest ground of any wall
-  const base = Math.min(...built.flatMap(({ profile }) => profile.posts.map((p) => p.groundLevelM)))
+  if (!built.length && !decks.length) return null
+  // the ground everything stands on: the lowest ground of any wall or deck
+  const base = Math.min(...built.flatMap(({ profile }) => profile.posts.map((p) => p.groundLevelM)), ...decks.map((d) => d.groundLevelM))
 
   const solids: Solid[] = []
   /** where the camera looks square-on from: the walls' low sides, by length */
@@ -151,10 +153,32 @@ export function buildSiteScene(walls: SiteWall[], placements: { wall: SiteWall; 
     })
   }
 
-  // the stairs: the wall's own 3D world, put where the wall is on the site
-  for (const { wall, placement } of placements) {
-    if (!built.some((b) => b.w.id === wall.id)) continue
-    const place = toSite(wall)
+  // the decks: the frame's own model (mm, its own plan) put on the site
+  for (const d of decks) {
+    const f = siteDeckFrame(d)
+    const place = deckToSite(d)
+    const { boards } = siteDeckBoards(d)
+    for (const sd of frameSolids({ frame: f, boards: boards.length ? { list: boards, runsAlong: "x" } : undefined }, NOTHING_HIDDEN))
+      solids.push(
+        makeSolid(
+          sd.faces.map((face) => ({
+            color: face.color,
+            pts: face.pts.map(([x, y, z]): V3 => {
+              const q = place({ xM: x / 1000, yM: -y / 1000 })
+              return [q.xM, -q.yM, d.groundLevelM + z / 1000]
+            }),
+          })),
+        ),
+      )
+    // looking at it from in front of its bottom edge (its own +y, turned;
+    // world y is −plan y)
+    const r = (d.rotationDeg * Math.PI) / 180
+    facing = add(facing, scale([-Math.sin(r), -Math.cos(r), 0], Math.max(0.1, d.widthM)))
+  }
+
+  // the stairs: the wall's (or deck's) own 3D world, put where it is on the site
+  for (const { wall, placement, place } of placements) {
+    if (wall && !built.some((b) => b.w.id === wall.id)) continue
     for (const s of stairRenderExtra(placement).solids) {
       solids.push(
         makeSolid(
