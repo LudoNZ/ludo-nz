@@ -118,7 +118,7 @@ const StairRenderView: React.FC<{
     <div className={styles.renderRoot}>
       {/* stays mounted with everything hidden, so full-screen doesn't drop out */}
       <div className={styles.printArea}>
-        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} toolbar={memberToggles}>
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} headerTools={memberToggles}>
           {scene ? (
             <svg
               ref={svgRef}

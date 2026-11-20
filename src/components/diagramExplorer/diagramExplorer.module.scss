@@ -117,6 +117,7 @@
 .title {
   font-size: 0.95rem;
   margin-right: auto;
+  flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -229,11 +230,90 @@
   }
 }
 
+// a row of options that scrolls sideways rather than wrapping onto more
+// lines (which would take height from the drawing)
+.headerTools,
+.tools {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  white-space: nowrap;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  // whatever's put in here lays out in one row
+  > * {
+    flex-wrap: nowrap !important;
+  }
+  :global(label),
+  :global(button) {
+    flex-shrink: 0;
+  }
+}
+
+// takes the room between the title and the buttons, scrolling within it
+.headerTools {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+}
+
+// the bottom strip: whatever's in it side by side, in one row
+.tools {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 1rem;
+
+  > * {
+    flex-shrink: 0;
+    margin: 0 !important;
+  }
+}
+
 .hint {
   flex-basis: 100%;
   margin: 0;
   font-size: 0.78rem;
   opacity: 0.7;
+}
+
+// a phone on its side: every bit of height to the drawing — thinner
+// bars, the hint line left out, and both bars on one line
+@media (max-height: 500px) {
+  .topBar,
+  .bottomBar {
+    flex-wrap: nowrap;
+    padding-top: max(0.3rem, env(safe-area-inset-top));
+    padding-bottom: 0.3rem;
+  }
+
+  .bottomBar {
+    padding-bottom: max(0.3rem, env(safe-area-inset-bottom));
+  }
+
+  .hint,
+  .hintOnly {
+    display: none;
+  }
+
+  .modeSwitch button,
+  .editToggle,
+  .done {
+    min-height: 2rem;
+  }
+
+  .zoomButtons {
+    bottom: 0.5rem;
+
+    button {
+      width: 2.4rem;
+      height: 2.4rem;
+    }
+  }
 }
 
 @media print {

@@ -86,14 +86,19 @@ const DiagramExplorer: React.FC<{
   /** a 3D view that zooms and pans its own camera, flying in, rather than
    * being enlarged */
   camera?: ExploreCamera
-  /** shown along the bottom in full-screen (e.g. the 3D view's toggles) */
+  /** shown along the bottom in full-screen (e.g. the wall plan's Measure
+   * and turn controls); scrolls sideways rather than wrapping */
   toolbar?: ReactNode | ((view: ExploreState) => ReactNode)
+  /** a few options shown in the full-screen header, beside the title (e.g.
+   * the 3D view's toggles) — off the bottom, so the drawing gets the
+   * height; scrolls sideways when there's more than fits */
+  headerTools?: ReactNode
   /** a drawing that turns (given as a function, it draws itself turned
    * by `turn` about its middle): two fingers twist it full screen */
   turnable?: boolean
   /** fill the parent's height (a fixed-height pane) */
   fill?: boolean
-}> = ({ children, label, onOrbit, camera, toolbar, fill = false, editable = false, turnable = false }) => {
+}> = ({ children, label, onOrbit, camera, toolbar, headerTools, fill = false, editable = false, turnable = false }) => {
   const cameraRef = useRef(camera)
   cameraRef.current = camera
   const [exploring, setExploring] = useState(false)
@@ -344,6 +349,7 @@ const DiagramExplorer: React.FC<{
       {exploring && (
         <div className={styles.topBar}>
           <strong className={styles.title}>{label}</strong>
+          {headerTools && <div className={styles.headerTools}>{headerTools}</div>}
           {onOrbit && (
             <div className={styles.modeSwitch} role="radiogroup" aria-label="One-finger drag">
               {(["rotate", "pan"] as Mode[]).map((m) => (
@@ -422,12 +428,12 @@ const DiagramExplorer: React.FC<{
 
       {exploring ? (
         <>
-          <div className={styles.bottomBar}>
+          <div className={`${styles.bottomBar} ${toolbar ? "" : styles.hintOnly}`}>
             <p className={styles.hint}>
               {hint}
               {lockHint}
             </p>
-            {typeof toolbar === "function" ? toolbar(exploreState) : toolbar}
+            {toolbar && <div className={styles.tools}>{typeof toolbar === "function" ? toolbar(exploreState) : toolbar}</div>}
           </div>
         </>
       ) : (

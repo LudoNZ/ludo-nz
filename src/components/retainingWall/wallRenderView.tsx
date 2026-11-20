@@ -142,7 +142,7 @@ Show footings
   return (
     <div className={`${styles.renderRoot} ${compact ? styles.compact : ""}`}>
       <div className={styles.printArea}>
-        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} fill={compact} toolbar={footingsToggle}>
+        <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} fill={compact} headerTools={footingsToggle}>
           <svg
             ref={svgRef}
             viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
