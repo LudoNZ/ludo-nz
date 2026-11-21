@@ -430,6 +430,62 @@
   }
 }
 
+// the toolbar, and the plan's minimap beside it
+.diagramHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem 1rem;
+
+  .diagramToolbar {
+    flex: 1 1 auto;
+  }
+}
+
+.minimap {
+  flex: 0 0 auto;
+  width: 11rem;
+  height: 8.5rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: var(--borderRadius);
+  background: #fbfaf6;
+}
+
+.minimapFloor {
+  fill: rgba(0, 0, 0, 0.04);
+  stroke: none;
+}
+
+.minimapWall {
+  stroke: #9a958b;
+}
+
+.minimapElevation {
+  stroke: #3d3a35;
+}
+
+.minimapFocus {
+  stroke: var(--color-primary);
+}
+
+.minimapPlain {
+  stroke: #b9b4aa;
+}
+
+.minimapLabel {
+  fill: #6d6a62;
+}
+
+.minimapLabelOn {
+  fill: var(--color-primary);
+  font-weight: 700;
+}
+
+.minimapEye {
+  stroke: var(--color-primary);
+  fill: var(--color-primary);
+}
+
 .diagramToolbar {
   display: flex;
   flex-wrap: wrap;

@@ -11,6 +11,8 @@ import { calculateWall } from "./weatherboardCalc"
 import { setBoardSkipped, skipTotals } from "./skips"
 import JoinerySkipModal from "./joinerySkipModal"
 import HousePlanPanel from "./housePlanPanel"
+import { houseLayout } from "./housePlan"
+import WallMinimap from "./wallMinimap"
 import OpeningFields from "./openingFields"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
@@ -149,6 +151,8 @@ const WeatherboardEditor: React.FC<{
   // board ids ("N1-3a") shared by the drawing, cut list and schedule,
   // and which numbered stock board each one comes off
   const codes = useMemo(() => wallCodes(elevations), [elevations])
+  // where the walls go on plan, for the minimap beside the elevation
+  const layout = useMemo(() => houseLayout(project), [project])
   const boardSource = useMemo(() => stockBoardOf(plan), [plan])
   const [showLengths, setShowLengths] = useState(false)
   // "Skip boards" mode: tap boards on the elevation to leave them out
@@ -484,19 +488,34 @@ const WeatherboardEditor: React.FC<{
           </div>
 
           <div className={styles.diagramCard}>
-            <div className={styles.diagramToolbar}>
-              <label className={styles.lengthToggle}>
-                <input type="checkbox" checked={showLengths} onChange={(e) => setShowLengths(e.target.checked)} />
-                Show board lengths <span className={styles.hint}>— length and the stock board (#) it&apos;s cut from</span>
-              </label>
-              <button
-                type="button"
-                aria-pressed={skipMode}
-                className={`${styles.skipToggle} ${skipMode ? styles.skipToggleOn : ""}`}
-                onClick={() => setSkipMode((v) => !v)}
-              >
-                {skipMode ? "✓ Done skipping" : "Skip boards…"}
-              </button>
+            <div className={styles.diagramHead}>
+              <div className={styles.diagramToolbar}>
+                <label className={styles.lengthToggle}>
+                  <input type="checkbox" checked={showLengths} onChange={(e) => setShowLengths(e.target.checked)} />
+                  Show board lengths <span className={styles.hint}>— length and the stock board (#) it&apos;s cut from</span>
+                </label>
+                <button
+                  type="button"
+                  aria-pressed={skipMode}
+                  className={`${styles.skipToggle} ${skipMode ? styles.skipToggleOn : ""}`}
+                  onClick={() => setSkipMode((v) => !v)}
+                >
+                  {skipMode ? "✓ Done skipping" : "Skip boards…"}
+                </button>
+              </div>
+              {/* the whole plan, small, with the wall in focus picked out */}
+              <WallMinimap
+                layout={layout}
+                codes={codes}
+                activeWallId={activeWallId}
+                elevationWallIds={new Set(activeElevation.walls.map((w) => w.id))}
+                onSelectWall={(wallId) => {
+                  const e = elevations.find((x) => x.walls.some((w) => w.id === wallId))
+                  if (!e) return
+                  setActiveElevationId(e.id)
+                  selectWall(e.id, wallId)
+                }}
+              />
             </div>
             {/* the selected window/door's shape and size, right by the drawing */}
             {!skipMode &&
