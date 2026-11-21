@@ -33,6 +33,7 @@ import { houseRenderInputFrom } from "./houseRenderInput"
 import { claddingFloorOf, insideTarget, outsideAt, outsideTarget, planJoinery, useJoineryEditor } from "./joineryEditor"
 import { joineryTypesOf } from "./joinery"
 import JoinerySettings from "./joinerySettings"
+import { useSharedJoinery } from "./joineryDefaultsStore"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -71,6 +72,8 @@ const HouseCalculator: React.FC<{
   setHouse: (update: (h: HouseProject) => HouseProject) => void
   header: ReactNode
 }> = ({ house, setHouse, header }) => {
+  // (the shared joinery defaults: a house without its own types follows them)
+  useSharedJoinery()
   const floor = house.floor
   const graph = useMemo(() => floorGraph(floor), [floor])
   const upperPlan = house.upper?.plan ?? null

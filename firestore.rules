@@ -196,6 +196,22 @@ service cloud.firestore {
     // schema-check shape as decks above (a project's location works
     // identically to a deck's); doesn't reference member decks at all,
     // that link only ever lives on the deck side (projectId/projectOrder).
+    // House calculator: the joinery defaults every house starts from (types,
+    // their sizes and what they're measured from, the head height). Shared:
+    // anyone reads them, anyone logged in changes them — one document.
+    match /houseDefaults/{docId} {
+      allow get: if true;
+      allow create, update: if request.auth != null
+        && docId == 'joinery'
+        && request.resource.data.keys().hasOnly(['types', 'headMm', 'updatedAt', 'updatedBy'])
+        && request.resource.data.types is list
+        && request.resource.data.types.size() > 0
+        && request.resource.data.types.size() <= 100
+        && request.resource.data.headMm is number
+        && request.resource.data.updatedBy == request.auth.uid;
+      allow delete: if false;
+    }
+
     match /users/{userId}/projects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null && request.auth.uid == userId

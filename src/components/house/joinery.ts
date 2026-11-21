@@ -39,8 +39,18 @@ export const DEFAULT_JOINERY_TYPES: JoineryType[] = [
 /** the head height windows line up with, off the floor, unless set */
 export const DEFAULT_HEAD_MM = 2100
 
-export const joineryTypesOf = (h: Pick<HouseProject, "joineryTypes">) => (h.joineryTypes?.length ? h.joineryTypes : DEFAULT_JOINERY_TYPES)
-export const houseHeadOf = (h: Pick<HouseProject, "settings">) => h.settings.joineryHeadMm ?? DEFAULT_HEAD_MM
+/** the shared defaults (see joineryDefaultsStore.ts), once they've loaded */
+let shared: { types: JoineryType[]; headMm: number } | null = null
+export const setSharedJoinery = (d: { types: JoineryType[]; headMm: number } | null) => {
+  shared = d
+}
+/** what a house starts from: the shared defaults, or (without them) the built-in ones */
+export const baseJoineryTypes = () => shared?.types ?? DEFAULT_JOINERY_TYPES
+export const baseHeadMm = () => shared?.headMm ?? DEFAULT_HEAD_MM
+
+/** a house's own types (once it's changed any), else what every house starts from */
+export const joineryTypesOf = (h: Pick<HouseProject, "joineryTypes">) => (h.joineryTypes?.length ? h.joineryTypes : baseJoineryTypes())
+export const houseHeadOf = (h: Pick<HouseProject, "settings">) => h.settings.joineryHeadMm ?? baseHeadMm()
 
 /** what was laid last, inside or out: the next one starts the same */
 export interface LastJoinery {
