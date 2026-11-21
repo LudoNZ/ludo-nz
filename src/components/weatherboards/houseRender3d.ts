@@ -71,7 +71,7 @@ export interface HouseRenderInput {
   /** walls inside the house (the House calculator's): a line on plan
    * (world mm), standing on its floor (z0, default 0) */
   /** inside walls, as plain slabs; with an id they can be tapped (x along from `along`) */
-  extras?: { a: P2; b: P2; height: number; thickness: number; color: string; z0?: number; upper?: boolean; id?: string; along?: number }[]
+  extras?: { a: P2; b: P2; height: number; thickness: number; color: string; z0?: number; upper?: boolean; id?: string; along?: number; member?: "inside" | "joinery" }[]
   /** more roofs: with a first floor, the lower ones over the ground floor */
   moreRoofs?: Roof[]
   /** a storey above: its own walls round (in `walls`), its floor (cells on
@@ -527,17 +527,18 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
 
   for (const x of input.extras ?? []) {
     const len = Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y)
-    if (len < 10) continue
+    // (a door's leaf goes with its wall)
+    if (len < 10 || (x.member === "joinery" && hidden.has("inside"))) continue
     const n = { x: (-(x.b.y - x.a.y) / len) * (x.thickness / 2), y: ((x.b.x - x.a.x) / len) * (x.thickness / 2) }
     const at = (p: P2, side: 1 | -1, z: number): V3 => [p.x + n.x * side, p.y + n.y * side, z]
     const z0 = x.z0 ?? 0
     // (only once they can be seen: under a roof, a tap is on the roof)
-    if (x.id && !hidden.has("inside") && hidden.has("roof"))
+    if (x.id && !hidden.has(x.member ?? "inside") && hidden.has("roof"))
       faces.push({ wallId: x.id, a: x.a, d: { x: (x.b.x - x.a.x) / len, y: (x.b.y - x.a.y) / len }, x0: x.along ?? 0, x1: (x.along ?? 0) + len, lo: z0, hi: z0 + x.height, upper: !!x.upper })
     const base = [at(x.a, 1, z0), at(x.b, 1, z0), at(x.b, -1, z0), at(x.a, -1, z0)]
     const top = [at(x.a, 1, z0 + x.height), at(x.b, 1, z0 + x.height), at(x.b, -1, z0 + x.height), at(x.a, -1, z0 + x.height)]
     pieces.push({
-      member: "inside",
+      member: x.member ?? "inside",
       upper: x.upper,
       solid: makeSolid([
         { pts: top, color: x.color },

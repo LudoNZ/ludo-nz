@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import type { HouseRenderInput } from "../weatherboards/houseRender3d"
 import { FloorGraph, floorGraph, inside as isInside } from "./floorPlan"
 import { Cladding, houseCladding } from "./houseCladding"
-import { HouseProject, Pt } from "./houseTypes"
+import { Door, HouseProject, Pt } from "./houseTypes"
 import { analyseHouse, Structure } from "./structure"
 
 /** the first floor's floor as slabs, one per cell (world mm), held clear
@@ -45,22 +45,55 @@ const trim = (g: FloorGraph, w: FloorGraph["walls"][number]) => {
   return { a: { x: w.a.x + d.x * sa, y: w.a.y + d.y * sa }, b: { x: w.b.x - d.x * sb, y: w.b.y - d.y * sb } }
 }
 
-const insideWalls = (g: FloorGraph, st: Structure, z0: number, height: number, upper: boolean) =>
+/** a door's leaf, in the 3D view */
+const DOOR_LEAF = "#a9825a"
+
+/** the inside walls stood up, each cut round its doors: full height either
+ * side, the wall over each door's head, and the door's leaf (closed, thin,
+ * in the wall's middle) — every piece keeping the wall's id, so a tap on any
+ * of it finds the wall (and the door) */
+const insideWalls = (g: FloorGraph, st: Structure, z0: number, height: number, upper: boolean, doors: Door[]) =>
   g.walls
     .map((w) => ({ w, ...trim(g, w) }))
     .filter((x) => Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y) > 20)
-    .map(({ w, a, b }) => ({
-      // (to find it again from the 3D view: its line, and how far along it the trimmed wall starts)
-      id: `in:${upper ? 1 : 0}:${w.id}`,
-      along: Math.hypot(a.x - w.a.x, a.y - w.a.y),
-      a: { x: a.x, y: -a.y },
-      b: { x: b.x, y: -b.y },
-      height,
-      thickness: 110,
-      z0,
-      upper,
-      color: st.inside.get(w.id)?.loadBearing ? "#c98f7a" : "#ece8df",
-    }))
+    .flatMap(({ w, a, b }) => {
+      const along = Math.hypot(a.x - w.a.x, a.y - w.a.y)
+      const L = Math.hypot(b.x - a.x, b.y - a.y)
+      const d = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }
+      const at = (t: number) => ({ x: a.x + d.x * t, y: -(a.y + d.y * t) })
+      const color = st.inside.get(w.id)?.loadBearing ? "#c98f7a" : "#ece8df"
+      const id = `in:${upper ? 1 : 0}:${w.id}`
+      const piece = (t0: number, t1: number, lo: number, hi: number, more: { color?: string; thickness?: number; member?: "inside" | "joinery" } = {}) => ({
+        // (to find it again from the 3D view: its line, and how far along it this piece starts)
+        id,
+        along: along + t0,
+        a: at(t0),
+        b: at(t1),
+        height: hi - lo,
+        thickness: more.thickness ?? 110,
+        z0: z0 + lo,
+        upper,
+        color: more.color ?? color,
+        ...(more.member ? { member: more.member } : {}),
+      })
+      // its doors, along the trimmed wall, in order, kept on it and clear of each other
+      const cuts = doors
+        .filter((x) => x.wallId === w.id)
+        .map((x) => ({ t0: Math.max(0, x.atMm - x.widthMm / 2 - along), t1: Math.min(L, x.atMm + x.widthMm / 2 - along), h: Math.min(height, x.heightMm) }))
+        .filter((c) => c.t1 - c.t0 > 50)
+        .sort((p, q) => p.t0 - q.t0)
+      const out: ReturnType<typeof piece>[] = []
+      let from = 0
+      for (const c of cuts) {
+        if (c.t0 < from) continue
+        if (c.t0 - from > 1) out.push(piece(from, c.t0, 0, height))
+        if (height - c.h > 1) out.push(piece(c.t0, c.t1, c.h, height))
+        out.push(piece(c.t0, c.t1, 0, c.h, { color: DOOR_LEAF, thickness: 36, member: "joinery" }))
+        from = c.t1
+      }
+      if (L - from > 1) out.push(piece(from, L, 0, height))
+      return out
+    })
 
 /** The 3D input, from what the House calculator has already worked out. */
 export function houseRenderInputFrom(
@@ -74,8 +107,8 @@ export function houseRenderInputFrom(
   const results = new Map([...walls.values()].map((w) => [w.id, calculateWall(w, WB_DEFAULTS)]))
   const z1 = cladding.upperFloorZ
   const extras = [
-    ...insideWalls(graph, structures.ground, 0, house.settings.studHeightMm, false),
-    ...(upperGraph && structures.upper && house.upper ? insideWalls(upperGraph, structures.upper, z1, house.upper.studHeightMm, true) : []),
+    ...insideWalls(graph, structures.ground, 0, house.settings.studHeightMm, false, house.floor.doors),
+    ...(upperGraph && structures.upper && house.upper ? insideWalls(upperGraph, structures.upper, z1, house.upper.studHeightMm, true, house.upper.plan.doors) : []),
   ]
   const upper = cladding.upper && upperGraph ? { layout: cladding.upper, floorZ: z1, floorCells: upperFloorCells(upperGraph) } : undefined
   return { layout: cladding.ground, walls, results, settings: WB_DEFAULTS, roof: cladding.roof, moreRoofs: cladding.lowerRoofs, roofColour: house.settings.roof.colour, extras, upper }
