@@ -13,6 +13,7 @@ import JoinerySkipModal from "./joinerySkipModal"
 import HousePlanPanel from "./housePlanPanel"
 import { houseLayout } from "./housePlan"
 import WallMinimap from "./wallMinimap"
+import MiniElevations from "./miniElevations"
 import OpeningFields from "./openingFields"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
@@ -513,6 +514,14 @@ const WeatherboardEditor: React.FC<{
                   {skipMode ? "✓ Done skipping" : "Skip boards…"}
                 </button>
               </div>
+              {/* the elevation's walls together, small, as seen from afar: tap one to focus it */}
+              <MiniElevations
+                walls={activeElevation.walls}
+                layout={layout}
+                codes={codes}
+                activeWallId={activeWallId}
+                onSelectWall={(wallId) => selectWall(activeElevation.id, wallId)}
+              />
               {/* the whole plan, small, with the wall in focus picked out */}
               <WallMinimap
                 layout={layout}

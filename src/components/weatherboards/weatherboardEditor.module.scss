@@ -451,6 +451,39 @@
   background: #fbfaf6;
 }
 
+.miniElevations {
+  flex: 0 1 18rem;
+  min-width: 10rem;
+  height: 8.5rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: var(--borderRadius);
+  background: #fbfaf6;
+}
+
+.miniGround {
+  stroke: #8a857b;
+}
+
+.miniWall {
+  fill: #e3dccb;
+  stroke: #6d6a62;
+}
+
+.miniWall:hover {
+  fill: #efe7d4;
+}
+
+.miniWallOn {
+  fill: #d9e8d4;
+  stroke: var(--color-primary);
+}
+
+.miniOpening {
+  fill: #9fb3c2;
+  stroke: #4b5563;
+}
+
 .minimapFloor {
   fill: rgba(0, 0, 0, 0.04);
   stroke: none;
