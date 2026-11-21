@@ -509,10 +509,25 @@ const PlanCanvas: React.FC<{
         const n = { x: -(d.b.y - d.a.y) / L, y: (d.b.x - d.a.x) / L }
         const tip = { x: d.a.x + n.x * L, y: d.a.y + n.y * L }
         return (
-          <g key={`d${d.id}`} pointerEvents="none" className={d.picked ? styles.doorPicked : styles.door}>
-            <line x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y} className={styles.doorGap} strokeWidth={sw * 2.6} />
-            <line x1={d.a.x} y1={d.a.y} x2={tip.x} y2={tip.y} strokeWidth={sw * 0.9} />
-            <path d={`M${tip.x},${tip.y} A${L},${L} 0 0 ${n.x * (d.b.y - d.a.y) - n.y * (d.b.x - d.a.x) > 0 ? 0 : 1} ${d.b.x},${d.b.y}`} fill="none" strokeWidth={sw * 0.6} strokeDasharray={`${sw * 2} ${sw * 1.5}`} />
+          <g key={`d${d.id}`} className={d.picked ? styles.doorPicked : styles.door}>
+            {onPickJoinery && !placing && (
+              <line
+                x1={d.a.x}
+                y1={d.a.y}
+                x2={d.b.x}
+                y2={d.b.y}
+                stroke="transparent"
+                strokeWidth={sw * 8}
+                style={{ cursor: "pointer" }}
+                role="button"
+                aria-label="Door — tap to change it"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => (e.stopPropagation(), onPickJoinery(d.id))}
+              />
+            )}
+            <line x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y} className={styles.doorGap} strokeWidth={sw * 2.6} pointerEvents="none" />
+            <line x1={d.a.x} y1={d.a.y} x2={tip.x} y2={tip.y} strokeWidth={sw * 0.9} pointerEvents="none" />
+            <path d={`M${tip.x},${tip.y} A${L},${L} 0 0 ${n.x * (d.b.y - d.a.y) - n.y * (d.b.x - d.a.x) > 0 ? 0 : 1} ${d.b.x},${d.b.y}`} fill="none" strokeWidth={sw * 0.6} strokeDasharray={`${sw * 2} ${sw * 1.5}`} pointerEvents="none" />
           </g>
         )
       })}

@@ -29,7 +29,8 @@ import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
-import { useJoineryEditor } from "./joineryEditor"
+import { claddingFloorOf, insideTarget, outsideAt, outsideTarget, planJoinery, useJoineryEditor } from "./joineryEditor"
+import JoinerySettings from "./joinerySettings"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -128,6 +129,7 @@ const HouseCalculator: React.FC<{
         <FloorsStep
           house={house}
           setHouse={setHouse}
+          cladding={cladding}
           level={level}
           setLevel={setLevel}
           graph={graph}
@@ -237,6 +239,7 @@ const StartStep: React.FC<{ house: HouseProject; setHouse: (u: (h: HouseProject)
 const FloorsStep: React.FC<{
   house: HouseProject
   setHouse: (u: (h: HouseProject) => HouseProject) => void
+  cladding: ReturnType<typeof houseCladding>
   level: number
   setLevel: (l: number) => void
   graph: ReturnType<typeof floorGraph>
@@ -244,8 +247,51 @@ const FloorsStep: React.FC<{
   setPlanOf: (l: number) => (u: (f: FloorPlan) => FloorPlan) => void
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ house, setHouse, level, setLevel, graph, upperGraph, setPlanOf, selection, setSelection }) => {
+}> = ({ house, setHouse, cladding, level, setLevel, graph, upperGraph, setPlanOf, selection, setSelection }) => {
   const [adding, setAdding] = useState(false)
+  // windows and doors, placed on the plan
+  const joinery = useJoineryEditor(house, setHouse, setPlanOf, cladding ? claddingFloorOf(cladding) : () => 0)
+  const kitFor = (storey: 0 | 1): JoineryKit => {
+    const g = storey === 1 ? upperGraph : graph
+    const plan = storey === 1 ? house.upper?.plan : house.floor
+    const doors = (plan?.doors ?? []).flatMap((d) => {
+      const w = g?.walls.find((x) => x.id === d.wallId)
+      if (!w) return []
+      const L = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1
+      const at = (t: number) => ({ x: w.a.x + ((w.b.x - w.a.x) * t) / L, y: w.a.y + ((w.b.y - w.a.y) * t) / L })
+      return [{ id: d.id, a: at(d.atMm - d.widthMm / 2), b: at(d.atMm + d.widthMm / 2) }]
+    })
+    return {
+      placing: joinery.placing,
+      setPlacing: joinery.setPlacing,
+      marks: cladding ? planJoinery(cladding, storey) : [],
+      doors,
+      onPlace: (hit, p) => {
+        if (hit.kind === "edge") {
+          const o = cladding && outsideAt(cladding, storey, p)
+          const t = o && cladding && outsideTarget(cladding, o.wallId, o.x)
+          if (t) joinery.open(t)
+        } else if (g) {
+          const w = g.walls.find((x) => x.id === hit.id)
+          if (!w) return
+          const L = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1
+          const t = insideTarget(house, g, storey, w.id, ((p.x - w.a.x) * (w.b.x - w.a.x) + (p.y - w.a.y) * (w.b.y - w.a.y)) / L)
+          if (t) joinery.open(t)
+        }
+      },
+      onPick: (id) => {
+        const j = (house.joinery ?? []).find((x) => x.id === id)
+        if (j && cladding) {
+          const t = outsideTarget(cladding, j.wallId, 0, { editId: id })
+          if (t) joinery.open(t)
+          return
+        }
+        const d = plan?.doors.find((x) => x.id === id)
+        const t = d && g && insideTarget(house, g, storey, d.wallId, 0, { editId: id })
+        if (t) joinery.open(t)
+      },
+    }
+  }
   const addUpper = (mode: "outline" | "rooms") => {
     const outline = graph.outline.length >= 3 ? graph.outline : STARTING_OUTLINE
     const xs = outline.map((p) => p.x)
@@ -327,7 +373,7 @@ const FloorsStep: React.FC<{
         </section>
       ) : level === 1 && upper && upperGraph ? (
         <>
-          <FloorStep plan={upper.plan} title="First floor" setFloor={setPlanOf(1)} graph={upperGraph} ghost={graph.outline} selection={selection} setSelection={setSelection} {...gridProps} />
+          <FloorStep plan={upper.plan} title="First floor" setFloor={setPlanOf(1)} graph={upperGraph} ghost={graph.outline} selection={selection} setSelection={setSelection} {...gridProps} joineryKit={kitFor(1)} />
           <section className={styles.card}>
             <div className={styles.fields}>
               <label>
@@ -359,10 +405,23 @@ const FloorsStep: React.FC<{
           </section>
         </>
       ) : (
-        <FloorStep plan={house.floor} title="Ground floor" setFloor={setPlanOf(0)} graph={graph} selection={selection} setSelection={setSelection} {...gridProps} />
+        <FloorStep plan={house.floor} title="Ground floor" setFloor={setPlanOf(0)} graph={graph} selection={selection} setSelection={setSelection} {...gridProps} joineryKit={kitFor(0)} />
       )}
+      {!adding && <JoinerySettings house={house} setHouse={setHouse} />}
+      {joinery.modal}
     </>
   )
+}
+
+/** what a storey's plan needs to place windows and doors (see FloorsStep) */
+interface JoineryKit {
+  placing: boolean
+  setPlacing: (u: (v: boolean) => boolean) => void
+  /** the outside walls' windows and doors, and the inside walls' doors, on plan */
+  marks: { id: string; a: Pt; b: Pt; door: boolean }[]
+  doors: { id: string; a: Pt; b: Pt }[]
+  onPlace: (hit: { kind: "edge"; index: number } | { kind: "wall"; id: string }, p: Pt) => void
+  onPick: (id: string) => void
 }
 
 const FloorStep: React.FC<{
@@ -377,7 +436,8 @@ const FloorStep: React.FC<{
   grid: ProjectGrid
   onMoveGridline: (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset?: boolean) => void
   setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void
-}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection, grid, onMoveGridline, setGrid }) => {
+  joineryKit?: JoineryKit
+}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection, grid, onMoveGridline, setGrid, joineryKit: kit }) => {
   const floor = plan
   const [part, setPart] = useState<"outside" | "inside">("inside")
   const [tool, setTool] = useState<CanvasTool>("draw")
@@ -561,11 +621,27 @@ const FloorStep: React.FC<{
             </label>
             {snapOn && <span className={styles.muted}>(hold Shift not to)</span>}
           </div>
+          {kit && (
+            <div className={styles.toolbar}>
+              <button type="button" className={`${styles.pill} ${kit.placing ? styles.pillOn : ""}`} aria-pressed={kit.placing} onClick={() => kit.setPlacing((v) => !v)} aria-keyshortcuts="W">
+                Place windows &amp; doors <kbd className={styles.kbd}>W</kbd>
+              </button>
+              <span className={styles.muted}>
+                {kit.placing ? "Tap a wall, outside or in, where one goes — it starts like the last one you laid. Tap one laid to change it. W or Escape to stop." : "Tap a window or door to change it."}
+              </span>
+            </div>
+          )}
           <PlanCanvas
             graph={graph}
             ghost={ghost}
             grid={grid}
-            tool={tool}
+            tool={kit?.placing ? "select" : tool}
+            pickOutside={kit?.placing}
+            placing={kit?.placing}
+            onPlace={kit?.onPlace}
+            joinery={kit?.marks}
+            doors={kit?.doors}
+            onPickJoinery={kit?.onPick}
             selection={selection}
             onSelect={setSelection}
             onDrawWall={(a, b) => setFloor((f) => ({ ...f, walls: [...f.walls, { id: newHouseId(), a, b, loadBearing: "auto" }] }))}
@@ -1219,6 +1295,18 @@ const ThreeDStep: React.FC<{
   const floorOf = (wallId: string) => (wallId.startsWith("us") ? cladding.upperFloorZ : 0)
   const joinery = useJoineryEditor(house, setHouse, setPlanOf, floorOf)
   const onPick = (hit: { wallId: string; x: number; z: number }) => {
+    if (hit.wallId.startsWith("in:")) {
+      // an inside wall: a door on its line
+      const [, s, lineId] = hit.wallId.split(":")
+      const storey = s === "1" ? 1 : 0
+      const g = storey === 1 ? upperGraph : graph
+      const floor = storey === 1 ? cladding.upperFloorZ : 0
+      const plan = storey === 1 ? house.upper?.plan : house.floor
+      const on = plan?.doors.find((d) => d.wallId === lineId && Math.abs(hit.x - d.atMm) <= d.widthMm / 2 && hit.z - floor <= d.heightMm)
+      const t = g && insideTarget(house, g, storey, lineId, hit.x, { z: hit.z - floor, ...(on ? { editId: on.id } : {}) })
+      if (t) joinery.open(t)
+      return
+    }
     const w = cladding.walls.get(hit.wallId)
     if (!w) return
     const floor = floorOf(w.id)
@@ -1239,10 +1327,13 @@ const ThreeDStep: React.FC<{
           Place windows &amp; doors <kbd className={styles.kbd}>W</kbd>
         </button>
         <span className={styles.muted}>
-          {joinery.placing ? "Tap an outside wall where one goes (or one you've placed, to change it) — fly in with the magnifier to get close. W or Escape to stop." : "Then tap an outside wall."}
+          {joinery.placing
+            ? "Tap a wall where one goes, outside or in (untick Roof to see in), or one you've placed to change it — fly in with the magnifier to get close. W or Escape to stop."
+            : "Then tap a wall, outside or in."}
         </span>
       </div>
       <HouseRenderView input={input} fileName={house.name.replace(/\W+/g, "-").toLowerCase() || "house"} picking={joinery.placing} onPick={onPick} />
+      <JoinerySettings house={house} setHouse={setHouse} />
       {joinery.modal}
     </section>
   )

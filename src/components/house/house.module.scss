@@ -296,7 +296,8 @@
 .modalBack {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  // (over the 3D view's full screen, at 1000)
+  z-index: 2000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -509,6 +510,29 @@
 
 .door {
   stroke: #6d6a62;
+}
+
+.typeGroup {
+  flex: 1 1 100%;
+  margin-top: 0.6rem;
+
+  h4 {
+    margin: 0 0 0.3rem;
+  }
+}
+
+.typeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.8rem;
+  padding: 0.25rem 0;
+  border-top: 1px solid rgba(127, 127, 127, 0.2);
+
+  input:not([type]) {
+    font: inherit;
+    min-width: 12rem;
+  }
 }
 
 .warn {

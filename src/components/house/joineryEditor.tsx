@@ -4,6 +4,10 @@ import { useEffect, useState } from "react"
 import { DEFAULT_JOINERY_TYPES, fitIn, freeGap, headsUsed, houseHeadOf, JoineryType, joineryTypesOf } from "./joinery"
 import JoineryModal, { JoineryDraft } from "./joineryModal"
 import { FloorPlan, HOUSE_JOINERY, HouseJoinery, HouseProject, newHouseId } from "./houseTypes"
+import type { Cladding } from "./houseCladding"
+import type { FloorGraph } from "./floorPlan"
+import type { Pt } from "./houseTypes"
+import { wallName } from "./wallFraming"
 
 /** A wall something's being put on, or changed on: an outside wall (its
  * cladding wall, x from its start as the weatherboards keep it) or an
@@ -169,4 +173,61 @@ export function useJoineryEditor(
     />
   )
   return { placing, setPlacing, open: openOn, modal, houseHead, heads: headsUsed(house, floorOf) }
+}
+
+// ── where on a wall: from the plan, the 3D view, a wall's frame ───────
+
+/** each outside wall's floor (up from the ground floor), by its cladding wall's id */
+export const claddingFloorOf = (cladding: Cladding) => (wallId: string) => (wallId.startsWith("us") ? cladding.upperFloorZ : 0)
+
+/** an outside (cladding) wall to put something on, `at` along it */
+export function outsideTarget(cladding: Cladding, wallId: string, at: number, more: Partial<Pick<JoineryTarget, "drawn" | "editId" | "z">> = {}): JoineryTarget | null {
+  const w = cladding.walls.get(wallId)
+  if (!w) return null
+  const taken = w.openings.filter((o) => o.id !== more.editId).map((o) => ({ id: o.id, x0: o.x, x1: o.x + o.width }))
+  return { where: "outside", wallId, floor: claddingFloorOf(cladding)(wallId), wallName: w.name, length: w.lengthMm, taken, at, ...more }
+}
+
+/** an inside wall line on a storey to put a door on, `at` along it from its start */
+export function insideTarget(house: HouseProject, graph: FloorGraph, storey: 0 | 1, lineId: string, at: number, more: Partial<Pick<JoineryTarget, "drawn" | "editId" | "z">> = {}): JoineryTarget | null {
+  const i = graph.walls.findIndex((w) => w.id === lineId)
+  if (i < 0) return null
+  const line = graph.walls[i]
+  const plan = storey === 1 ? house.upper?.plan : house.floor
+  const taken = (plan?.doors ?? []).filter((d) => d.wallId === lineId && d.id !== more.editId).map((d) => ({ id: d.id, x0: d.atMm - d.widthMm / 2, x1: d.atMm + d.widthMm / 2 }))
+  return { where: "inside", storey, lineId, wallName: wallName(graph, line.a, line.b, i), length: Math.hypot(line.b.x - line.a.x, line.b.y - line.a.y), taken, at, ...more }
+}
+
+/** a point on a storey's plan (y down) to the outside wall it's on, and how far along it */
+export function outsideAt(cladding: Cladding, storey: 0 | 1, p: Pt): { wallId: string; x: number } | null {
+  const layout = storey === 1 ? cladding.upper : cladding.ground
+  if (!layout) return null
+  const q = { x: p.x, y: -p.y }
+  let best: { wallId: string; x: number; off: number } | null = null
+  for (const s of layout.sides) {
+    if (!s.wallId) continue
+    const L = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
+    const d = { x: (s.b.x - s.a.x) / L, y: (s.b.y - s.a.y) / L }
+    const t = (q.x - s.a.x) * d.x + (q.y - s.a.y) * d.y
+    if (t < -50 || t > L + 50) continue
+    const off = Math.abs((q.x - s.a.x) * d.y - (q.y - s.a.y) * d.x)
+    if (off < 400 && (!best || off < best.off)) best = { wallId: s.wallId, x: s.x0 + Math.min(L, Math.max(0, t)), off }
+  }
+  return best && { wallId: best.wallId, x: best.x }
+}
+
+/** the outside walls' windows and doors on a storey's plan (y down) */
+export function planJoinery(cladding: Cladding, storey: 0 | 1): { id: string; a: Pt; b: Pt; door: boolean; wallId: string }[] {
+  const layout = storey === 1 ? cladding.upper : cladding.ground
+  if (!layout) return []
+  const floor = storey === 1 ? cladding.upperFloorZ : 0
+  return layout.sides.flatMap((s) => {
+    const w = s.wallId ? cladding.walls.get(s.wallId) : undefined
+    if (!w) return []
+    const L = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
+    const at = (x: number): Pt => ({ x: s.a.x + ((s.b.x - s.a.x) * (x - s.x0)) / L, y: -(s.a.y + ((s.b.y - s.a.y) * (x - s.x0)) / L) })
+    return w.openings
+      .filter((o) => o.x >= s.x0 - 1 && o.x + o.width <= s.x1 + 1)
+      .map((o) => ({ id: o.id, a: at(o.x), b: at(o.x + o.width), door: o.sill - floor < 100, wallId: w.id }))
+  })
 }

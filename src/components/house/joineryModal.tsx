@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import NumField from "@/components/weatherboards/numField"
 import { fitIn, JoineryType, LastJoinery } from "./joinery"
 import styles from "./house.module.scss"
@@ -87,7 +88,8 @@ const JoineryModal: React.FC<{
   const overEnd = d.x < 0 || d.x + d.width > length + 1
   const clash = !fits(d.width) && !(d.x >= gap[0] - 1 && d.x + d.width <= gap[1] + 1)
 
-  return (
+  // (on the page itself, so it shows over a view gone full screen too)
+  return createPortal(
     <div className={styles.modalBack} onPointerDown={(e) => e.target === e.currentTarget && onCancel()}>
       <form
         className={styles.modal}
@@ -106,7 +108,7 @@ const JoineryModal: React.FC<{
           <label style={{ flex: "1 1 100%" }}>
             Type
             <select
-              value={d.typeId ?? ""}
+              value={d.typeId && types.some((t) => t.id === d.typeId) ? d.typeId : ""}
               onChange={(e) => {
                 const v = e.target.value
                 if (v === LAST && last) take({ id: last.typeId, kind: last.kind, width: last.width, height: last.height, head: last.head })
@@ -250,7 +252,8 @@ const JoineryModal: React.FC<{
           )}
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

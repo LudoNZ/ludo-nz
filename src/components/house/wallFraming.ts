@@ -188,7 +188,7 @@ const split = (L: number, max = MAX_PLATE): number[] => {
 }
 
 /** room names either side of an inside wall */
-const wallName = (g: FloorGraph, a: Pt, b: Pt, i: number) => {
+export const wallName = (g: FloorGraph, a: Pt, b: Pt, i: number) => {
   const L = len(a, b) || 1
   const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
   const n = { x: -(b.y - a.y) / L, y: (b.x - a.x) / L }

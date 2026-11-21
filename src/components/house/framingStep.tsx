@@ -16,6 +16,7 @@ import { FloorGraph } from "./floorPlan"
 import { Door, FloorPlan, FramingSettings, HOUSE_JOINERY, HouseProject, newHouseId, Pt } from "./houseTypes"
 import { snapTo } from "./joinery"
 import { JoineryTarget, useJoineryEditor } from "./joineryEditor"
+import JoinerySettings from "./joinerySettings"
 import PlanCanvas, { Selection } from "./planCanvas"
 import type { Structure } from "./structure"
 import {
@@ -514,9 +515,13 @@ const FramingStep: React.FC<{
         placing={joinery.placing}
         onPlace={placeOnPlan}
         onPickJoinery={(id) => {
-          const j = planJoinery.find((x) => x.id === id)
-          const w = j && storeyWalls.find((x) => x.id === j.wallId)
-          if (w && editable(id)) joinery.open(targetFor(w, 0, { editId: id }))
+          // an outside wall's, or an inside wall's door
+          const wallId = planJoinery.find((x) => x.id === id)?.wallId ?? plan.doors.find((d) => d.id === id)?.wallId
+          const w = wallId && storeyWalls.find((x) => x.id === wallId)
+          if (w && editable(id)) {
+            setPickedDoor(plan.doors.some((d) => d.id === id) ? id : null)
+            joinery.open(targetFor(w, 0, { editId: id }))
+          }
         }}
       />
       <div className={styles.toolbar}>
@@ -593,6 +598,7 @@ const FramingStep: React.FC<{
         </div>
       )}
 
+      <JoinerySettings house={house} setHouse={setHouse} />
       {joinery.modal}
 
       <p className={styles.summary}>

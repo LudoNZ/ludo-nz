@@ -50,6 +50,9 @@ const insideWalls = (g: FloorGraph, st: Structure, z0: number, height: number, u
     .map((w) => ({ w, ...trim(g, w) }))
     .filter((x) => Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y) > 20)
     .map(({ w, a, b }) => ({
+      // (to find it again from the 3D view: its line, and how far along it the trimmed wall starts)
+      id: `in:${upper ? 1 : 0}:${w.id}`,
+      along: Math.hypot(a.x - w.a.x, a.y - w.a.y),
       a: { x: a.x, y: -a.y },
       b: { x: b.x, y: -b.y },
       height,
