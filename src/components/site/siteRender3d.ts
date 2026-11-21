@@ -148,6 +148,26 @@ export function buildSiteScene(walls: SiteWall[], placements: SitePlaced[], opti
       const run = runOfBay(Math.min(i, posts.length - 2))
       const h = p.widthM / 2
       const top = Math.max(p.topBeforeM, p.topAfterM)
+      if (/round/i.test(p.sizeLabel)) {
+        // a round post: a 12-sided prism round its centre
+        const [cx, cy] = run.at(p.xM, 0, 0)
+        const ring = Array.from({ length: 12 }, (_, k) => {
+          const a = (k / 12) * Math.PI * 2
+          return [cx + Math.cos(a) * h, cy + Math.sin(a) * h] as const
+        })
+        const bottom = ring.map(([x, y]): V3 => [x, y, p.groundLevelM])
+        const topRing = ring.map(([x, y]): V3 => [x, y, top])
+        const faces = [
+          { pts: bottom, color: COLORS.post },
+          { pts: topRing, color: COLORS.post },
+          ...ring.map((_, k) => {
+            const j = (k + 1) % ring.length
+            return { pts: [bottom[k], bottom[j], topRing[j], topRing[k]], color: COLORS.post }
+          }),
+        ]
+        solids.push(makeSolid(faces))
+        return
+      }
       const post = extrude(run.at, [[p.xM - h, p.groundLevelM], [p.xM + h, p.groundLevelM], [p.xM + h, top], [p.xM - h, top]], -h, h, COLORS.post)
       if (post) solids.push(post)
     })
