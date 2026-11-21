@@ -59,7 +59,11 @@ const PlanCanvas: React.FC<{
   onAddDim?: (a: GridPoint, b: GridPoint) => void
   /** origin tool: a grid point made 0,0 */
   onSetOrigin?: (p: GridPoint) => void
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin }) => {
+  /** select tool: an inside wall dragged across to a new line */
+  onMoveWall?: (id: string, a: Pt, b: Pt) => void
+  /** snap drawn and dragged walls to the gridlines and walls nearby (Shift held: never) */
+  snapOn?: boolean
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -90,6 +94,13 @@ const PlanCanvas: React.FC<{
   }
   // a gridline being dragged
   const [gdrag, setGdragState] = useState<{ line: GridLine; at: number } | null>(null)
+  // an inside wall being dragged across: which way it moves, from where, and where it is
+  const [wdrag, setWdragState] = useState<{ id: string; axis: "x" | "y"; base: number; from: number; at: number } | null>(null)
+  const wdragRef = useRef(wdrag)
+  const setWdrag = (d: typeof wdrag) => {
+    wdragRef.current = d
+    setWdragState(d)
+  }
   const gdragRef = useRef(gdrag)
   const setGdrag = (d: typeof gdrag) => {
     gdragRef.current = d
@@ -147,13 +158,16 @@ const PlanCanvas: React.FC<{
     xs: [...graph.outline.map((p) => p.x), ...graph.walls.flatMap((w) => [w.a.x, w.b.x]), ...(ghost ?? []).map((p) => p.x)],
     ys: [...graph.outline.map((p) => p.y), ...graph.walls.flatMap((w) => [w.a.y, w.b.y]), ...(ghost ?? []).map((p) => p.y)],
   }
-  const snap = (v: number, to: number[]) => {
+  // (snapping off, or Shift held: to the nearest 10 mm only)
+  const free = (e: React.PointerEvent) => !snapOn || e.shiftKey
+  const snap = (v: number, to: number[], loose = false) => {
+    if (loose) return Math.round(v / 10) * 10
     const tol = pxMm(10)
     const near = to.reduce<number | null>((b, x) => (Math.abs(x - v) < tol && (b === null || Math.abs(x - v) < Math.abs(b - v)) ? x : b), null)
     return near ?? Math.round(v / GRID) * GRID
   }
   // (the walls nearby, and the gridlines)
-  const snapPt = (p: Pt): Pt => ({ x: snap(p.x, [...lines.xs, ...gxs]), y: snap(p.y, [...lines.ys, ...gys]) })
+  const snapPt = (p: Pt, loose = false): Pt => ({ x: snap(p.x, [...lines.xs, ...gxs], loose), y: snap(p.y, [...lines.ys, ...gys], loose) })
   /** square to the plan: whichever way it's gone furthest */
   const square = (a: Pt, b: Pt): Pt => (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
 
@@ -170,7 +184,7 @@ const PlanCanvas: React.FC<{
       return
     }
     if (tool !== "draw" || !onDrawWall) return
-    const a = snapPt(toPlan(e))
+    const a = snapPt(toPlan(e), free(e))
     setDraft({ a, b: a })
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
   }
@@ -223,6 +237,15 @@ const PlanCanvas: React.FC<{
       setOdrag({ ...od, pts: out, moved: od.moved || moved })
       return
     }
+    const wd = wdragRef.current
+    if (wd) {
+      const v = wd.base + toPlan(e)[wd.axis] - wd.from
+      // (to the other walls' lines and the gridlines, not its own)
+      const own = graph.walls.find((w) => w.id === wd.id)
+      const to = (wd.axis === "x" ? [...lines.xs, ...gxs] : [...lines.ys, ...gys]).filter((x) => !own || Math.abs(x - own.a[wd.axis]) >= 1)
+      setWdrag({ ...wd, at: snap(v, to, free(e)) })
+      return
+    }
     const gd = gdragRef.current
     if (gd) {
       const p = toPlan(e)
@@ -252,7 +275,7 @@ const PlanCanvas: React.FC<{
       return
     }
     if (draft) {
-      const b = square(draft.a, snapPt(toPlan(e)))
+      const b = square(draft.a, snapPt(toPlan(e), free(e)))
       setDraft({ a: draft.a, b })
     } else if (drag && boxes && onMoveBox) {
       const p = toPlan(e)
@@ -280,6 +303,12 @@ const PlanCanvas: React.FC<{
         onSelect(null)
       } else if (od.kind === "edge") onSelect({ kind: "edge", index: od.index })
       setOdrag(null)
+    }
+    const wd = wdragRef.current
+    if (wd) {
+      const w = graph.walls.find((x) => x.id === wd.id)
+      if (w && Math.abs(wd.at - wd.base) >= 1) onMoveWall?.(w.id, { ...w.a, [wd.axis]: wd.at }, { ...w.b, [wd.axis]: wd.at })
+      setWdrag(null)
     }
     const gd = gdragRef.current
     if (gd) {
@@ -413,8 +442,12 @@ const PlanCanvas: React.FC<{
       })}
 
       {/* the inside walls */}
-      {graph.walls.map((w) => {
-        const sel = selection?.kind === "wall" && selection.id === w.id
+      {graph.walls.map((wall) => {
+        const sel = selection?.kind === "wall" && selection.id === wall.id
+        const w = wdrag?.id === wall.id ? { ...wall, a: { ...wall.a, [wdrag.axis]: wdrag.at }, b: { ...wall.b, [wdrag.axis]: wdrag.at } } : wall
+        // which way it moves: square to itself (a slanted one stays put)
+        const axis = Math.abs(w.a.x - w.b.x) < 1 ? "x" : Math.abs(w.a.y - w.b.y) < 1 ? "y" : null
+        const movable = !!onMoveWall && !!axis
         return (
           <g key={w.id}>
             <line x1={w.a.x} y1={w.a.y} x2={w.b.x} y2={w.b.y} className={`${lb(w.id) ? styles.wallLB : styles.wallIn} ${sel ? styles.wallSelected : ""}`} strokeWidth={sw * (sel ? 2.8 : 2)} strokeLinecap="square" />
@@ -426,13 +459,33 @@ const PlanCanvas: React.FC<{
                 y2={w.b.y}
                 stroke="transparent"
                 strokeWidth={sw * 10}
-                onPointerDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  if (!movable || !axis) return
+                  onSelect({ kind: "wall", id: w.id })
+                  const at = w.a[axis]
+                  setWdrag({ id: w.id, axis, base: at, from: toPlan(e)[axis], at })
+                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onSelect({ kind: "wall", id: w.id })
                 }}
-                style={{ cursor: "pointer" }}
+                style={{ cursor: movable ? (axis === "x" ? "ew-resize" : "ns-resize") : "pointer" }}
               />
+            )}
+            {wdrag?.id === w.id && (
+              <text
+                x={axis === "x" ? w.a.x + sw * 6 : (w.a.x + w.b.x) / 2}
+                y={axis === "x" ? (w.a.y + w.b.y) / 2 : w.a.y - sw * 6}
+                textAnchor={axis === "x" ? "start" : "middle"}
+                dominantBaseline="middle"
+                fontSize={sw * 7}
+                className={styles.gridLabel}
+                pointerEvents="none"
+              >
+                {mm(wdrag.at - origin[wdrag.axis])}
+              </text>
             )}
           </g>
         )

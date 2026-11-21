@@ -380,6 +380,7 @@ const FloorStep: React.FC<{
   const floor = plan
   const [part, setPart] = useState<"outside" | "inside">("inside")
   const [tool, setTool] = useState<CanvasTool>("draw")
+  const [snapOn, setSnapOn] = useState(true)
   const [newKind, setNewKind] = useState<RoomKind>("bedroom")
 
   if (floor.mode === "rooms") {
@@ -493,6 +494,19 @@ const FloorStep: React.FC<{
     })
   }
   const vertical = wall ? Math.abs(wall.a.x - wall.b.x) < 1 : false
+  /** a wall moved across to a new line; the walls butting into it stretch to meet it */
+  const moveWall = (id: string, a: Pt, b: Pt) =>
+    setFloor((f) => {
+      const old = f.walls.find((w) => w.id === id)
+      if (!old) return f
+      const axis = Math.abs(old.a.x - old.b.x) < 1 ? "x" : Math.abs(old.a.y - old.b.y) < 1 ? "y" : null
+      const other = axis === "x" ? "y" : "x"
+      const lo = axis ? Math.min(old.a[other], old.b[other]) - 1 : 0
+      const hi = axis ? Math.max(old.a[other], old.b[other]) + 1 : 0
+      const on = (p: Pt) => !!axis && Math.abs(p[axis] - old.a[axis]) < 1 && p[other] >= lo && p[other] <= hi
+      const carry = (p: Pt): Pt => (axis && on(p) ? { ...p, [axis]: a[axis] } : p)
+      return { ...f, walls: f.walls.map((w) => (w.id === id ? { ...w, a, b } : { ...w, a: carry(w.a), b: carry(w.b) })) }
+    })
   // (the fields measure from 0,0)
   const o = gridOrigin(grid)
   const op = vertical ? o.x : o.y
@@ -526,9 +540,9 @@ const FloorStep: React.FC<{
         <>
           <p className={styles.hint}>
             {tool === "draw"
-              ? "Drag across the plan to draw a wall — it snaps square, to the grid and to the walls nearby. Switch to Select to name a room or change a wall."
+              ? "Drag across the plan to draw a wall — it snaps square, to the grid and to the walls nearby (hold Shift not to). Switch to Select to name a room or change a wall."
               : tool === "select"
-                ? "Tap a room to name it, or a wall to move it, set whether it's load-bearing, or remove it."
+                ? "Drag a wall to move it — the walls butting into it stretch to meet it; hold Shift not to snap. Tap a room to name it, or a wall to set whether it's load-bearing, or remove it."
                 : GRID_TOOL_HINTS[tool]}
           </p>
           <div className={styles.toolbar}>
@@ -541,6 +555,10 @@ const FloorStep: React.FC<{
               </button>
               <GridToolButtons tool={tool} setTool={setTool} />
             </div>
+            <label className={styles.check}>
+              <input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> Snap to gridlines and walls
+            </label>
+            {snapOn && <span className={styles.muted}>(hold Shift not to)</span>}
           </div>
           <PlanCanvas
             graph={graph}
@@ -550,6 +568,8 @@ const FloorStep: React.FC<{
             selection={selection}
             onSelect={setSelection}
             onDrawWall={(a, b) => setFloor((f) => ({ ...f, walls: [...f.walls, { id: newHouseId(), a, b, loadBearing: "auto" }] }))}
+            onMoveWall={moveWall}
+            snapOn={snapOn}
             {...gridToolProps(setGrid, setSelection, () => setTool("select"))}
           />
           <DimPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
@@ -564,8 +584,8 @@ const FloorStep: React.FC<{
                       step={100}
                       onChange={(n) => {
                         const v = n + op
-                        if (vertical) setWall(wall.id, { ...wall.a, x: v }, { ...wall.b, x: v })
-                        else setWall(wall.id, { ...wall.a, y: v }, { ...wall.b, y: v })
+                        if (vertical) moveWall(wall.id, { ...wall.a, x: v }, { ...wall.b, x: v })
+                        else moveWall(wall.id, { ...wall.a, y: v }, { ...wall.b, y: v })
                       }}
                     />{" "}
                     mm

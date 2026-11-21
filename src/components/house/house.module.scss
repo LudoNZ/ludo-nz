@@ -255,6 +255,14 @@
   color: var(--background) !important;
 }
 
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
