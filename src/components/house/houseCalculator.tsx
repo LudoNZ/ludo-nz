@@ -29,9 +29,11 @@ import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridLine, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
+import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
-const STEPS = ["Start", "Floor plans", "Roof & structure", "3D", "Cladding"] as const
+// (framing comes last so saved houses stay on the step they were on)
+const STEPS = ["Start", "Floor plans", "Roof & structure", "3D", "Cladding", "Framing"] as const
 
 const LEVEL_NAMES = ["Ground floor", "First floor"] as const
 
@@ -92,7 +94,7 @@ const HouseCalculator: React.FC<{
   }
   const setSettings = (patch: Partial<HouseSettings>) => setHouse((h) => ({ ...h, settings: { ...h.settings, ...patch } }))
 
-  const canGoOn = [!!floor.mode, graph.outline.length >= 3, true, true, false]
+  const canGoOn = [!!floor.mode, graph.outline.length >= 3, true, true, true, false]
 
   return (
     <div className={styles.page}>
@@ -153,6 +155,21 @@ const HouseCalculator: React.FC<{
       )}
       {step === 3 && cladding && <ThreeDStep house={house} graph={graph} upperGraph={upperGraph} cladding={cladding} structures={structures} />}
       {step === 4 && <CladdingStep house={house} setHouse={setHouse} cladding={cladding} />}
+      {step === 5 && (
+        <FramingStep
+          house={house}
+          setHouse={setHouse}
+          level={level}
+          setLevel={setLevel}
+          setPlanOf={setPlanOf}
+          graph={graph}
+          upperGraph={upperGraph}
+          structures={structures}
+          upperFloorZ={cladding?.upperFloorZ ?? house.settings.studHeightMm + house.settings.floorDepthMm}
+          selection={selection}
+          setSelection={setSelection}
+        />
+      )}
 
       <div className={styles.nav}>
         {step > 0 && (
@@ -253,7 +270,7 @@ const FloorsStep: React.FC<{
       ...hs,
       upper: {
         studHeightMm: hs.settings.studHeightMm,
-        plan: { mode, outline: outline.map((p) => ({ ...p })), lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes, overrides: {} },
+        plan: { mode, outline: outline.map((p) => ({ ...p })), lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes, overrides: {}, doors: [] },
       },
     }))
     setAdding(false)

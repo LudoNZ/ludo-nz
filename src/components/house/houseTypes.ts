@@ -51,6 +51,17 @@ export interface InsideWall {
   loadBearing: LoadBearing
 }
 
+/** a door in an inside wall: its leaf's size, and where its middle is
+ * along the wall, from the wall's first end (`a`) */
+export interface Door {
+  id: string
+  /** the inside wall's id (outline mode) or key (rooms mode, see floorPlan.ts) */
+  wallId: string
+  atMm: number
+  widthMm: number
+  heightMm: number
+}
+
 /** a room's name, pinned to a point inside it (outline mode: the room is
  * whatever space the walls close off round that point) */
 export interface RoomTag {
@@ -85,6 +96,8 @@ export interface FloorPlan {
   /** rooms mode: load-bearing set by hand on a wall found between rooms,
    * by its key (see floorPlan.ts) */
   overrides: Record<string, LoadBearing>
+  /** doors in the inside walls */
+  doors: Door[]
 }
 
 export type RoofFrame = "trusses" | "rafters"
@@ -92,6 +105,38 @@ export type RoofFrame = "trusses" | "rafters"
 export const ROOF_FRAME_LABELS: Record<RoofFrame, string> = {
   trusses: "Trusses",
   rafters: "Rafters & ceiling joists",
+}
+
+/** How the inside walls are framed (see wallFraming.ts). */
+export interface FramingSettings {
+  /** studs, plates and nogs: depth across the wall × thickness, mm */
+  studDepthMm: number
+  studThickMm: number
+  /** what the timber's asked for as, after the size */
+  grade: string
+  studCentresMm: number
+  /** nog rows no further apart than this (and from the plates) */
+  nogMaxMm: number
+  /** a second top plate on the load-bearing walls */
+  doubleTopPlateLB: boolean
+  /** a load-bearing wall's lintel: two of this depth × the stud
+   * thickness, side by side (to be checked against NZS 3604) */
+  lintelDepthMm: number
+  /** the frame's opening over a door's leaf: jambs and packing */
+  doorWidthAllowanceMm: number
+  doorHeightAllowanceMm: number
+}
+
+export const DEFAULT_FRAMING: FramingSettings = {
+  studDepthMm: 90,
+  studThickMm: 45,
+  grade: "SG8 H1.2",
+  studCentresMm: 600,
+  nogMaxMm: 800,
+  doubleTopPlateLB: true,
+  lintelDepthMm: 190,
+  doorWidthAllowanceMm: 60,
+  doorHeightAllowanceMm: 40,
 }
 
 export interface HouseSettings {
@@ -117,6 +162,8 @@ export interface HouseSettings {
   /** the most a rafter spans, eaves to ridge on the slope, before it
    * needs an underpurlin propped off a wall below */
   rafterSpanMm: number
+  /** the inside walls' framing */
+  framing: FramingSettings
 }
 
 /** where the linked weatherboard project lives */
@@ -157,13 +204,14 @@ export const DEFAULT_SETTINGS: HouseSettings = {
   maxTrussSpanMm: 12000,
   ceilingJoistSpanMm: 3600,
   rafterSpanMm: 3600,
+  framing: DEFAULT_FRAMING,
 }
 
 export const newHouseId = () => Math.random().toString(36).slice(2, 10)
 
 export const DEFAULT_HOUSE: HouseProject = {
   name: "My house",
-  floor: { mode: null, outline: [], lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes: [], overrides: {} },
+  floor: { mode: null, outline: [], lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes: [], overrides: {}, doors: [] },
   upper: null,
   grid: { stepMm: 500, moved: {} },
   settings: DEFAULT_SETTINGS,
@@ -204,6 +252,7 @@ const planFromData = (d: unknown): FloorPlan => {
     tags: arr<RoomTag>(f.tags),
     boxes: arr<RoomBox>(f.boxes),
     overrides: f.overrides ?? {},
+    doors: arr<Door>(f.doors).filter((d) => d && typeof d.wallId === "string" && typeof d.atMm === "number" && typeof d.widthMm === "number" && typeof d.heightMm === "number"),
   }
 }
 
@@ -223,6 +272,7 @@ export function houseFromData(d: unknown): HouseProject {
       ...(o.settings ?? {}),
       roof: { ...DEFAULT_SETTINGS.roof, ...(o.settings?.roof ?? {}) },
       lowerRoof: { ...DEFAULT_SETTINGS.lowerRoof, ...(o.settings?.lowerRoof ?? {}) },
+      framing: { ...DEFAULT_FRAMING, ...(o.settings?.framing ?? {}) },
     },
     step: typeof o.step === "number" ? o.step : 0,
     link: o.link && typeof o.link === "object" && typeof o.link.id === "string" ? o.link : null,

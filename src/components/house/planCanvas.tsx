@@ -48,7 +48,9 @@ const PlanCanvas: React.FC<{
   onOutlineChange?: (pts: Pt[]) => void
   /** a gridline dragged to a new place */
   onMoveGridline?: (line: GridLine, to: number) => void
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline }) => {
+  /** doors in the inside walls: each one's opening on plan, `picked` drawn out */
+  doors?: { id: string; a: Pt; b: Pt; picked?: boolean }[]
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -366,6 +368,20 @@ const PlanCanvas: React.FC<{
                 style={{ cursor: "pointer" }}
               />
             )}
+          </g>
+        )
+      })}
+
+      {/* doors: a gap in the wall, and the leaf swung open */}
+      {doors?.map((d) => {
+        const L = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y) || 1
+        const n = { x: -(d.b.y - d.a.y) / L, y: (d.b.x - d.a.x) / L }
+        const tip = { x: d.a.x + n.x * L, y: d.a.y + n.y * L }
+        return (
+          <g key={`d${d.id}`} pointerEvents="none" className={d.picked ? styles.doorPicked : styles.door}>
+            <line x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y} className={styles.doorGap} strokeWidth={sw * 2.6} />
+            <line x1={d.a.x} y1={d.a.y} x2={tip.x} y2={tip.y} strokeWidth={sw * 0.9} />
+            <path d={`M${tip.x},${tip.y} A${L},${L} 0 0 ${n.x * (d.b.y - d.a.y) - n.y * (d.b.x - d.a.x) > 0 ? 0 : 1} ${d.b.x},${d.b.y}`} fill="none" strokeWidth={sw * 0.6} strokeDasharray={`${sw * 2} ${sw * 1.5}`} />
           </g>
         )
       })}

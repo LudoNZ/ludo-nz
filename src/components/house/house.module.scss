@@ -457,6 +457,62 @@
   stroke: var(--color-primary);
 }
 
+.door {
+  stroke: #6d6a62;
+}
+
+.doorPicked {
+  stroke: var(--color-primary);
+}
+
+// (the gap is the plan's own background)
+.doorGap {
+  stroke: #fbfaf6;
+}
+
+// ── a wall's frame, in elevation ────────────────────────────────────────
+.elevation {
+  width: 100%;
+  height: auto;
+  max-height: 50vh;
+  display: block;
+  background: #fbfaf6;
+  border-radius: var(--borderRadius);
+  color: #3d3a35;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  span {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+  }
+}
+
+.doorRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(127, 127, 127, 0.25);
+}
+
 .wallDraft {
   stroke: var(--color-primary);
   opacity: 0.8;
@@ -516,4 +572,53 @@
 .gridLabel {
   fill: #2b6cb0;
   font-weight: 700;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin: 0.5rem 0 1rem;
+}
+
+.cutList {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.35rem 0.6rem 0.35rem 0;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 700;
+  }
+
+  td:nth-child(2),
+  td:last-child {
+    white-space: nowrap;
+  }
+}
+
+.swatchDot {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  vertical-align: -1px;
 }
