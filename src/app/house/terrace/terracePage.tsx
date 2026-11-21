@@ -1,6 +1,8 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useAuth } from "@/context/auth"
+import { deleteTerrace, newTerraceId, saveTerrace, StoredTerrace, subscribeToTerraces } from "@/components/house/terraceStore"
 import Link from "next/link"
 import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
@@ -34,6 +36,54 @@ export default function TerracePage() {
   const setUnit = (id: string, patch: Partial<TerraceUnit>) => set((t) => ({ ...t, units: t.units.map((u) => (u.id === id ? { ...u, ...patch } : u)) }))
   const [msg, setMsg] = useState<string | null>(null)
   const [showing, setShowing] = useState(false)
+  const uid = useAuth()?.currentUser?.uid ?? null
+  // your saved terraces, and how saving's going
+  const [mine, setMine] = useState<StoredTerrace[] | null>(null)
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  useEffect(() => {
+    if (!uid) {
+      setMine(null)
+      return
+    }
+    return subscribeToTerraces(uid, setMine, () => setMine([]))
+  }, [uid])
+  // saved to your account: every change saves there too (a moment after the last)
+  const savedHere = !!uid && terrace.saved?.uid === uid
+  const lastSaved = useRef<string>("")
+  useEffect(() => {
+    if (!savedHere || !terrace.saved) return
+    const body = JSON.stringify(terrace)
+    if (body === lastSaved.current) return
+    const id = terrace.saved.id
+    const timer = setTimeout(() => {
+      setSaveState("saving")
+      saveTerrace(uid!, id, terrace)
+        .then(() => {
+          lastSaved.current = body
+          setSaveState("saved")
+        })
+        .catch((err) => {
+          console.error("Saving the terrace failed", err)
+          setSaveState("error")
+        })
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [terrace, savedHere, uid])
+  const saveToAccount = async () => {
+    if (!uid) return
+    const id = newTerraceId(uid)
+    const next = { ...terrace, saved: { uid, id } }
+    setSaveState("saving")
+    try {
+      await saveTerrace(uid, id, next)
+      lastSaved.current = JSON.stringify(next)
+      setStored(() => next)
+      setSaveState("saved")
+    } catch (err) {
+      console.error("Saving the terrace failed", err)
+      setSaveState("error")
+    }
+  }
   const addFile = useRef<HTMLInputElement>(null)
   const openFile = useRef<HTMLInputElement>(null)
 
@@ -129,7 +179,7 @@ export default function TerracePage() {
       <p className={styles.intro}>
         Several houses on one site — townhouses in a terrace — each its own house project, set where it stands and at its own floor level. See the
         lot in 3D, and play the showcase over the whole building. Mark the walls between them as party walls in each house, and they meet as one.
-        Kept in this browser: save it to a file to keep it or share it.
+        Kept in this browser — save it to your account to open it anywhere, or to a file to share it.
       </p>
 
       <section className={styles.card}>
@@ -158,6 +208,65 @@ export default function TerracePage() {
           </button>
           {msg && <span className={styles.muted}>{msg}</span>}
         </div>
+        <div className={styles.toolbar}>
+          {!uid ? (
+            <span className={styles.muted}>
+              <Link href="/login">Log in</Link> to save terraces to your account (private — only you see them) and open them on any device.
+            </span>
+          ) : savedHere ? (
+            <span className={styles.muted}>
+              {saveState === "error"
+                ? "⚠ Couldn't save to your account — it's still kept in this browser."
+                : saveState === "saving"
+                  ? "Saving to your account…"
+                  : "Saved to your account — changes save as you go."}
+            </span>
+          ) : (
+            <>
+              <button type="button" className={`${styles.pill} ${styles.pillOn}`} onClick={saveToAccount} disabled={!terrace.units.length || saveState === "saving"}>
+                {saveState === "saving" ? "Saving…" : "Save to my account"}
+              </button>
+              <span className={styles.muted}>{saveState === "error" ? "⚠ Couldn't save it — try again in a moment." : "Private: only you see it."}</span>
+            </>
+          )}
+        </div>
+        {uid && mine && mine.length > 0 && (
+          <div className={styles.toolbar}>
+            <span className={styles.muted}>Your terraces:</span>
+            {mine.map((m) => (
+              <span key={m.id}>
+                <button
+                  type="button"
+                  className={`${styles.pill} ${terrace.saved?.id === m.id ? styles.pillOn : ""}`}
+                  onClick={() => {
+                    if (terrace.saved?.id === m.id) return
+                    if (terrace.units.length && !savedHere && !window.confirm(`Open "${m.name}" over the terrace here? This one isn't saved to your account.`)) return
+                    lastSaved.current = JSON.stringify({ ...m.terrace, saved: { uid: uid!, id: m.id } })
+                    setStored(() => ({ ...m.terrace, saved: { uid: uid!, id: m.id } }))
+                    setSaveState("saved")
+                  }}
+                  title={m.updatedAt ? `Saved ${m.updatedAt.toLocaleString()}` : undefined}
+                >
+                  {m.name} ({m.terrace.units.length})
+                </button>{" "}
+                {terrace.saved?.id === m.id && (
+                  <button
+                    type="button"
+                    className={styles.link}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${m.name}" from your account? The copy in this browser stays.`)) return
+                      await deleteTerrace(uid!, m.id)
+                      set((t) => ({ name: t.name, units: t.units }))
+                      setSaveState("idle")
+                    }}
+                  >
+                    Delete from my account
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <input
           ref={addFile}
           type="file"
@@ -186,6 +295,9 @@ export default function TerracePage() {
             try {
               const t = terraceFromData(JSON.parse(await f.text()))
               if (!t.units.length) throw new Error("empty")
+              // (a file opens as a terrace of its own, not over the one saved to your account)
+              delete t.saved
+              setSaveState("idle")
               setStored(() => t)
               setMsg(`Opened ${f.name}.`)
             } catch {

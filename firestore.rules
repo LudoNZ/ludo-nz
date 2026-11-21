@@ -499,6 +499,22 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.token.admin == true;
     }
 
+    // a terrace of houses (see house/terraceStore.ts): private only — the
+    // houses in it are a client's, so there's no public kind. `terrace` is
+    // the whole terrace, every house in it.
+    match /users/{userId}/terraceProjects/{terraceId} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'terrace', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.terrace is map
+        && request.resource.data.terrace.units is list
+        && request.resource.data.terrace.units.size() <= 30
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     match /{path=**}/houseProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.token.admin == true;
     }

@@ -17,6 +17,8 @@ export interface TerraceUnit {
 export interface Terrace {
   name: string
   units: TerraceUnit[]
+  /** saved to an account (see terraceStore.ts): changes here save there too */
+  saved?: { uid: string; id: string }
 }
 
 export const EMPTY_TERRACE: Terrace = { name: "My terrace", units: [] }
@@ -28,7 +30,9 @@ export function terraceFromData(d: unknown): Terrace {
   const o = (d && typeof d === "object" ? d : {}) as Partial<Terrace> & { kind?: string; terrace?: unknown }
   if (o.kind === "ludo-terrace" && o.terrace) return terraceFromData(o.terrace)
   const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0)
+  const sv = o.saved && typeof o.saved === "object" && typeof o.saved.uid === "string" && typeof o.saved.id === "string" ? { saved: { uid: o.saved.uid, id: o.saved.id } } : {}
   return {
+    ...sv,
     name: typeof o.name === "string" && o.name ? o.name : EMPTY_TERRACE.name,
     units: (Array.isArray(o.units) ? o.units : [])
       .filter((u) => u && typeof u === "object" && u.house)
@@ -36,7 +40,11 @@ export function terraceFromData(d: unknown): Terrace {
   }
 }
 
-export const terraceToJson = (t: Terrace) => JSON.stringify({ kind: "ludo-terrace", version: 1, terrace: t }, null, 1)
+/** (a file's not tied to anyone's account) */
+export const terraceToJson = (t: Terrace) => {
+  const { saved: _saved, ...rest } = t // eslint-disable-line @typescript-eslint/no-unused-vars
+  return JSON.stringify({ kind: "ludo-terrace", version: 1, terrace: rest }, null, 1)
+}
 
 /** a house's ground floor's extent across (for setting the next one alongside) */
 export const widthOf = (h: HouseProject) => {
