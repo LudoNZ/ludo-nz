@@ -20,6 +20,10 @@ import { HouseLayout, P2 } from "./housePlan"
 import { RoofPlan, RoofType, Wall } from "./types"
 import { edgePoints } from "./weatherboardCalc"
 
+/** how deep the roof is drawn, sheet to soffit (the fascia) — a roof
+ * running under another closer than this is cut where they'd meet */
+export const ROOF_DEPTH = 200
+
 export const DEFAULT_ROOF: RoofPlan = { type: "auto", pitchDeg: null, eavesMm: 450, vergeMm: 300, colour: "#3f4449" }
 
 export const ROOF_COLOURS: { name: string; hex: string }[] = [
@@ -66,7 +70,33 @@ export interface Roof {
    * together they tile the footprint), at the wall lines, and which way
    * its ridge runs — trusses, rafters and ceiling joists span square to it */
   wings: { corners: P2[]; ridge: P2 }[]
+  /** each wing's own roof: its rectangle at the wall lines (as laid out,
+   * not run on into another) and its planes, uncut — what the walls round
+   * that wing stop under (see own) */
+  own: { rect: P2[]; planes: Plane[] }[]
   notes: string[]
+}
+
+/** The roof a wall at `p` stops under: the wing whose own rectangle `p`
+ * (nudged just inside the house) is in — the lowest of its planes there —
+ * or null where it's under none. Not just the highest roof overhead: a
+ * gable's verge overhanging a lower roof isn't what the wall below holds up. */
+export function ownRoofAt(roof: Roof, p: P2, inside: P2, along: P2 = { x: 0, y: 0 }): number | null {
+  // (nudged in, and along the wall toward its middle — a wall's end is on
+  // the corner where its wing meets the next)
+  const q = { x: p.x + inside.x * 10 + along.x * 10, y: p.y + inside.y * 10 + along.y * 10 }
+  for (const w of roof.own) {
+    // (the rectangles are square to the house, which may not be to north)
+    const a = w.rect[0]
+    const u = { x: w.rect[1].x - a.x, y: w.rect[1].y - a.y }
+    const v = { x: w.rect[3].x - a.x, y: w.rect[3].y - a.y }
+    const lu = Math.hypot(u.x, u.y) || 1
+    const lv = Math.hypot(v.x, v.y) || 1
+    const su = ((q.x - a.x) * u.x + (q.y - a.y) * u.y) / lu
+    const sv = ((q.x - a.x) * v.x + (q.y - a.y) * v.y) / lv
+    if (su > 0 && su < lu && sv > 0 && sv < lv) return Math.min(...w.planes.map((pl) => zAt(pl, p)))
+  }
+  return null
 }
 
 // ── the walls' tops ────────────────────────────────────────────────────
@@ -192,10 +222,15 @@ interface Rect {
 type Side = "u0" | "u1" | "v0" | "v1"
 
 interface Wing extends Rect {
+  /** its own roof: the house's, or a lean-to up against a gable end */
+  type: "gable" | "hip" | "skillion"
   /** the ridge (or for a skillion, the level eaves) runs along u */
   alongU: boolean
   /** skillion only: rises toward the high (u1 / v1) side */
   risesToHigh: boolean
+  /** a lean-to against a gable end: its high side at the eaves height (it
+   * has to get under the gable's rake), falling away at its own pitch */
+  underRake?: number
   /** sides run into the roof they join: no overhang, no gable end */
   buried: Set<Side>
 }
@@ -331,28 +366,61 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
   // ── the wings ────────────────────────────────────────────────────────
   const wings: Wing[] = []
   rects.forEach((rect, i) => {
-    const wing: Wing = { ...rect, alongU: rect.u1 - rect.u0 >= rect.v1 - rect.v0, risesToHigh: true, buried: new Set() }
+    const wing: Wing = { ...rect, type, alongU: rect.u1 - rect.u0 >= rect.v1 - rect.v0, risesToHigh: true, buried: new Set() }
     if (i > 0) {
-      // the side it joins the roof before it by, and how far to run it in
-      let best: { s: Side; len: number; parent: Rect } | null = null
+      // the roof it joins (one before it), and the side it joins it by
+      let best: { s: Side; len: number; parent: Wing } | null = null
+      // (touching its rectangle as laid out, not as run on into another)
       for (const s of SIDES)
-        for (const p of rects.slice(0, i)) {
+        rects.slice(0, i).forEach((p, k) => {
           const len = shared(rect, s, p)
-          if (len > (best?.len ?? 0)) best = { s, len, parent: p }
-        }
+          if (len > (best?.len ?? 0)) best = { s, len, parent: wings[k] }
+        })
       if (best) {
-        const { s, parent } = best
-        const across = s[0] === "u" // joins on a u side: the wing runs along u into it
+        const { s, parent } = best as { s: Side; len: number; parent: Wing }
+        const across = s[0] === "u" // joined on a u side: it sticks out along u
         const depth = across ? rect.u1 - rect.u0 : rect.v1 - rect.v0
         const width = across ? rect.v1 - rect.v0 : rect.u1 - rect.u0
-        // a leg sticking well out has its ridge running into the roof it joins;
-        // a shallow step's runs along it
-        wing.alongU = depth >= width * 0.5 ? across : !across
-        const half = (across ? parent.u1 - parent.u0 : parent.v1 - parent.v0) / 2
-        if (s === "u0") wing.u0 -= half
-        if (s === "u1") wing.u1 += half
-        if (s === "v0") wing.v0 -= half
-        if (s === "v1") wing.v1 += half
+        // what the roof it joins does along that side: slopes up away from
+        // it (an eaves side, a hip end, a lean-to's low side), or stands as
+        // a wall going on up above it (a gable end, a lean-to's high side or
+        // its verge)
+        const theirs = OPPOSITE[s]
+        const theirsAlongRidge = (theirs[0] === "u") !== parent.alongU
+        const slopes =
+          type !== "skillion" &&
+          (parent.type === "hip" ||
+            (parent.type === "gable" && theirsAlongRidge) ||
+            (parent.type === "skillion" && theirsAlongRidge && theirs.endsWith(parent.risesToHigh ? "0" : "1")))
+        if (slopes) {
+          // its ridge runs into that roof, and on in under it as far as it
+          // takes to be buried (half its width, at the one pitch): valleys
+          wing.type = type
+          wing.alongU = across
+          const run = Math.min(width / 2, (across ? parent.u1 - parent.u0 : parent.v1 - parent.v0) / 2)
+          if (s === "u0") wing.u0 -= run
+          if (s === "u1") wing.u1 += run
+          if (s === "v0") wing.v0 -= run
+          if (s === "v1") wing.v1 += run
+        } else if (depth < width) {
+          // a shallow one: a lean-to against the wall, its top edge at the
+          // eaves (under the gable's rake, which comes down to the eaves at
+          // the corners), falling away at no more than 15°
+          wing.type = "skillion"
+          wing.alongU = !across
+          wing.risesToHigh = s.endsWith("1")
+          wing.underRake = Math.tan((Math.min(pitchDeg, 15) * Math.PI) / 180)
+        } else if (type === "skillion") {
+          // a lean-to off a lean-to: rising to the wall it's against
+          wing.type = "skillion"
+          wing.alongU = !across
+          wing.risesToHigh = s.endsWith("1")
+        } else {
+          // a lower roof of its own, running out from the wall
+          wing.type = type
+          wing.alongU = across
+        }
+        // either way, nothing hangs over (and no gable's filled) where it joins
         wing.buried.add(s)
       }
     }
@@ -367,19 +435,19 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         const overlap = Math.min(hi, Math.max(a[o], b[o])) - Math.max(lo, Math.min(a[o], b[o]))
         if (Math.abs(a[k] - rect[s]) < 5 && Math.abs(b[k] - rect[s]) < 5 && overlap > 100) {
           wing.buried.add(s)
-          if (type === "skillion") {
+          if (wing.type === "skillion") {
             wing.alongU = k === "y"
             wing.risesToHigh = s.endsWith("1")
           }
         }
       }
     }
-    if (type === "gable") {
+    if (i === 0 && type === "gable") {
       // a peaked wall on a side: the ridge runs square to it
       if (wallOn(rect, "u0", "peak") || wallOn(rect, "u1", "peak")) wing.alongU = true
       else if (wallOn(rect, "v0", "peak") || wallOn(rect, "v1", "peak")) wing.alongU = false
     }
-    if (type === "skillion" && !(opts.abut ?? []).length) {
+    if (i === 0 && type === "skillion" && !(opts.abut ?? []).length) {
       // a wall sloping end to end on a side: the roof falls along it
       for (const s of SIDES) {
         const w = wallOn(rect, s, "slope")
@@ -401,12 +469,16 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
     const [a0, a1, b0, b1] = w.alongU ? [w.v0, w.v1, w.u0, w.u1] : [w.u0, w.u1, w.v0, w.v1]
     const across = (k: number, c: number) => (w.alongU ? plane(0, k, c) : plane(k, 0, c))
     const along = (k: number, c: number) => (w.alongU ? plane(k, 0, c) : plane(0, k, c))
+    const lt = w.underRake
     const planes: Plane[] =
-      type === "skillion"
-        ? [w.risesToHigh ? across(t, H - a0 * t) : across(-t, H + a1 * t)]
-        : [across(t, H - a0 * t), across(-t, H + a1 * t), ...(type === "hip" ? [along(t, H - b0 * t), along(-t, H + b1 * t)] : [])]
+      w.type === "skillion"
+        ? lt !== undefined
+          ? // its high side at the eaves height, falling away from it
+            [w.risesToHigh ? across(lt, H - a1 * lt) : across(-lt, H + a0 * lt)]
+          : [w.risesToHigh ? across(t, H - a0 * t) : across(-t, H + a1 * t)]
+        : [across(t, H - a0 * t), across(-t, H + a1 * t), ...(w.type === "hip" ? [along(t, H - b0 * t), along(-t, H + b1 * t)] : [])]
     const eaves = r.eavesMm
-    const ends = type === "hip" ? r.eavesMm : r.vergeMm
+    const ends = w.type === "hip" ? r.eavesMm : r.vergeMm
     const over = (s: Side) => (w.buried.has(s) ? 0 : (s[0] === "u") === w.alongU ? ends : eaves)
     const corners: P2[] = [
       { x: w.u0 - over("u0"), y: w.v0 - over("v0") },
@@ -428,34 +500,73 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
       let pieces = [poly]
       built.forEach((B, bi) => {
         if (bi === ai) return
-        // hidden where B's roof is above it (a tie goes to the earlier wing)
+        // cut where it runs into B's roof: under B's surface but within a
+        // roof's depth of it (where they'd meet — a valley). Well below B
+        // (a lower roof under another's verge) it carries on under, to its
+        // wall. Taken face by face of B, so each piece cut out is convex;
+        // a tie goes to the earlier wing.
         const d = bi < ai ? -1 : 1
-        const hidden: Half[] = [...halvesOf(B.region), ...B.planes.map((Q) => ({ a: P.a - Q.a, b: P.b - Q.b, c: P.c - Q.c + d }))]
-        pieces = pieces.flatMap((pc) => subtract(pc, hidden))
+        B.planes.forEach((Q, qi) => {
+          const hidden: Half[] = [
+            ...halvesOf(B.region),
+            // where Q is B's surface
+            ...B.planes.filter((_, k) => k !== qi).map((R) => ({ a: Q.a - R.a, b: Q.b - R.b, c: Q.c - R.c })),
+            // under it…
+            { a: P.a - Q.a, b: P.b - Q.b, c: P.c - Q.c + d },
+            // …but not by more than a roof's depth
+            { a: Q.a - P.a, b: Q.b - P.b, c: Q.c - P.c - ROOF_DEPTH },
+          ]
+          pieces = pieces.flatMap((pc) => subtract(pc, hidden))
+        })
       })
       for (const pc of pieces) if (pc.length > 2 && Math.abs(area(pc)) > 2000) faces.push({ poly: pc, plane: P })
     })
   })
 
   // ── gable ends that the walls don't fill ────────────────────────────
+  // Each gable end's triangle, less the stretches a wall along that line
+  // already reaches up into (a gable wall); what's left is filled — say,
+  // above a lower roof that runs out from the end.
   const infills: Roof["infills"] = []
-  if (type === "gable")
-    for (const w of wings) {
+  for (const w of wings)
+    if (w.type === "gable") {
       const ends: Side[] = w.alongU ? ["u0", "u1"] : ["v0", "v1"]
       const [lo, hi] = w.alongU ? [w.v0, w.v1] : [w.u0, w.u1]
-      const peak = H + ((hi - lo) / 2) * t
+      const mid = (lo + hi) / 2
+      const zAt2 = (v: number) => H + Math.min(v - lo, hi - v) * t
       for (const s of ends) {
-        // run into another roof, or a gable wall's already there
-        if (w.buried.has(s) || wallOn(w, s, "peak")) continue
+        // run into another roof: nothing to fill
+        if (w.buried.has(s)) continue
+        const k = s[0] === "u" ? "x" : "y"
+        const o = k === "x" ? "y" : "x"
+        // the walls along this end, as stretches along it
+        const covered = shapes
+          .filter((x) => Math.abs(x.a[k] - w[s]) < 30 && Math.abs(x.b[k] - w[s]) < 30)
+          .map((x) => [Math.min(x.a[o], x.b[o]), Math.max(x.a[o], x.b[o])] as [number, number])
+          .sort((p, q) => p[0] - q[0])
+        const gaps: [number, number][] = []
+        let at0 = lo
+        for (const [p, q] of covered) {
+          if (p - at0 > 100) gaps.push([at0, Math.min(p, hi)])
+          at0 = Math.max(at0, q)
+        }
+        if (hi - at0 > 100) gaps.push([at0, hi])
         const inward = s.endsWith("0") ? 1 : -1
-        // flush with the wall's face, on top of it
         const at = w[s]
         const pt = (along: number, z: number): [number, number, number] => {
           const p = toWorld(w.alongU ? { x: at, y: along } : { x: along, y: at })
           return [p.x, p.y, z]
         }
         const dir = toWorld(w.alongU ? { x: inward, y: 0 } : { x: 0, y: inward })
-        infills.push({ pts: [pt(lo, H), pt(hi, H), pt((lo + hi) / 2, peak)], inward: dir })
+        for (const [p, q] of gaps) {
+          const top = [pt(q, zAt2(q)), ...(p < mid && mid < q ? [pt(mid, zAt2(mid))] : []), pt(p, zAt2(p))]
+          // (at an eaves corner the top meets the bottom: one point, not two)
+          const pts = [pt(p, H), pt(q, H), ...top].filter((a, i, all) => {
+            const b = all[(i + 1) % all.length]
+            return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > 1
+          })
+          if (pts.length >= 3) infills.push({ pts, inward: dir })
+        }
       }
     }
 
@@ -469,5 +580,14 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
     ridge: toWorld(wings[i].alongU ? { x: 1, y: 0 } : { x: 0, y: 1 }),
   }))
   if (wings.length > 1) notes.push(`${wings.length} roofs meeting in valleys, one over each wing of the footprint.`)
-  return { type, pitchDeg, eavesZ: H, faces, infills, wings: wingsOut, notes }
+  const own = rects.map((rect, i) => ({
+    rect: [
+      { x: rect.u0, y: rect.v0 },
+      { x: rect.u1, y: rect.v0 },
+      { x: rect.u1, y: rect.v1 },
+      { x: rect.u0, y: rect.v1 },
+    ].map(toWorld),
+    planes: built[i].planes,
+  }))
+  return { type, pitchDeg, eavesZ: H, faces, infills, wings: wingsOut, own, notes }
 }

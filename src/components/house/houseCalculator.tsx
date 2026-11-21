@@ -992,10 +992,26 @@ const ThreeDStep: React.FC<{
   const input = useMemo(() => {
     const walls = cladding.walls
     const results = new Map([...walls.values()].map((w) => [w.id, calculateWall(w, WB_DEFAULTS)]))
+    // (each held short where it meets the outside walls, and where it butts
+    // into another inside wall, so no solid runs through another)
+    const onSeg = (p: Pt, a: Pt, b: Pt) => {
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+      const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len)
+      return t >= -0.001 && t <= 1.001 && Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / len < 5
+    }
+    const trim = (g: typeof graph, w: (typeof graph.walls)[number]) => {
+      const len = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1
+      const d = { x: (w.b.x - w.a.x) / len, y: (w.b.y - w.a.y) / len }
+      const short = (p: Pt) =>
+        g.outline.some((q, i) => onSeg(p, q, g.outline[(i + 1) % g.outline.length])) ? 141 : g.walls.some((o) => o !== w && onSeg(p, o.a, o.b)) ? 56 : 0
+      const sa = short(w.a)
+      const sb = short(w.b)
+      return { a: { x: w.a.x + d.x * sa, y: w.a.y + d.y * sa }, b: { x: w.b.x - d.x * sb, y: w.b.y - d.y * sb } }
+    }
     const inside = (g: typeof graph, st: Structure, z0: number, height: number, upper: boolean) =>
-      g.walls.map((w) => ({
-        a: { x: w.a.x, y: -w.a.y },
-        b: { x: w.b.x, y: -w.b.y },
+      g.walls.map((w) => ({ w, ...trim(g, w) })).filter((x) => Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y) > 20).map(({ w, a, b }) => ({
+        a: { x: a.x, y: -a.y },
+        b: { x: b.x, y: -b.y },
         height,
         thickness: 110,
         z0,

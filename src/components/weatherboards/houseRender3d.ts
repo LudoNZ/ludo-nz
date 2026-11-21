@@ -14,7 +14,7 @@
 import { FIT_CAMERA, makeCamera, surfaceAtCentre, type CameraFrame, type CameraState, type V2, type V3 } from "../render3d/perspective"
 import { makeSolid, orderSolids, worldBox, type Solid } from "../stairs/stairRender3d"
 import { HouseLayout, outwardOf, P2, PlanSide } from "./housePlan"
-import { Roof, zAt } from "./roof"
+import { Roof, ROOF_DEPTH, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
@@ -52,7 +52,7 @@ const TRIM_PROUD = 20
 /** glass sits this far back from the face */
 const GLASS_BACK = 60
 /** the roof's depth, sheet to soffit: what shows as the fascia */
-const ROOF_T = 200
+const ROOF_T = ROOF_DEPTH
 /** sheet ribs, this far apart across the fall */
 const RIB_MM = 300
 
@@ -544,11 +544,25 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     for (const inf of roof.infills) {
       const back = inf.pts.map(([x, y, z]): V3 => [x + inf.inward.x * 10, y + inf.inward.y * 10, z])
       const faces = [
-        { pts: inf.pts, color: COLORS.plain },
-        { pts: back, color: COLORS.plain },
-        ...inf.pts.map((p, k) => ({ pts: [p, inf.pts[(k + 1) % inf.pts.length], back[(k + 1) % back.length], back[k]], color: COLORS.plain })),
+        { pts: inf.pts, color: COLORS.cladding },
+        { pts: back, color: COLORS.cladding },
+        ...inf.pts.map((p, k) => ({ pts: [p, inf.pts[(k + 1) % inf.pts.length], back[(k + 1) % back.length], back[k]], color: COLORS.cladding })),
       ]
-      pieces.push({ solid: makeSolid(faces), member: "roof" })
+      // weatherboard courses across it, so it reads as the gable's cladding
+      const zs = inf.pts.map((p) => p[2])
+      const lines: [V3, V3][] = []
+      for (let z = Math.min(...zs) + 150; z < Math.max(...zs) - 20; z += 150) {
+        const cuts: V3[] = []
+        inf.pts.forEach((p, k) => {
+          const q = inf.pts[(k + 1) % inf.pts.length]
+          if ((p[2] - z) * (q[2] - z) < 0) {
+            const f = (z - p[2]) / (q[2] - p[2])
+            cuts.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, z])
+          }
+        })
+        if (cuts.length === 2) lines.push([cuts[0], cuts[1]].map(([x, y, zz]): V3 => [x - inf.inward.x * 0.5, y - inf.inward.y * 0.5, zz]) as [V3, V3])
+      }
+      pieces.push({ solid: makeSolid(faces), member: "roof", lines })
     }
   }
 

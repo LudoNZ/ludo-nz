@@ -15,7 +15,7 @@
 
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
-import { buildRoof, Roof, zAt } from "../weatherboards/roof"
+import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
 import { Elevation, RoofPlan, Wall, WallEdge, WeatherboardProject } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
 import { HouseProject } from "./houseTypes"
@@ -48,15 +48,17 @@ const roofAt = (roofs: Roof[], p: P2): number | null => {
   return z
 }
 
-/** where a wall line (a → b) crosses the edges of the roofs' faces, mm along it */
+/** where a wall line (a → b) crosses the edges of the roofs' faces, and of
+ * their wings' own rectangles (where a wall passes from under one wing's
+ * roof to the next), mm along it */
 const roofBends = (roofs: Roof[], a: P2, b: P2): number[] => {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
   const d = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
   const out: number[] = []
   for (const r of roofs)
-    for (const f of r.faces)
-      f.poly.forEach((p, i) => {
-        const q = f.poly[(i + 1) % f.poly.length]
+    for (const poly of [...r.faces.map((f) => f.poly), ...(r.own ?? []).map((o) => o.rect)])
+      poly.forEach((p, i) => {
+        const q = poly[(i + 1) % poly.length]
         const e = { x: q.x - p.x, y: q.y - p.y }
         const den = d.x * e.y - d.y * e.x
         if (Math.abs(den) < 1e-9) return
@@ -75,14 +77,29 @@ function edgeFrom(samples: { x: number; y: number }[]): WallEdge {
     .sort((p, q) => p.x - q.x)
     .map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }))
     .filter((p, i, all) => i === 0 || p.x !== all[i - 1].x)
-  const kept = pts.filter((p, i) => {
-    if (i === 0 || i === pts.length - 1) return true
-    const a0 = pts[i - 1]
-    const b0 = pts[i + 1]
-    if (b0.x === a0.x) return true
-    const expect = a0.y + ((b0.y - a0.y) * (p.x - a0.x)) / (b0.x - a0.x)
-    return Math.abs(expect - p.y) > 2
-  })
+  // drop the points that sit on the line between the ones either side of
+  // them, the straightest first, measured against what's kept (close
+  // samples either side of a bend mustn't hide it)
+  const kept = [...pts]
+  const off = (i: number) => {
+    const a0 = kept[i - 1]
+    const b0 = kept[i + 1]
+    if (b0.x === a0.x) return Infinity
+    return Math.abs(a0.y + ((b0.y - a0.y) * (kept[i].x - a0.x)) / (b0.x - a0.x) - kept[i].y)
+  }
+  for (;;) {
+    let best = -1
+    let bestOff = 2
+    for (let i = 1; i < kept.length - 1; i++) {
+      const o = off(i)
+      if (o <= bestOff) {
+        best = i
+        bestOff = o
+      }
+    }
+    if (best < 0) break
+    kept.splice(best, 1)
+  }
   // (a sheer step needs two points a hair apart)
   const out = kept.filter((p, i) => i === 0 || p.x !== kept[i - 1].x || p.y !== kept[i - 1].y)
   return { left: out[0].y, right: out[out.length - 1].y, breaks: out.slice(1, -1).map((p, i) => ({ id: `e${i}`, x: p.x, y: p.y })) }
@@ -97,7 +114,18 @@ function topFromRoofs(roofs: Roof[], a: P2, b: P2, eaves: number, held?: { at: (
   // along it — either side of each too (a roof can start part way along)
   const cuts = [...roofBends(roofs, a, b), ...(held?.corners ?? []).map((p) => ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len).filter((t) => t > 1 && t < len - 1)]
   const xs = [0, len, ...cuts.flatMap((x) => [x - 10, x, x + 10])].filter((x) => x >= 0 && x <= len)
-  return edgeFrom(xs.map((x) => ({ x, y: held?.at(at(x), a, b) ? eaves : Math.max(eaves, roofAt(roofs, at(x)) ?? eaves) })))
+  // its own roof over it (even below the eaves height — a lean-to falling
+  // away from a gable end), else the eaves; inside is to the left going a → b
+  const inside = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len }
+  const own = (p: P2, x: number) => {
+    const toMid = x < len / 2 ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: -(b.x - a.x) / len, y: -(b.y - a.y) / len }
+    for (const r of roofs) {
+      const z = ownRoofAt(r, p, inside, toMid)
+      if (z !== null) return z
+    }
+    return roofAt(roofs, p)
+  }
+  return edgeFrom(xs.map((x) => ({ x, y: held?.at(at(x), a, b) ? eaves : (own(at(x), x) ?? eaves) })))
 }
 
 const onSegment = (p: P2, a: P2, b: P2, tol = 5) => {
