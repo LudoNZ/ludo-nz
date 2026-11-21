@@ -653,11 +653,11 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         const wallTop = (v: number) => {
           let z = -Infinity
           for (const tops of along) {
-            if (v < tops[0].v - 1 || v > tops[tops.length - 1].v + 1) continue
+            if (v < tops[0].v - 0.25 || v > tops[tops.length - 1].v + 0.25) continue
             for (let i = 1; i < tops.length; i++) {
               const p = tops[i - 1]
               const q = tops[i]
-              if (v >= p.v - 1 && v <= q.v + 1) z = Math.max(z, q.v - p.v < 1 ? Math.max(p.z, q.z) : p.z + ((q.z - p.z) * (v - p.v)) / (q.v - p.v))
+              if (v >= p.v - 0.25 && v <= q.v + 0.25) z = Math.max(z, q.v - p.v < 1 ? Math.max(p.z, q.z) : p.z + ((q.z - p.z) * (v - p.v)) / (q.v - p.v))
             }
           }
           return z
@@ -691,7 +691,19 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           }
           return z
         }
-        const ends = others.flatMap((B) => (w.alongU ? [B.w.v0, B.w.v1] : [B.w.u0, B.w.u1]))
+        // where another roof starts/stops along it, and where it bends
+        // (where two of its planes meet over the line: a ridge, a hip)
+        const crease = (Q: Plane, R: Plane) => {
+          // z along the line is linear in v: find where the two are equal
+          const z = (pl: Plane, v: number) => zAt(pl, toWorld(localAt(v)))
+          const d0 = z(Q, 0) - z(R, 0)
+          const d1 = z(Q, 1000) - z(R, 1000)
+          return Math.abs(d1 - d0) < 1e-9 ? [] : [(-d0 * 1000) / (d1 - d0)]
+        }
+        const ends = others.flatMap((B) => [
+          ...(w.alongU ? [B.w.v0, B.w.v1] : [B.w.u0, B.w.u1]),
+          ...B.planes.flatMap((Q, i) => B.planes.slice(i + 1).flatMap((R) => crease(Q, R))),
+        ])
         for (const [p, q] of gaps) {
           // breaks along it: the ridge, where another roof starts/stops, and
           // the walls' tops' bends and ends
@@ -723,9 +735,23 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
             }
             run = []
           }
+          // (split where top and bottom meet, so no piece runs on as a sliver
+          // of nothing along a gable wall)
+          let open = false
           for (const v of vs) {
-            if (zAt2(v) - bottom(v) > -1) run.push(v)
-            else flush()
+            const d = zAt2(v) - bottom(v)
+            if (d < -1) {
+              flush()
+              open = false
+            } else if (d <= 1) {
+              run.push(v)
+              if (open) flush()
+              run = [v]
+              open = false
+            } else {
+              run.push(v)
+              open = true
+            }
           }
           flush()
         }
