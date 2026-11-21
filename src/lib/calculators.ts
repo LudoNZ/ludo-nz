@@ -104,6 +104,24 @@ export const CALCULATORS: readonly Calculator[] = [
     href: "/site-projects",
     defaultStatus: "ready",
   },
+  {
+    id: "rib-raft",
+    title: "Rib Raft Slab",
+    description:
+      "A waffle slab on any square-cornered footprint: pods set out from the beams, ribs between, edge and internal beams, then the pods (whole and cut), concrete, HD12 with laps, corner bars, mesh sheets, DPM, hardfill and boxing.",
+    tags: ["Pod layout", "Concrete", "Steel", "Mesh"],
+    href: "/rib-raft",
+    defaultStatus: "development",
+  },
+  {
+    id: "intertenancy-walls",
+    title: "Intertenancy Walls",
+    description:
+      "Integra lightweight-concrete party walls between townhouses, slab to roofing: panels stood side by side to the wall's own profile (gables, steps), brackets, FireWool and fire sealant.",
+    tags: ["Integra panels", "Brackets", "FireWool", "Townhouses"],
+    href: "/intertenancy-walls",
+    defaultStatus: "development",
+  },
   // Ideas queued up for the same rule-of-thumb, real-materials-list
   // treatment — no page behind these yet. The first block roughly follows a
   // house's build sequence and mostly tracks NZS 3604 section for section;

@@ -8,7 +8,7 @@ import { DEFAULT_RIB_RAFT, ribRaft, ribRaftFromData, RibRaftSettings } from "../
 import { DEFAULT_INTEGRA, integraFromData, integraWalls, IntegraSettings, PartyWall } from "../intertenancy/integraWall"
 import { FloorGraph, simplify } from "./floorPlan"
 import type { Cladding } from "./houseCladding"
-import { HouseProject, HouseSettings, onParty } from "./houseTypes"
+import { HouseProject, HouseSettings, onParty, Pt } from "./houseTypes"
 import type { Structure } from "./structure"
 import styles from "./house.module.scss"
 
@@ -23,11 +23,33 @@ export const RibRaftCard: React.FC<{
   structure: Structure
   setSettings: (patch: Partial<HouseSettings>) => void
 }> = ({ house, graph, structure, setSettings }) => {
-  const st = ribRaftFromData(house.settings.ribRaft)
-  const set = (patch: Partial<RibRaftSettings>) => setSettings({ ribRaft: { ...(house.settings.ribRaft ?? {}), ...patch } })
   const outline = useMemo(() => simplify(graph.outline), [graph])
   const beams = graph.walls.filter((w) => structure.inside.get(w.id)?.loadBearing).map((w) => ({ a: w.a, b: w.b }))
   const joints = outline.flatMap((p, i) => (onParty(house.floor.party, p, outline[(i + 1) % outline.length]) ? [i] : []))
+  return (
+    <RibRaftPanel
+      outline={outline}
+      beams={beams}
+      joints={joints}
+      settings={house.settings.ribRaft}
+      setSettings={(ribRaft) => setSettings({ ribRaft })}
+      beamsFrom="load-bearing walls"
+    />
+  )
+}
+
+/** A rib raft on any square-cornered outline: its pods drawn, its settings, its takeoff. */
+export const RibRaftPanel: React.FC<{
+  outline: Pt[]
+  beams: { a: Pt; b: Pt }[]
+  joints: number[]
+  settings: Partial<RibRaftSettings> | undefined
+  setSettings: (s: Partial<RibRaftSettings> | undefined) => void
+  /** what the internal beams are under */
+  beamsFrom?: string
+}> = ({ outline, beams, joints, settings, setSettings, beamsFrom = "internal beams" }) => {
+  const st = ribRaftFromData(settings)
+  const set = (patch: Partial<RibRaftSettings>) => setSettings({ ...(settings ?? {}), ...patch })
   const r = useMemo(() => ribRaft({ outline, beams, joints }, st), [outline, JSON.stringify(beams), JSON.stringify(joints), JSON.stringify(st)]) // eslint-disable-line react-hooks/exhaustive-deps
   if (outline.length < 4) return null
   const xs = outline.map((p) => p.x)
@@ -57,7 +79,7 @@ export const RibRaftCard: React.FC<{
       <h3>Rib raft slab</h3>
       <p className={styles.hint}>
         {r.areaM2.toFixed(1)} m², {m(r.perimeterMm)} round: a {st.edgeBeamMm} edge beam all round
-        {beams.length ? `, a ${st.internalBeamMm} beam under each of the ${beams.length} load-bearing walls` : ""}
+        {beams.length ? `, a ${st.internalBeamMm} beam under each of the ${beams.length} ${beamsFrom}` : ""}
         {joints.length ? `, a free joint along the party wall${joints.length > 1 ? "s" : ""}` : ""}, {st.podMm} pods with {st.ribMm} ribs between, {st.toppingMm} topping. An estimate off the usual
         engineer&apos;s notes — the engineer&apos;s plan sets out the beams and what&apos;s in them.
       </p>
@@ -149,7 +171,7 @@ export const RibRaftCard: React.FC<{
         </ul>
       )}
       {JSON.stringify(st) !== JSON.stringify(DEFAULT_RIB_RAFT) && (
-        <button type="button" className={styles.link} onClick={() => setSettings({ ribRaft: undefined })}>
+        <button type="button" className={styles.link} onClick={() => setSettings(undefined)}>
           Back to the usual rib raft
         </button>
       )}
@@ -211,9 +233,18 @@ export const IntegraCard: React.FC<{
   cladding: Cladding
   setSettings: (patch: Partial<HouseSettings>) => void
 }> = ({ house, cladding, setSettings }) => {
-  const st = integraFromData(house.settings.integra)
-  const set = (patch: Partial<IntegraSettings>) => setSettings({ integra: { ...(house.settings.integra ?? {}), ...patch } })
   const walls = useMemo(() => partyWallsOf(cladding), [cladding])
+  return <IntegraPanel walls={walls} settings={house.settings.integra} setSettings={(integra) => setSettings({ integra })} />
+}
+
+/** Integra party walls, any shape: the settings and the takeoff, wall by wall. */
+export const IntegraPanel: React.FC<{
+  walls: PartyWall[]
+  settings: Partial<IntegraSettings> | undefined
+  setSettings: (s: Partial<IntegraSettings> | undefined) => void
+}> = ({ walls, settings, setSettings }) => {
+  const st = integraFromData(settings)
+  const set = (patch: Partial<IntegraSettings>) => setSettings({ ...(settings ?? {}), ...patch })
   const r = useMemo(() => integraWalls(walls, st), [walls, JSON.stringify(st)]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!walls.length) return null
   return (
@@ -288,7 +319,7 @@ export const IntegraCard: React.FC<{
         ))}
       </ul>
       {JSON.stringify(st) !== JSON.stringify(DEFAULT_INTEGRA) && (
-        <button type="button" className={styles.link} onClick={() => setSettings({ integra: undefined })}>
+        <button type="button" className={styles.link} onClick={() => setSettings(undefined)}>
           Back to the usual panels
         </button>
       )}
