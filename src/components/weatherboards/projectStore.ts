@@ -41,6 +41,7 @@ const fromData = (id: string, location: ProjectLocation, data: Record<string, un
   name: typeof data.name === "string" ? data.name : "Untitled",
   settings: (data.settings ?? {}) as WeatherboardProject["settings"],
   elevations: Array.isArray(data.elevations) ? (data.elevations as WeatherboardProject["elevations"]) : [],
+  ...(data.plan && typeof data.plan === "object" ? { plan: data.plan as WeatherboardProject["plan"] } : {}),
   summary: (data.summary as ProjectSummary | undefined) ?? null,
   updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : null,
 })
@@ -75,6 +76,8 @@ export const saveProject = async (location: ProjectLocation, id: string, name: s
     name: (name.trim() || "Untitled").slice(0, 100),
     settings: plain(project.settings),
     elevations: plain(project.elevations),
+    // (only once it's been set, so a project that's never had a plan saves as before)
+    ...(project.plan ? { plan: plain(project.plan) } : {}),
     summary: plain(summarise(project)),
     updatedAt: Timestamp.now(),
   })

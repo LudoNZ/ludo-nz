@@ -125,7 +125,42 @@ export interface WeatherboardSettings {
   trimLengthsMm: number[]
 }
 
+/** Where the walls sit on plan, for the 3D view — worked out either way
+ * (`method`): by joining the elevations up round the house, or from a
+ * footprint drawn on plan with each side given the wall that clads it.
+ * Both are kept, so flicking between them loses nothing; housePlan.ts
+ * turns whichever is in use into one layout. */
+export interface HousePlan {
+  method: "chain" | "footprint"
+  chain: ChainPlan
+  footprint: FootprintPlan | null
+}
+
+/** The elevations in the order they meet going round the house, each
+ * one's right-hand end (seen from outside) meeting the next one's left.
+ * Between walls in one elevation, and at a corner part way along a wall,
+ * the face can step out toward you (+ mm) or back (−). */
+export interface ChainPlan {
+  /** elevation ids; any left out follow in tab order */
+  order: string[]
+  /** step depth, mm: keyed by a wall id (the step after that wall, to the
+   * next one in its elevation) or "c:" + a corner id */
+  steps: Record<string, number>
+}
+
+/** A footprint drawn on plan (mm, y down as on screen), and the wall
+ * cladding each side, in order round it — a wall with corners along it
+ * runs on over the next sides. null is a side no wall here clads. */
+export interface FootprintPlan {
+  points: { x: number; y: number }[]
+  lockedEdgeLengths: Record<string, number>
+  lockedVertexAngles: Record<string, number>
+  sides: (string | null)[]
+}
+
 export interface WeatherboardProject {
   settings: WeatherboardSettings
   elevations: Elevation[]
+  /** absent until the Plan & 3D tab is first used */
+  plan?: HousePlan
 }

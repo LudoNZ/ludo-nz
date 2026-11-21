@@ -1,0 +1,501 @@
+/** The house in 3D, from its walls set out on plan (housePlan.ts): every
+ * wall stood up on its side of the house with its raked top and bottom,
+ * the windows and doors cut through, the weatherboard courses and joins
+ * drawn on its face as the take-off lays them, and the facings over the
+ * corners and round the joinery.
+ *
+ * Each wall is cut into vertical strips at every rake break and every
+ * jamb, so each piece is a convex slab the painter's sort (stairs/
+ * stairRender3d.ts) can order; the courses are lines drawn on a piece's
+ * face rather than solids of their own, which keeps a whole house quick
+ * enough to swing round. World mm, x east, y north, z up from the
+ * elevations' datum. Pure — no React. */
+
+import { FIT_CAMERA, makeCamera, surfaceAtCentre, type CameraFrame, type CameraState, type V2, type V3 } from "../render3d/perspective"
+import { makeSolid, orderSolids, type Solid } from "../stairs/stairRender3d"
+import { HouseLayout, outwardOf, P2, PlanSide } from "./housePlan"
+import { Opening, Wall, WeatherboardSettings } from "./types"
+import { edgePoints, WallResult } from "./weatherboardCalc"
+
+export type HouseRenderMember = "boards" | "trims" | "joinery" | "foundation" | "floor"
+
+export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
+  boards: "Board lines",
+  trims: "Facings",
+  joinery: "Windows & doors",
+  foundation: "Foundation",
+  floor: "Floor",
+}
+
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["boards", "trims", "joinery", "foundation", "floor"]
+
+const COLORS = {
+  cladding: "#e9e4d8",
+  plain: "#ddd7c9",
+  trim: "#fbfbf8",
+  glass: "#5d7486",
+  frame: "#3c4248",
+  foundation: "#a9a6a0",
+  floor: "#c9b79a",
+  grass: "#9cc46e",
+  line: "#000000",
+}
+
+/** wall depth behind the cladding's face: boards, cavity, studs, lining */
+const WALL_T = 140
+/** facings stand proud of the boards by this much */
+const TRIM_PROUD = 20
+/** glass sits this far back from the face */
+const GLASS_BACK = 60
+/** the lawn sits this far below the lowest wall bottom */
+const GROUND_DROP = 200
+
+const EPS = 0.5
+
+export interface HouseRenderInput {
+  layout: HouseLayout
+  walls: Map<string, Wall>
+  results: Map<string, WallResult>
+  settings: WeatherboardSettings
+}
+
+// ── wall heights ───────────────────────────────────────────────────────
+
+type Pts = { x: number; y: number }[]
+const valueAt = (pts: Pts, x: number): number => {
+  if (x <= pts[0].x) return pts[0].y
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]
+    const b = pts[i]
+    if (x <= b.x) return b.x === a.x ? b.y : a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x)
+  }
+  return pts[pts.length - 1].y
+}
+
+interface Edges {
+  top: Pts
+  bottom: Pts
+}
+const edgesOf = (w: Wall): Edges => ({ top: edgePoints(w.top, w.lengthMm), bottom: edgePoints(w.bottom, w.lengthMm) })
+
+const headAt = (o: Opening, x: number) => o.sill + o.height + ((o.heightRight ?? o.height) - o.height) * ((x - o.x) / (o.width || 1))
+
+// ── a side's own frame ─────────────────────────────────────────────────
+
+/** wall coordinates on one side → world: `x` along the wall (mm from its
+ * left end), `y` height above datum, `off` out from the face (+ outside) */
+interface SideFrame {
+  at: (x: number, y: number, off: number) => V3
+  /** how far the back of the wall shifts along at each end, per mm of
+   * depth in: mitres the corners so neighbouring walls meet, not overlap */
+  mitreA: number
+  mitreB: number
+  x0: number
+  x1: number
+}
+
+const turnAt = (into: PlanSide, out: PlanSide) => {
+  const d1 = { x: into.b.x - into.a.x, y: into.b.y - into.a.y }
+  const d2 = { x: out.b.x - out.a.x, y: out.b.y - out.a.y }
+  return Math.atan2(d1.x * d2.y - d1.y * d2.x, d1.x * d2.x + d1.y * d2.y)
+}
+/** how far along the back of a wall moves per mm in, at a turn: a left
+ * turn (an outside corner, going anticlockwise) cuts it short, a right
+ * one (an inside corner) runs it on */
+const mitre = (turn: number) => Math.max(-3, Math.min(3, Math.tan(turn / 2)))
+
+function sideFrame(s: PlanSide, prev: PlanSide | null, next: PlanSide | null): SideFrame {
+  const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
+  const d: P2 = { x: (s.b.x - s.a.x) / len, y: (s.b.y - s.a.y) / len }
+  const n = outwardOf(s)
+  const span = s.wallId ? s.x1 - s.x0 : len
+  const x0 = s.wallId ? s.x0 : 0
+  return {
+    at: (x, y, off) => {
+      const t = ((x - x0) / span) * len
+      return [s.a.x + d.x * t + n.x * off, s.a.y + d.y * t + n.y * off, y]
+    },
+    mitreA: prev ? mitre(turnAt(prev, s)) : 0,
+    mitreB: next ? mitre(turnAt(s, next)) : 0,
+    x0,
+    x1: x0 + span,
+  }
+}
+
+// ── solids on a side ───────────────────────────────────────────────────
+
+interface Piece {
+  solid: Solid
+  member: HouseRenderMember | "wall"
+  /** lines on the solid's first face (its outside), drawn over it */
+  lines?: [V3, V3][]
+}
+
+/** A convex profile in wall coords (x along, y up) made a slab from
+ * `off0` to `off1` out from the face. With `mitre`, the slab's back is
+ * pulled or pushed along at the side's ends to meet the next wall. */
+function slab(f: SideFrame, profile: Pts, off0: number, off1: number, color: string, mitreEnds = false): Solid | null {
+  const pts: Pts = []
+  for (const p of profile) {
+    const last = pts[pts.length - 1]
+    if (!last || Math.abs(last.x - p.x) > EPS || Math.abs(last.y - p.y) > EPS) pts.push(p)
+  }
+  if (pts.length > 2 && Math.abs(pts[0].x - pts[pts.length - 1].x) < EPS && Math.abs(pts[0].y - pts[pts.length - 1].y) < EPS) pts.pop()
+  if (pts.length < 3 || off1 - off0 < 0.1) return null
+  const shift = (x: number, off: number) => {
+    if (!mitreEnds || off >= 0) return x
+    const depth = -off
+    if (Math.abs(x - f.x0) < EPS) return x + f.mitreA * depth
+    if (Math.abs(x - f.x1) < EPS) return x - f.mitreB * depth
+    return x
+  }
+  const front = pts.map((p) => f.at(shift(p.x, off1), p.y, off1))
+  const back = pts.map((p) => f.at(shift(p.x, off0), p.y, off0))
+  const faces = [
+    { pts: front, color },
+    { pts: back, color },
+  ]
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length
+    faces.push({ pts: [front[i], front[j], back[j], back[i]], color })
+  }
+  return makeSolid(faces)
+}
+
+/** a band [lo, hi] of a wall between two x's, each edge straight across it */
+const quad = (u: number, v: number, loU: number, loV: number, hiU: number, hiV: number): Pts => [
+  { x: u, y: loU },
+  { x: v, y: loV },
+  { x: v, y: hiV },
+  { x: u, y: hiU },
+]
+
+/** Where a level line at height `y` crosses a band between `u` and `v`
+ * whose bottom and top run straight from lo/hi at u to lo/hi at v. */
+function levelAcross(u: number, v: number, loU: number, loV: number, hiU: number, hiV: number, y: number): [number, number] | null {
+  let a = u
+  let b = v
+  const clip = (fu: number, fv: number) => {
+    // keep where f(x) > 0, f linear from fu at u to fv at v
+    if (fu <= 0 && fv <= 0) return false
+    if (fu < 0 || fv < 0) {
+      const x = u + ((v - u) * fu) / (fu - fv)
+      if (fu < 0) a = Math.max(a, x)
+      else b = Math.min(b, x)
+    }
+    return true
+  }
+  if (!clip(y - loU, y - loV) || !clip(hiU - y, hiV - y)) return null
+  return b - a > EPS ? [a, b] : null
+}
+
+function sidePieces(
+  s: PlanSide,
+  f: SideFrame,
+  heights: { top: (x: number) => number; bottom: (x: number) => number; breaks: number[] },
+  wall: Wall | null,
+  result: WallResult | null,
+  settings: WeatherboardSettings,
+  courseLevels: number[],
+  groundZ: number,
+): Piece[] {
+  const out: Piece[] = []
+  const push = (member: Piece["member"], solid: Solid | null, lines?: [V3, V3][]) => solid && out.push({ solid, member, lines })
+  const { x0, x1 } = f
+  const openings = (wall?.openings ?? []).filter((o) => o.x < x1 - EPS && o.x + o.width > x0 + EPS)
+  const cuts = new Set<number>([x0, x1])
+  for (const b of heights.breaks) if (b > x0 + EPS && b < x1 - EPS) cuts.add(b)
+  for (const o of openings) for (const x of [o.x, o.x + o.width]) if (x > x0 + EPS && x < x1 - EPS) cuts.add(x)
+  const xs = [...cuts].sort((a, b) => a - b)
+
+  const courses = result?.courses ?? []
+  const lineOf = (x: number, y: number): V3 => f.at(x, y, 0.5)
+
+  for (let i = 0; i + 1 < xs.length; i++) {
+    const u = xs[i]
+    const v = xs[i + 1]
+    const mid = (u + v) / 2
+    const bands: [number, number, number, number][] = [] // loU, loV, hiU, hiV
+    const holes = openings.filter((o) => o.x <= mid && o.x + o.width >= mid).sort((a, b) => a.sill - b.sill)
+    let loU = heights.bottom(u)
+    let loV = heights.bottom(v)
+    const topU = heights.top(u)
+    const topV = heights.top(v)
+    for (const o of holes) {
+      bands.push([loU, loV, Math.min(topU, Math.max(loU, o.sill)), Math.min(topV, Math.max(loV, o.sill))])
+      loU = Math.max(loU, headAt(o, u))
+      loV = Math.max(loV, headAt(o, v))
+    }
+    bands.push([loU, loV, topU, topV])
+    for (const [lu, lv, hu, hv] of bands) {
+      if (hu - lu < 1 && hv - lv < 1) continue
+      const lines: [V3, V3][] = []
+      if (wall) {
+        for (const c of courses) {
+          if (c.index === 0) continue
+          const r = levelAcross(u, v, lu, lv, hu, hv, c.bottom)
+          if (r) lines.push([lineOf(r[0], c.bottom), lineOf(r[1], c.bottom)])
+        }
+        for (const c of courses)
+          for (const j of c.joins) {
+            if (j <= u + EPS || j >= v - EPS) continue
+            const t = (j - u) / (v - u)
+            const lo = Math.max(c.bottom, lu + (lv - lu) * t)
+            const hi = Math.min(c.top, hu + (hv - hu) * t)
+            if (hi - lo > 5) lines.push([lineOf(j, lo), lineOf(j, hi)])
+          }
+      } else {
+        for (const y of courseLevels) {
+          const r = levelAcross(u, v, lu, lv, hu, hv, y)
+          if (r) lines.push([lineOf(r[0], y), lineOf(r[1], y)])
+        }
+      }
+      push("wall", slab(f, quad(u, v, lu, lv, hu, hv), -WALL_T, 0, wall ? COLORS.cladding : COLORS.plain, true), lines)
+    }
+    // the foundation under it, down to the lawn
+    const bu = heights.bottom(u)
+    const bv = heights.bottom(v)
+    if (bu - groundZ > 1 || bv - groundZ > 1) push("foundation", slab(f, quad(u, v, groundZ, groundZ, bu, bv), -WALL_T, -10, COLORS.foundation, true))
+  }
+
+  if (!wall) return out
+  const fw = settings.facingWidthMm
+  const clipX = (a: number, b: number): [number, number] | null => {
+    const lo = Math.max(a, x0)
+    const hi = Math.min(b, x1)
+    return hi - lo > 1 ? [lo, hi] : null
+  }
+  /** a facing from a to b along the wall, following the wall's top and bottom */
+  const facingOverWall = (a: number, b: number) => {
+    const r = clipX(a, b)
+    if (!r) return
+    push("trims", slab(f, quad(r[0], r[1], heights.bottom(r[0]), heights.bottom(r[1]), heights.top(r[0]), heights.top(r[1])), 0, TRIM_PROUD, COLORS.trim))
+  }
+  // corner facings at the wall's ends and at the outside corners along it
+  if (wall.leftEnd === "externalFacing" || wall.leftEnd === "externalBox") facingOverWall(0, fw)
+  if (wall.rightEnd === "externalFacing" || wall.rightEnd === "externalBox") facingOverWall(wall.lengthMm - fw, wall.lengthMm)
+  for (const c of wall.corners ?? [])
+    if (c.type === "external") {
+      facingOverWall(c.x - fw, c.x)
+      facingOverWall(c.x, c.x + fw)
+    }
+
+  for (const o of openings) {
+    const L = o.x
+    const R = o.x + o.width
+    const top = Math.max(heights.top(Math.max(x0, Math.min(x1, (L + R) / 2))), o.sill)
+    // facings: a jamb each side, up to the head, and the head across over them
+    for (const [a, b] of [
+      [L - fw, L],
+      [R, R + fw],
+    ] as const) {
+      const r = clipX(a, b)
+      if (!r) continue
+      const hu = Math.min(headAt(o, r[0]) + fw, heights.top(r[0]))
+      const hv = Math.min(headAt(o, r[1]) + fw, heights.top(r[1]))
+      push("trims", slab(f, quad(r[0], r[1], o.sill, o.sill, hu, hv), 0, TRIM_PROUD, COLORS.trim))
+    }
+    const hr = clipX(L, R)
+    if (hr) {
+      const [a, b] = hr
+      const hu = Math.min(headAt(o, a) + fw, top)
+      const hv = Math.min(headAt(o, b) + fw, top)
+      push("trims", slab(f, quad(a, b, headAt(o, a), headAt(o, b), hu, hv), 0, TRIM_PROUD, COLORS.trim))
+      // the glass, set back in the opening, with its frame round it
+      const door = o.sill <= wall.bottom.left + 50
+      const fr = 45
+      const glassLines: [V3, V3][] = []
+      const mullion = (L + R) / 2
+      if (o.width > 1400 && mullion > a && mullion < b)
+        glassLines.push([f.at(mullion, o.sill, -GLASS_BACK + 0.5), f.at(mullion, headAt(o, mullion), -GLASS_BACK + 0.5)])
+      push("joinery", slab(f, quad(a, b, o.sill, o.sill, headAt(o, a), headAt(o, b)), -GLASS_BACK - 10, -GLASS_BACK, COLORS.glass), glassLines)
+      // the frame: a sill, a head and two jambs, just in front of the glass
+      push("joinery", slab(f, quad(a, b, o.sill, o.sill, o.sill + fr, o.sill + fr), -GLASS_BACK, -GLASS_BACK + 30, COLORS.frame))
+      push("joinery", slab(f, quad(a, b, headAt(o, a) - fr, headAt(o, b) - fr, headAt(o, a), headAt(o, b)), -GLASS_BACK, -GLASS_BACK + 30, COLORS.frame))
+      if (L >= x0) push("joinery", slab(f, quad(L, L + fr, o.sill + fr, o.sill + fr, headAt(o, L) - fr, headAt(o, L + fr) - fr), -GLASS_BACK, -GLASS_BACK + 30, COLORS.frame))
+      if (R <= x1) push("joinery", slab(f, quad(R - fr, R, o.sill + fr, o.sill + fr, headAt(o, R - fr) - fr, headAt(o, R) - fr), -GLASS_BACK, -GLASS_BACK + 30, COLORS.frame))
+      // a window's sill nosing, out past the boards
+      if (!door) push("joinery", slab(f, quad(a, b, o.sill - 25, o.sill - 25, o.sill, o.sill), 0, 35, COLORS.trim))
+    }
+  }
+  return out
+}
+
+// ── the scene ──────────────────────────────────────────────────────────
+
+export interface HouseRenderOptions {
+  azimuthDeg: number
+  elevationDeg: number
+  hidden: ReadonlySet<HouseRenderMember>
+  camera?: CameraState
+}
+
+export interface HouseScene {
+  /** polygons and line sets, back to front */
+  items: ({ kind: "poly"; points: string; fill: string; stroke: string } | { kind: "lines"; d: string; stroke: string })[]
+  viewBox: { x: number; y: number; w: number; h: number }
+  strokeW: number
+  frame: CameraFrame
+}
+
+const hexToRgb = (hex: string): V3 => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
+const rgbToHex = (c: V3) => "#" + c.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("")
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+/** every piece of the house, as solids, with which side the camera
+ * squares up to (the first wall's outside) */
+export interface HouseModel {
+  pieces: Piece[]
+  front: P2 | null
+  groundZ: number
+  floor: V3[] | null
+}
+
+export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRenderMember>): HouseModel {
+  const { layout, walls, results, settings } = input
+  const sides = layout.sides
+  const edges = new Map<string, Edges>()
+  const edgeOf = (id: string) => {
+    let e = edges.get(id)
+    if (!e) {
+      e = edgesOf(walls.get(id)!)
+      edges.set(id, e)
+    }
+    return e
+  }
+  const placed = sides.filter((s) => s.wallId && walls.has(s.wallId))
+  if (!placed.length) return { pieces: [], front: null, groundZ: 0, floor: null }
+  const groundZ = Math.min(...placed.map((s) => Math.min(...edgeOf(s.wallId!).bottom.map((p) => p.y)))) - GROUND_DROP
+
+  const n = sides.length
+  const near = (i: number, dir: 1 | -1): { wallId: string; x: number } | null => {
+    for (let k = 1; k < n; k++) {
+      const j = i + dir * k
+      if (!layout.closed && (j < 0 || j >= n)) return null
+      const s = sides[(j + n) % n]
+      if (s.wallId && walls.has(s.wallId)) return { wallId: s.wallId, x: dir < 0 ? s.x1 : s.x0 }
+    }
+    return null
+  }
+
+  const pieces: Piece[] = []
+  sides.forEach((s, i) => {
+    const prev = layout.closed || i > 0 ? sides[(i - 1 + n) % n] : null
+    const next = layout.closed || i < n - 1 ? sides[(i + 1) % n] : null
+    const f = sideFrame(s, prev, next)
+    const wall = s.wallId ? (walls.get(s.wallId) ?? null) : null
+    if (wall) {
+      const e = edgeOf(wall.id)
+      const breaks = [...e.top, ...e.bottom].map((p) => p.x)
+      pieces.push(
+        ...sidePieces(s, f, { top: (x) => valueAt(e.top, x), bottom: (x) => valueAt(e.bottom, x), breaks }, wall, results.get(wall.id) ?? null, settings, [], groundZ),
+      )
+      return
+    }
+    // a plain side: its top and bottom run from the wall before to the wall after
+    const a = near(i, -1)
+    const b = near(i, 1) ?? a
+    const from = a ?? b
+    if (!from || !b) return
+    const ea = edgeOf(from.wallId)
+    const eb = edgeOf(b.wallId)
+    const t0 = valueAt(ea.top, from.x)
+    const t1 = valueAt(eb.top, b.x)
+    const b0 = valueAt(ea.bottom, from.x)
+    const b1 = valueAt(eb.bottom, b.x)
+    const span = f.x1 - f.x0 || 1
+    const lerp = (p: number, q: number) => (x: number) => p + ((q - p) * (x - f.x0)) / span
+    const levels = (results.get(from.wallId)?.courses ?? []).filter((c) => c.index > 0).map((c) => c.bottom)
+    pieces.push(...sidePieces(s, f, { top: lerp(t0, t1), bottom: lerp(b0, b1), breaks: [] }, null, null, settings, levels, groundZ))
+  })
+
+  const kept = pieces.filter((p) => p.member === "wall" || !hidden.has(p.member))
+  if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
+  const s0 = placed[0]
+  const floor = layout.closed && !hidden.has("floor") ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null
+  return { pieces: kept, front: outwardOf(s0), groundZ, floor }
+}
+
+/** square-on is looking at the first wall's outside (the model is built
+ * once by housePieces; this is what turning the camera redoes) */
+export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOptions, "hidden">): HouseScene | null {
+  const { pieces, front, groundZ, floor } = model
+  if (!pieces.length || !front) return null
+  const solids = pieces.map((p) => p.solid)
+  const az = Math.atan2(front.y, front.x) + (options.azimuthDeg * Math.PI) / 180
+  const el = (options.elevationDeg * Math.PI) / 180
+  const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
+  const cam = makeCamera(allPts, az, el, options.camera ?? FIT_CAMERA)
+  const lightAz = az + (35 * Math.PI) / 180
+  const lightEl = (50 * Math.PI) / 180
+  const light: V3 = [Math.cos(lightEl) * Math.cos(lightAz), Math.cos(lightEl) * Math.sin(lightAz), Math.sin(lightEl)]
+
+  const inView = pieces.filter((p) => p.solid.faces.some((f) => f.pts.some((q) => cam.ahead(q) > 0)))
+  const order = orderSolids(
+    inView.map((p) => p.solid),
+    cam.toCam,
+    cam.project,
+    EPS,
+    cam.eye,
+  )
+
+  const items: HouseScene["items"] = []
+  const drawn: { pts: V3[]; normal: V3 }[] = []
+  const fmt = ([x, y]: V2) => `${x.toFixed(1)},${y.toFixed(1)}`
+  const emit = (pts: V3[], color: string, normal: V3, seamless = false) => {
+    const cut = cam.clip(pts)
+    if (cut.length < 3) return
+    drawn.push({ pts: cut, normal })
+    const shade = 0.55 + 0.55 * Math.max(0, dot(normal, light))
+    const rgb = hexToRgb(color)
+    const fill = rgbToHex(rgb.map((c) => c * shade) as V3)
+    items.push({ kind: "poly", points: cut.map(cam.project).map(fmt).join(" "), fill, stroke: seamless ? fill : rgbToHex(rgb.map((c) => c * shade * 0.7) as V3) })
+  }
+
+  // the lawn, round everything, and the floor inside
+  const gx0 = Math.min(...allPts.map((p) => p[0])) - 2000
+  const gx1 = Math.max(...allPts.map((p) => p[0])) + 2000
+  const gy0 = Math.min(...allPts.map((p) => p[1])) - 2000
+  const gy1 = Math.max(...allPts.map((p) => p[1])) + 2000
+  if (cam.eye[2] > groundZ) {
+    emit(
+      [
+        [gx0, gy0, groundZ],
+        [gx1, gy0, groundZ],
+        [gx1, gy1, groundZ],
+        [gx0, gy1, groundZ],
+      ],
+      COLORS.grass,
+      [0, 0, 1],
+      true,
+    )
+    if (floor && cam.eye[2] > 0) emit(floor, COLORS.floor, [0, 0, 1], true)
+  }
+
+  for (const k of order) {
+    const p = inView[k]
+    p.solid.faces.forEach((f, fi) => {
+      if (!cam.sees(f.normal, f.pts[0])) return
+      // walls (and their foundations) are cut into strips: no outline on their faces, so the cuts don't show
+      emit(f.pts, f.color, f.normal, (p.member === "wall" || p.member === "foundation") && fi < 2)
+      if (fi === 0 && p.lines?.length) {
+        const d = p.lines
+          .filter(([a, b]) => cam.ahead(a) > 0 && cam.ahead(b) > 0)
+          .map(([a, b]) => `M${fmt(cam.project(a))}L${fmt(cam.project(b))}`)
+          .join("")
+        if (d) items.push({ kind: "lines", d, stroke: "rgba(70,60,45,0.45)" })
+      }
+    })
+  }
+
+  // never taller than wide (a long thin house end-on would fill the page)
+  const vb = cam.viewBox
+  const minW = vb.h * 1.5
+  const viewBox = vb.w >= minW ? vb : { ...vb, x: vb.x - (minW - vb.w) / 2, w: minW }
+  return {
+    items,
+    viewBox,
+    strokeW: cam.span * 0.0009,
+    frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
+  }
+}

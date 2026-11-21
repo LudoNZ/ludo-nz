@@ -10,6 +10,7 @@ import { boardId, calculateResults, planBoards, planTrims, stockBoardOf, wallCod
 import { calculateWall } from "./weatherboardCalc"
 import { setBoardSkipped, skipTotals } from "./skips"
 import JoinerySkipModal from "./joinerySkipModal"
+import HousePlanPanel from "./housePlanPanel"
 import OpeningFields from "./openingFields"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
@@ -38,6 +39,7 @@ import styles from "./weatherboardEditor.module.scss"
 const NEW_WALL_TAB = "__new__"
 const VIEW_ALL_TAB = "__all__"
 const SETTINGS_TAB = "__settings__"
+const PLAN_TAB = "__plan__"
 
 export const formatM = (mm: number, decimals = 1) => `${(mm / 1000).toFixed(decimals)} m`
 const m = formatM
@@ -63,7 +65,8 @@ const WeatherboardEditor: React.FC<{
   const { elevations } = project
   const settings = useMemo(() => withDefaults(project.settings), [project.settings])
   const settingsOpen = activeElevationId === SETTINGS_TAB
-  const activeElevation = settingsOpen
+  const planOpen = activeElevationId === PLAN_TAB
+  const activeElevation = settingsOpen || planOpen
     ? null
     : (elevations.find((e) => e.id === activeElevationId) ?? elevations[0] ?? null)
 
@@ -380,9 +383,20 @@ const WeatherboardEditor: React.FC<{
         <button type="button" className={styles.tabAdd} onClick={addElevation}>
           + Elevation
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={planOpen}
+          className={`${styles.tab} ${planOpen ? styles.tabActive : ""}`}
+          onClick={() => setActiveElevationId(PLAN_TAB)}
+        >
+          Plan &amp; 3D
+        </button>
       </div>
 
-      {settingsOpen ? (
+      {planOpen ? (
+        <HousePlanPanel project={project} setProject={setProject} results={results} settings={settings} />
+      ) : settingsOpen ? (
         <section className={styles.settingsPanel}>
           <div className={styles.settingsGrid}>
             <label>

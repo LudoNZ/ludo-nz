@@ -57,7 +57,7 @@ export default function WeatherboardProjectPage() {
           if (cancelled) return
           if (found) {
             setLocation(loc)
-            setProject({ settings: found.settings, elevations: found.elevations })
+            setProject({ settings: found.settings, elevations: found.elevations, ...(found.plan ? { plan: found.plan } : {}) })
             setName(found.name)
             setLoadState("ready")
             return

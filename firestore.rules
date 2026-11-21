@@ -272,24 +272,26 @@ service cloud.firestore {
     match /users/{userId}/weatherboardProjects/{projectId} {
       allow read, delete: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'summary', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'plan', 'summary', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 100
         && request.resource.data.settings is map
         && request.resource.data.elevations is list
+        && (!('plan' in request.resource.data) || request.resource.data.plan is map)
         && request.resource.data.summary is map
         && request.resource.data.updatedAt is timestamp;
     }
 
     match /publicWeatherboardProjects/{projectId} {
       allow get, list: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'summary', 'updatedAt'])
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'settings', 'elevations', 'plan', 'summary', 'updatedAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 100
         && request.resource.data.settings is map
         && request.resource.data.elevations is list
+        && (!('plan' in request.resource.data) || request.resource.data.plan is map)
         && request.resource.data.summary is map
         && request.resource.data.updatedAt is timestamp;
       allow delete: if false;

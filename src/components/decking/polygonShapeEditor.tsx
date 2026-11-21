@@ -115,10 +115,16 @@ const PolygonShapeEditor: React.FC<{
   points: DeckPoint[]
   lockedEdgeLengths: Record<string, number>
   lockedVertexAngles: Record<string, number>
-  boardDirection: BoardDirection
+  /** absent (with onDirectionChange) for a shape with no boards on it —
+   * no hatching, no rotate button */
+  boardDirection?: BoardDirection
   onShapeChange: (points: DeckPoint[], lockedEdgeLengths: Record<string, number>, lockedVertexAngles: Record<string, number>) => void
-  onDirectionChange: (d: BoardDirection) => void
-}> = ({ points, lockedEdgeLengths, lockedVertexAngles, boardDirection, onShapeChange, onDirectionChange }) => {
+  onDirectionChange?: (d: BoardDirection) => void
+  /** a name to show off each side, outside the shape (e.g. the wall on it) */
+  sideNames?: (string | null)[]
+  /** what the shape is, for its label ("Deck shape") */
+  ariaName?: string
+}> = ({ points, lockedEdgeLengths, lockedVertexAngles, boardDirection, onShapeChange, onDirectionChange, sideNames, ariaName = "Deck shape" }) => {
   const intoRake = boardDirection !== "alongRake"
   const clipId = useId()
   const svgRef = useRef<SVGSVGElement>(null)
@@ -436,7 +442,7 @@ const PolygonShapeEditor: React.FC<{
   return (
     <div className={styles.editor}>
       <div className={styles.shapeWrap}>
-        <svg ref={svgRef} viewBox={viewBox} className={styles.svg} role="img" aria-label="Deck shape, drag a corner to reshape">
+        <svg ref={svgRef} viewBox={viewBox} className={styles.svg} role="img" aria-label={`${ariaName}, drag a corner to reshape`}>
           <defs>
             <clipPath id={clipId}>
               <path d={outlinePath} />
@@ -446,7 +452,7 @@ const PolygonShapeEditor: React.FC<{
           <path d={outlinePath} className={`${styles.outline} ${simple ? "" : styles.invalidOutline}`} strokeWidth={strokeW * 1.6} />
 
           <g clipPath={`url(#${clipId})`}>
-            {intoRake
+            {!boardDirection ? null : intoRake
               ? previewLines.map((f) => {
                   const x = bounds.minX + f * (bounds.maxX - bounds.minX)
                   return <line key={f} x1={x} y1={bounds.minY} x2={x} y2={bounds.maxY} className={styles.previewLine} strokeWidth={strokeW} />
@@ -486,6 +492,40 @@ const PolygonShapeEditor: React.FC<{
               </g>
             )
           })}
+
+          {/* each side's name, just inside the shape (the lengths go outside) */}
+          {sideNames &&
+            points.map((p, i) => {
+              const name = sideNames[i]
+              if (!name) return null
+              const next = points[(i + 1) % n]
+              const midX = (p.x + next.x) / 2
+              const midY = (p.y + next.y) / 2
+              const dx = next.x - p.x
+              const dy = next.y - p.y
+              const len = Math.hypot(dx, dy) || 1
+              let px = -dy / len
+              let py = dx / len
+              if (px * (centroid.x - midX) + py * (centroid.y - midY) < 0) {
+                px = -px
+                py = -py
+              }
+              const along = Math.abs(dx) >= Math.abs(dy)
+              return (
+                <text
+                  key={`side-name-${i}`}
+                  x={midX + px * strokeW * 10}
+                  y={midY + py * strokeW * 10}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={strokeW * 6.5}
+                  className={styles.dimLabel}
+                  transform={along ? undefined : `rotate(-90 ${midX + px * strokeW * 10} ${midY + py * strokeW * 10})`}
+                >
+                  {name}
+                </text>
+              )
+            })}
 
           {/* a set (locked) side's length is always readable on the plan
               itself, not just once tapped — offset outward from the
@@ -571,7 +611,7 @@ const PolygonShapeEditor: React.FC<{
           })}
         </svg>
 
-        <button
+        {boardDirection && onDirectionChange && (<button
           type="button"
           className={styles.rotateBtn}
           onClick={() => onDirectionChange(intoRake ? "alongRake" : "intoRake")}
@@ -579,7 +619,7 @@ const PolygonShapeEditor: React.FC<{
         >
           <RotateIcon className={intoRake ? undefined : styles.rotated} />
           <span>Joist direction</span>
-        </button>
+        </button>)}
       </div>
 
       {!simple && (
@@ -598,11 +638,13 @@ const PolygonShapeEditor: React.FC<{
       {selection?.kind === "vertex" && renderVertexPanel(selection.index, () => setSelection(null))}
       {selection?.kind === "edge" && renderEdgePanel(selection.index, () => setSelection(null))}
 
-      <p className={styles.hint}>
-        Drag any corner to reshape the deck, or tap a corner or a side&apos;s midpoint to type an exact
-        angle or length — everything still unset just follows the shape. Double-tap either one for a
-        quick-entry popup instead. Boards all run one consistent direction across the whole shape.
-      </p>
+      {boardDirection && (
+        <p className={styles.hint}>
+          Drag any corner to reshape the deck, or tap a corner or a side&apos;s midpoint to type an exact
+          angle or length — everything still unset just follows the shape. Double-tap either one for a
+          quick-entry popup instead. Boards all run one consistent direction across the whole shape.
+        </p>
+      )}
 
       <Modal isActive={modalOpen} closeModal={() => setModalOpen(false)}>
         <div className={styles.modalPanel}>

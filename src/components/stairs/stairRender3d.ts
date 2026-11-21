@@ -188,7 +188,7 @@ export interface Solid {
   faces: Face[]
 }
 
-const makeSolid = (faces: { pts: V3[]; color: string }[]): Solid => {
+export const makeSolid = (faces: { pts: V3[]; color: string }[]): Solid => {
   const mid = centroid(faces.flatMap((f) => f.pts))
   return {
     faces: faces.map((f) => {
