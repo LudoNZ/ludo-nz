@@ -26,7 +26,7 @@ const Field: React.FC<{ label: string; value: number; min?: number; onChange: (v
   <label className={styles.field}>
     <span className={styles.label}>{label}</span>
     <span className={styles.unitInput}>
-      <NumField value={value} min={min} step={10} onChange={onChange} ariaLabel={label} />
+      <NumField value={value} min={min} step={1} onChange={onChange} ariaLabel={label} />
       mm
     </span>
   </label>

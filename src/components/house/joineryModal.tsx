@@ -155,20 +155,20 @@ const JoineryModal: React.FC<{
           <label>
             Width
             <span className={styles.unit}>
-              <NumField value={d.width} min={200} step={10} onChange={(v) => set({ width: v })} /> mm
+              <NumField value={d.width} min={200} step={1} onChange={(v) => set({ width: v })} /> mm
             </span>
           </label>
           <label>
             Height
             <span className={styles.unit}>
-              <NumField value={d.height} min={200} step={10} onChange={(v) => set(d.kind === "door" ? { height: v, head: v } : { height: v })} /> mm
+              <NumField value={d.height} min={200} step={1} onChange={(v) => set(d.kind === "door" ? { height: v, head: v } : { height: v })} /> mm
             </span>
           </label>
           {d.kind === "window" && (
             <label>
               Head height
               <span className={styles.unit}>
-                <NumField value={d.head} min={d.height} step={10} onChange={(v) => set({ head: v })} /> mm
+                <NumField value={d.head} min={d.height} step={1} onChange={(v) => set({ head: v })} /> mm
               </span>
               <span className={styles.muted}>off the floor — sill at {sill}</span>
             </label>
@@ -176,7 +176,7 @@ const JoineryModal: React.FC<{
           <label>
             Left edge from the wall&apos;s start
             <span className={styles.unit}>
-              <NumField value={d.x} min={0} step={10} onChange={(v) => set({ x: v })} /> mm
+              <NumField value={d.x} min={0} step={1} onChange={(v) => set({ x: v })} /> mm
             </span>
           </label>
         </div>

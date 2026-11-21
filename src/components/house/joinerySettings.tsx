@@ -40,7 +40,7 @@ const JoinerySettings: React.FC<{ house: HouseProject; setHouse: (u: (h: HousePr
         <label>
           Head height
           <span className={styles.unit}>
-            <NumField value={head} min={1500} max={3000} step={10} onChange={(v) => setHouse((h) => ({ ...h, settings: { ...h.settings, joineryHeadMm: v } }))} /> mm
+            <NumField value={head} min={1500} max={3000} step={1} onChange={(v) => setHouse((h) => ({ ...h, settings: { ...h.settings, joineryHeadMm: v } }))} /> mm
           </span>
           <span className={styles.muted}>off the floor — windows line their heads up with it, unless their type says</span>
         </label>
@@ -54,13 +54,13 @@ const JoinerySettings: React.FC<{ house: HouseProject; setHouse: (u: (h: HousePr
               <div key={t.id} className={styles.typeRow}>
                 <input value={t.name} aria-label="Type name" onChange={(e) => setType(t.id, { name: e.target.value })} />
                 <span className={styles.unit}>
-                  <NumField value={t.width} min={200} step={10} onChange={(v) => setType(t.id, { width: v })} /> ×
-                  <NumField value={t.height} min={200} step={10} onChange={(v) => setType(t.id, { height: v })} /> mm
+                  <NumField value={t.width} min={200} step={1} onChange={(v) => setType(t.id, { width: v })} /> ×
+                  <NumField value={t.height} min={200} step={1} onChange={(v) => setType(t.id, { height: v })} /> mm
                 </span>
                 {g.kind === "window" && (
                   <span className={styles.unit}>
                     head{" "}
-                    <NumField value={t.headMm ?? head} min={t.height} step={10} onChange={(v) => setType(t.id, { headMm: v === head ? undefined : v })} />
+                    <NumField value={t.headMm ?? head} min={t.height} step={1} onChange={(v) => setType(t.id, { headMm: v === head ? undefined : v })} />
                     {t.headMm === undefined ? <span className={styles.muted}> (the house&apos;s)</span> : ""}
                   </span>
                 )}

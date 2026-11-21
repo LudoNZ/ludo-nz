@@ -549,19 +549,19 @@ const FramingStep: React.FC<{
               <label>
                 Leaf width{" "}
                 <span className={styles.unit}>
-                  <NumField value={d.widthMm} min={400} max={2400} step={10} onChange={(v) => setDoor(d.id, { widthMm: v })} /> mm
+                  <NumField value={d.widthMm} min={400} max={2400} step={1} onChange={(v) => setDoor(d.id, { widthMm: v })} /> mm
                 </span>
               </label>
               <label>
                 Leaf height{" "}
                 <span className={styles.unit}>
-                  <NumField value={d.heightMm} min={1500} max={2700} step={10} onChange={(v) => setDoor(d.id, { heightMm: v })} /> mm
+                  <NumField value={d.heightMm} min={1500} max={2700} step={1} onChange={(v) => setDoor(d.id, { heightMm: v })} /> mm
                 </span>
               </label>
               <label>
                 Its middle from the {startName(lineOf.a, lineOf.b)} end{" "}
                 <span className={styles.unit}>
-                  <NumField value={d.atMm} min={0} step={10} onChange={(v) => setDoor(d.id, { atMm: v })} /> mm
+                  <NumField value={d.atMm} min={0} step={1} onChange={(v) => setDoor(d.id, { atMm: v })} /> mm
                 </span>
               </label>
               <button type="button" className={styles.link} onClick={() => setPlan((f) => ({ ...f, doors: f.doors.filter((x) => x.id !== d.id) }))}>
