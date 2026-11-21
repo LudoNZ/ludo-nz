@@ -148,6 +148,7 @@ export function houseRenderInputFrom(
   return {
     layout: cladding.ground,
     walls,
+    party: cladding.party,
     results,
     settings: WB_DEFAULTS,
     roof: cladding.roof,

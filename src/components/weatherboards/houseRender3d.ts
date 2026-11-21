@@ -38,6 +38,8 @@ export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "b
 const COLORS = {
   cladding: "#e9e4d8",
   plain: "#ddd7c9",
+  /** a party wall's Integra panels, standing bare */
+  party: "#b8b3aa",
   trim: "#fbfbf8",
   glass: "#5d7486",
   frame: "#3c4248",
@@ -64,6 +66,8 @@ const GROUND_DROP = 200
 const EPS = 0.5
 
 export interface HouseRenderInput {
+  /** party (intertenancy) walls, by id: drawn bare, as the panels */
+  party?: ReadonlySet<string>
   layout: HouseLayout
   walls: Map<string, Wall>
   results: Map<string, WallResult>
@@ -230,6 +234,8 @@ function sidePieces(
   courseLevels: number[],
   /** null: no foundation under it (a storey above) */
   groundZ: number | null,
+  /** a side without a wall of boards: its colour */
+  plainColor: string = COLORS.plain,
 ): Piece[] {
   const out: Piece[] = []
   const push = (member: Piece["member"], solid: Solid | null, lines?: [V3, V3][]) => solid && out.push({ solid, member, lines })
@@ -282,7 +288,7 @@ function sidePieces(
           if (r) lines.push([lineOf(r[0], y), lineOf(r[1], y)])
         }
       }
-      push("wall", slab(f, quad(u, v, lu, lv, hu, hv), -WALL_T, 0, wall ? COLORS.cladding : COLORS.plain, true), lines)
+      push("wall", slab(f, quad(u, v, lu, lv, hu, hv), -WALL_T, 0, wall ? COLORS.cladding : plainColor, true), lines)
     }
     // the foundation under it, down to the lawn
     const bu = heights.bottom(u)
@@ -480,7 +486,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     const sides = layout.sides
     const n = sides.length
     for (const s of sides) {
-      if (!s.wallId || !walls.has(s.wallId)) continue
+      if (!s.wallId || !walls.has(s.wallId) || input.party?.has(s.wallId)) continue
       const e = edgeOf(s.wallId)
       const L = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
       faces.push({ wallId: s.wallId, a: s.a, d: { x: (s.b.x - s.a.x) / L, y: (s.b.y - s.a.y) / L }, x0: s.x0, x1: s.x1, lo: Math.min(...e.bottom.map((p) => p.y)), hi: Math.max(...e.top.map((p) => p.y)), upper })
@@ -501,6 +507,12 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
       const next = layout.closed || i < n - 1 ? sides[(i + 1) % n] : null
       const f = sideFrame(s, prev, next)
       const wall = s.wallId ? (walls.get(s.wallId) ?? null) : null
+      if (wall && input.party?.has(wall.id)) {
+        // a party wall: bare panels to its own height, no boards, trims or joinery
+        const e = edgeOf(wall.id)
+        add(sidePieces(s, f, { top: (x) => valueAt(e.top, x), bottom: (x) => valueAt(e.bottom, x), breaks: [...e.top, ...e.bottom].map((p) => p.x) }, null, null, settings, [], found, COLORS.party))
+        return
+      }
       if (wall) {
         const e = edgeOf(wall.id)
         const breaks = [...e.top, ...e.bottom].map((p) => p.x)

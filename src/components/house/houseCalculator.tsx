@@ -26,6 +26,7 @@ import {
   STARTING_BOXES,
   STARTING_OUTLINE,
   DEFAULT_SETTINGS,
+  onParty,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, MeasureChain, parseMeasures, RulerShow, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
@@ -36,6 +37,8 @@ import { joineryTypesOf } from "./joinery"
 import JoinerySettings from "./joinerySettings"
 import { useSharedJoinery } from "./joineryDefaultsStore"
 import Showcase from "./showcase"
+import { IntegraCard, RibRaftCard } from "./foundationCards"
+import HouseFile from "./houseFile"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -161,6 +164,9 @@ const HouseCalculator: React.FC<{
           roofOk={!!cladding?.roof}
           selection={selection}
           setSelection={setSelection}
+          groundGraph={graph}
+          groundStructure={structures.ground}
+          cladding={cladding}
         />
       )}
       {step === 3 && cladding && <ThreeDStep house={house} setHouse={setHouse} setPlanOf={setPlanOf} graph={graph} upperGraph={upperGraph} cladding={cladding} structures={structures} />}
@@ -193,6 +199,7 @@ const HouseCalculator: React.FC<{
           </button>
         )}
       </div>
+      <HouseFile house={house} setHouse={setHouse} />
     </div>
   )
 }
@@ -596,6 +603,8 @@ const FloorStep: React.FC<{
         <OutlineEditor
           outline={floor.outline}
           setOutline={(outline) => setFloor((f) => ({ ...f, outline, lockedEdgeLengths: {}, lockedVertexAngles: {} }))}
+          party={floor.party}
+          setParty={(party) => setFloor((f) => ({ ...f, party }))}
           graph={graph}
           ghost={ghost}
           grid={grid}
@@ -765,6 +774,8 @@ const FloorStep: React.FC<{
 const OutlineEditor: React.FC<{
   outline: Pt[]
   setOutline: (pts: Pt[]) => void
+  party?: { a: Pt; b: Pt }[]
+  setParty: (p: { a: Pt; b: Pt }[]) => void
   graph: ReturnType<typeof floorGraph>
   ghost?: Pt[]
   grid: ProjectGrid
@@ -772,7 +783,7 @@ const OutlineEditor: React.FC<{
   setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ outline, setOutline, graph, ghost, grid, onMoveGridline, setGrid, selection, setSelection }) => {
+}> = ({ outline, setOutline, party, setParty, graph, ghost, grid, onMoveGridline, setGrid, selection, setSelection }) => {
   const [tool, setTool] = useState<CanvasTool>("outline")
   const lines = linesAround(grid, [...outline, ...(ghost ?? [])])
   const edge = selection?.kind === "edge" && selection.index < outline.length ? selection.index : null
@@ -858,6 +869,19 @@ const OutlineEditor: React.FC<{
           <button type="button" className={styles.pill} onClick={() => addStep(edge)}>
             Put a step in it
           </button>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={onParty(party, outline[edge], outline[(edge + 1) % outline.length])}
+              onChange={(e) => {
+                const a = outline[edge]
+                const b = outline[(edge + 1) % outline.length]
+                const rest = (party ?? []).filter((l) => !onParty([l], a, b) && !onParty([{ a, b }], l.a, l.b))
+                setParty(e.target.checked ? [...rest, { a, b }] : rest)
+              }}
+            />{" "}
+            A party wall to the unit next door — an Integra intertenancy wall, no cladding or windows on it
+          </label>
         </div>
       )}
       {gridline && (
@@ -1186,7 +1210,10 @@ const StructureStep: React.FC<{
   roofOk: boolean
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ house, setSettings, setHouse, level, setLevel, setFloor, graph, ghost, structure, lowerRoofs, roofOk, selection, setSelection }) => {
+  groundGraph: ReturnType<typeof floorGraph>
+  groundStructure: Structure
+  cladding: ReturnType<typeof houseCladding>
+}> = ({ house, setSettings, setHouse, level, setLevel, setFloor, graph, ghost, structure, lowerRoofs, roofOk, selection, setSelection, groundGraph, groundStructure, cladding }) => {
   const st = house.settings
   const roof = st.roof
   const setRoof = (patch: Partial<HouseSettings["roof"]>) => setSettings({ roof: { ...roof, ...patch } })
@@ -1250,7 +1277,7 @@ const StructureStep: React.FC<{
             onChange={(e) => setSettings({ groundFloor: { ...(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor), kind: e.target.value as "timber" | "slab" } })}
           >
             <option value="timber">Timber, on bearers and piles</option>
-            <option value="slab">Concrete slab</option>
+            <option value="slab">Concrete slab (rib raft)</option>
           </select>
         </label>
         {(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor).kind === "timber" && (
@@ -1459,6 +1486,8 @@ const StructureStep: React.FC<{
           {n}
         </p>
       ))}
+      {(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor).kind === "slab" && <RibRaftCard house={house} graph={groundGraph} structure={groundStructure} setSettings={setSettings} />}
+      {cladding && cladding.party.size > 0 && <IntegraCard house={house} cladding={cladding} setSettings={setSettings} />}
     </section>
   )
 }

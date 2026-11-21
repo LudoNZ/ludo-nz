@@ -7,6 +7,8 @@
 import type { Opening, RoofPlan, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import type { JoineryType, LastJoinery } from "./joinery"
 import { gridFromData, type ProjectGrid } from "./grid"
+import type { RibRaftSettings } from "../ribRaft/ribRaft"
+import type { IntegraSettings } from "../intertenancy/integraWall"
 
 export interface Pt {
   x: number
@@ -102,6 +104,10 @@ export interface FloorPlan {
   overrides: Record<string, LoadBearing>
   /** doors in the inside walls */
   doors: Door[]
+  /** stretches of the outline that are party (intertenancy) walls to the unit next door: no cladding or
+   * joinery on them, an Integra wall in them, a free joint in the slab under them. Plan lines; an
+   * outline side on one is a party wall. */
+  party?: { a: Pt; b: Pt }[]
 }
 
 export type RoofFrame = "trusses" | "rafters"
@@ -151,6 +157,10 @@ export const DEFAULT_FRAMING: FramingSettings = {
 export interface HouseSettings {
   /** the ground floor: timber, framed on bearers and piles this far up (ground to its finished floor), or a slab */
   groundFloor: { kind: "timber" | "slab"; heightMm: number }
+  /** a slab ground floor's rib raft (waffle) setout and takeoff settings, as changed from the usual */
+  ribRaft?: Partial<RibRaftSettings>
+  /** the party walls' Integra panels, as changed from the usual */
+  integra?: Partial<IntegraSettings>
   /** the head height off the floor windows line up with (unless their type says) */
   joineryHeadMm?: number
   /** ground floor to its top plate: the eaves height (and ceiling) of a
@@ -292,6 +302,7 @@ const planFromData = (d: unknown): FloorPlan => {
     boxes: arr<RoomBox>(f.boxes),
     overrides: f.overrides ?? {},
     doors: arr<Door>(f.doors).filter((d) => d && typeof d.wallId === "string" && typeof d.atMm === "number" && typeof d.widthMm === "number" && typeof d.heightMm === "number"),
+    ...(Array.isArray(f.party) && f.party.length ? { party: f.party.filter((l) => l && l.a && l.b) } : {}),
   }
 }
 
@@ -319,4 +330,21 @@ export function houseFromData(d: unknown): HouseProject {
       (j) => j && typeof j.id === "string" && typeof j.wallId === "string" && [j.x, j.sill, j.width, j.height].every((v) => typeof v === "number"),
     ),
   }
+}
+
+/** a side (a → b) lying along one of the party lines — most of it on one — is a party wall */
+export function onParty(party: { a: Pt; b: Pt }[] | undefined, a: Pt, b: Pt): boolean {
+  if (!party?.length) return false
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  if (len < 1) return false
+  return party.some((l) => {
+    const L = Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) || 1
+    const d = { x: (l.b.x - l.a.x) / L, y: (l.b.y - l.a.y) / L }
+    const off = (p: Pt) => Math.abs((p.x - l.a.x) * d.y - (p.y - l.a.y) * d.x)
+    if (off(a) > 5 || off(b) > 5) return false
+    const t = (p: Pt) => (p.x - l.a.x) * d.x + (p.y - l.a.y) * d.y
+    const lo = Math.max(0, Math.min(t(a), t(b)))
+    const hi = Math.min(L, Math.max(t(a), t(b)))
+    return hi - lo > len / 2
+  })
 }

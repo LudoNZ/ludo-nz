@@ -19,7 +19,7 @@ import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
 import { held } from "../weatherboards/openingPlace"
 import { Elevation, Opening, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
-import { HOUSE_JOINERY, HouseJoinery, HouseProject } from "./houseTypes"
+import { HOUSE_JOINERY, HouseJoinery, HouseProject, onParty, Pt } from "./houseTypes"
 
 const COMPASS = ["North", "East", "South", "West"] as const
 type Face = (typeof COMPASS)[number]
@@ -168,10 +168,12 @@ interface StoreyWalls {
   /** wall ids in the order round the storey */
   layout: HouseLayout
   byFace: Map<Face, Wall[]>
+  /** the party walls' ids */
+  party: Set<string>
 }
 
 /** a storey's walls: one per side of its outline, ids `${prefix}${side}` */
-function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: number, top: number, suffix: string): StoreyWalls {
+function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: number, top: number, suffix: string, party: { a: Pt; b: Pt }[] = []): StoreyWalls {
   const n = outline.length
   const sides = footprintSides({ points: outline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: [] })
   const order = sides.map((s) => s.index)
@@ -189,6 +191,7 @@ function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: n
     return graph.rooms.find((rm) => rm.cells.some((c) => mid.x >= c.x && mid.x <= c.x + c.w && mid.y >= c.y && mid.y <= c.y + c.h))?.name ?? null
   }
   const byFace = new Map<Face, Wall[]>()
+  const partyIds = new Set<string>()
   const walls: Wall[] = order.map((i, k) => {
     const a = outline[i]
     const b = outline[(i + 1) % n]
@@ -207,7 +210,9 @@ function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: n
       rightEnd: (turnAfter.get(i) ?? 1) > 0 ? "externalFacing" : "internalScriber",
       coverMm: null,
     }
-    byFace.set(face, [...(byFace.get(face) ?? []), w])
+    // (a party wall's no one's cladding: it's left off the elevations)
+    if (onParty(party, a, b)) partyIds.add(w.id)
+    else byFace.set(face, [...(byFace.get(face) ?? []), w])
     return w
   })
   // each face's walls left to right: the way round, starting after a gap
@@ -223,7 +228,7 @@ function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: n
     elevations: [{ id: "x", name: "x", walls }],
     plan: { method: "footprint", chain: { order: [], steps: {} }, footprint: { points: outline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: outline.map((_, i) => `${prefix}${i}`) } },
   })
-  return { outline, walls, layout, byFace }
+  return { outline, walls, layout, byFace, party: partyIds }
 }
 
 export interface Cladding {
@@ -237,6 +242,8 @@ export interface Cladding {
   /** the first floor's floor level (z) */
   upperFloorZ: number
   walls: Map<string, Wall>
+  /** the party (intertenancy) walls, by id: in `walls`, not on the elevations */
+  party: Set<string>
 }
 
 /** The weatherboard project for the house as it stands (no openings yet). */
@@ -250,12 +257,13 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
   const floorZ = H0 + st.floorDepthMm
   const top = twoStorey ? floorZ + (house.upper?.studHeightMm ?? H0) : H0
 
-  const g = storeyWalls(groundOutline, graph, "hs", 0, H0, "")
-  const u = twoStorey ? storeyWalls(upperOutline, upperGraph!, "us", floorZ, top, " (upstairs)") : null
+  // (each storey's own party lines: a first-floor wall over a neighbour's single-storey roof is clad)
+  const g = storeyWalls(groundOutline, graph, "hs", 0, H0, "", house.floor.party)
+  const u = twoStorey ? storeyWalls(upperOutline, upperGraph!, "us", floorZ, top, " (upstairs)", house.upper?.plan.party) : null
   const walls = new Map([...g.walls, ...(u?.walls ?? [])].map((w) => [w.id, w]))
   // the windows and doors drawn on them (as still fit)
   for (const j of house.joinery ?? []) {
-    const w = walls.get(j.wallId)
+    const w = g.party.has(j.wallId) || u?.party.has(j.wallId) ? undefined : walls.get(j.wallId)
     // (held where its locks say on the wall as it is now: from its right end, say)
     const h = w ? held(j, w.lengthMm) : j
     if (!w || h.x < -1 || h.x + h.width > w.lengthMm + 1) continue
@@ -348,16 +356,16 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
     plan: {
       method: "footprint",
       chain: { order: [], steps: {} },
-      footprint: { points: groundOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: groundOutline.map((_, i) => `hs${i}`) },
+      footprint: { points: groundOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: groundOutline.map((_, i) => (g.party.has(`hs${i}`) ? "" : `hs${i}`)) },
       // (the weatherboards' 3D view is one storey: two storeys go without its roof)
       roof: twoStorey ? { ...st.roof, type: "none" } : st.roof,
       // the first floor over it, for the minimap and stacking the elevations
       ...(twoStorey
-        ? { levels: [{ name: "First floor", footprint: { points: upperOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: upperOutline.map((_, i) => `us${i}`) } }] }
+        ? { levels: [{ name: "First floor", footprint: { points: upperOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: upperOutline.map((_, i) => (u?.party.has(`us${i}`) ? "" : `us${i}`)) } }] }
         : {}),
     },
   }
-  return { project, roof, lowerRoofs, ground: g.layout, upper: u?.layout ?? null, upperFloorZ: floorZ, walls }
+  return { project, roof, lowerRoofs, ground: g.layout, upper: u?.layout ?? null, upperFloorZ: floorZ, walls, party: new Set([...g.party, ...(u?.party ?? [])]) }
 }
 
 /** The house's cladding folded into the linked weatherboard project as it
