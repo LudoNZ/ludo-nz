@@ -200,8 +200,10 @@ const FloorStep: React.FC<{
     return (
       <section className={styles.card}>
         <h2>Ground floor — rooms</h2>
-        <p className={styles.hint}>Drag a room to move it — its edges snap to the rooms beside it. Tap one to name it or size it.</p>
-        <PlanCanvas graph={graph} boxes={floor.boxes} selection={selection} onSelect={setSelection} onMoveBox={(id, x, y) => setBox(id, { x, y })} />
+        <p className={styles.hint}>
+          Drag a room to move it, or tap it and drag a corner to resize it — both snap to the grid and to the rooms beside it. Tap one to name it or type its size.
+        </p>
+        <PlanCanvas graph={graph} boxes={floor.boxes} selection={selection} onSelect={setSelection} onMoveBox={(id, x, y) => setBox(id, { x, y })} onResizeBox={(id, r) => setBox(id, r)} />
         <div className={styles.toolbar}>
           <select value={newKind} onChange={(e) => setNewKind(e.target.value as RoomKind)} aria-label="Kind of room to add">
             {(Object.keys(ROOM_KIND_LABELS) as RoomKind[]).map((k) => (

@@ -30,13 +30,22 @@ const PlanCanvas: React.FC<{
   onDrawWall?: (a: Pt, b: Pt) => void
   /** rooms mode: a box moved */
   onMoveBox?: (id: string, x: number, y: number) => void
-}> = ({ graph, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox }) => {
+  /** rooms mode: a box resized by a corner */
+  onResizeBox?: (id: string, rect: { x: number; y: number; w: number; h: number }) => void
+}> = ({ graph, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
   const [drag, setDragState] = useState<{ id: string; dx: number; dy: number; x: number; y: number } | null>(null)
+  // a corner being dragged: the box as it's being resized
+  const [resize, setResizeState] = useState<{ id: string; fx: number; fy: number; x: number; y: number; w: number; h: number } | null>(null)
   const draftRef = useRef(draft)
   const dragRef = useRef(drag)
+  const resizeRef = useRef(resize)
+  const setResize = (r: typeof resize) => {
+    resizeRef.current = r
+    setResizeState(r)
+  }
   const setDraft = (d: typeof draft) => {
     draftRef.current = d
     setDraftState(d)
@@ -92,6 +101,26 @@ const PlanCanvas: React.FC<{
   const move = (e: React.PointerEvent) => {
     const draft = draftRef.current
     const drag = dragRef.current
+    const resize = resizeRef.current
+    if (resize && boxes) {
+      // the corner snaps to another room's edge nearby, else the grid; the
+      // opposite corner (fx, fy) stays put
+      const p = toPlan(e)
+      const others = boxes.filter((b) => b.id !== resize.id)
+      const tol = pxMm(12)
+      const fit = (v: number, edges: number[]) => {
+        const near = edges.reduce<number | null>((b, x) => (Math.abs(x - v) < tol && (b === null || Math.abs(x - v) < Math.abs(b - v)) ? x : b), null)
+        return near ?? Math.round(v / GRID) * GRID
+      }
+      const MIN = 600
+      let cx = fit(p.x, others.flatMap((b) => [b.x, b.x + b.w]))
+      let cy = fit(p.y, others.flatMap((b) => [b.y, b.y + b.h]))
+      // never smaller than a cupboard, nor turned inside out
+      if (Math.abs(cx - resize.fx) < MIN) cx = resize.fx + (cx >= resize.fx ? MIN : -MIN)
+      if (Math.abs(cy - resize.fy) < MIN) cy = resize.fy + (cy >= resize.fy ? MIN : -MIN)
+      setResize({ ...resize, x: Math.min(cx, resize.fx), y: Math.min(cy, resize.fy), w: Math.abs(cx - resize.fx), h: Math.abs(cy - resize.fy) })
+      return
+    }
     if (draft) {
       const b = square(draft.a, snapPt(toPlan(e)))
       setDraft({ a: draft.a, b })
@@ -115,6 +144,11 @@ const PlanCanvas: React.FC<{
   const up = () => {
     const draft = draftRef.current
     const drag = dragRef.current
+    const resize = resizeRef.current
+    if (resize) {
+      onResizeBox?.(resize.id, { x: resize.x, y: resize.y, w: resize.w, h: resize.h })
+      setResize(null)
+    }
     if (draft) {
       if (Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) >= 300) onDrawWall?.(draft.a, draft.b)
       setDraft(null)
@@ -152,15 +186,15 @@ const PlanCanvas: React.FC<{
       {/* rooms */}
       {boxes
         ? boxes.map((b) => {
-            const at = drag?.id === b.id ? { x: drag.x, y: drag.y } : b
+            const r = resize?.id === b.id ? resize : drag?.id === b.id ? { ...b, x: drag.x, y: drag.y } : b
             const sel = selection?.kind === "box" && selection.id === b.id
             return (
               <rect
                 key={b.id}
-                x={at.x}
-                y={at.y}
-                width={b.w}
-                height={b.h}
+                x={r.x}
+                y={r.y}
+                width={r.w}
+                height={r.h}
                 fill={ROOM_KIND_COLOURS[b.kind]}
                 className={`${styles.box} ${sel ? styles.boxSelected : ""}`}
                 strokeWidth={sel ? sw * 2 : sw * 0.8}
@@ -236,18 +270,64 @@ const PlanCanvas: React.FC<{
       {/* room names */}
       {graph.rooms.map((r, i) => {
         const box = boxes?.find((b) => b.id === r.id)
-        const at = box && drag?.id === box.id ? { x: drag.x + box.w / 2, y: drag.y + box.h / 2 } : box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : r.label
+        const at =
+          box && resize?.id === box.id
+            ? { x: resize.x + resize.w / 2, y: resize.y + resize.h / 2 }
+            : box && drag?.id === box.id
+              ? { x: drag.x + box.w / 2, y: drag.y + box.h / 2 }
+              : box
+                ? { x: box.x + box.w / 2, y: box.y + box.h / 2 }
+                : r.label
         return (
           <text key={`t${i}`} x={at.x} y={at.y} textAnchor="middle" className={styles.roomLabel} fontSize={sw * 9} pointerEvents="none">
             <tspan x={at.x} dy={-sw * 2}>
               {r.name}
             </tspan>
             <tspan x={at.x} dy={sw * 11} className={styles.roomArea} fontSize={sw * 7}>
-              {m2(r.areaM2)}
+              {box && resize?.id === box.id ? `${(resize.w / 1000).toFixed(1)} × ${(resize.h / 1000).toFixed(1)} m` : m2(r.areaM2)}
             </tspan>
           </text>
         )
       })}
+
+      {/* the selected room's corners, to drag */}
+      {boxes &&
+        onResizeBox &&
+        selection?.kind === "box" &&
+        (() => {
+          const b = boxes.find((x) => x.id === selection.id)
+          if (!b) return null
+          const r = resize?.id === b.id ? resize : drag?.id === b.id ? { ...b, x: drag.x, y: drag.y } : b
+          const corners: [number, number][] = [
+            [r.x, r.y],
+            [r.x + r.w, r.y],
+            [r.x + r.w, r.y + r.h],
+            [r.x, r.y + r.h],
+          ]
+          return corners.map(([cx, cy], k) => {
+            // the corner across from this one stays put
+            const [fx, fy] = corners[(k + 2) % 4]
+            return (
+              <g key={`h${k}`}>
+                <circle cx={cx} cy={cy} r={sw * 4} className={styles.handle} strokeWidth={sw * 1.2} pointerEvents="none" />
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={sw * 11}
+                  fill="transparent"
+                  style={{ cursor: k % 2 ? "nesw-resize" : "nwse-resize" }}
+                  role="button"
+                  aria-label={`Drag to resize ${b.name}`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation()
+                    setResize({ id: b.id, fx, fy, x: b.x, y: b.y, w: b.w, h: b.h })
+                    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                  }}
+                />
+              </g>
+            )
+          })
+        })()}
 
       {/* the wall being drawn */}
       {draft && (
