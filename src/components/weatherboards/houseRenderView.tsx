@@ -86,7 +86,7 @@ const HouseRenderView: React.FC<{ input: HouseRenderInput; fileName?: string }> 
 
   const memberToggles = (
     <div className={styles.members} role="group" aria-label="Parts shown">
-      {HOUSE_MEMBERS.map((m) => (
+      {HOUSE_MEMBERS.filter((m) => m !== "inside" || !!input.extras?.length).map((m) => (
         <label key={m} className={styles.memberToggle}>
           <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />
           {HOUSE_MEMBER_LABELS[m]}

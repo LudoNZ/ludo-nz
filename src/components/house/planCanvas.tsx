@@ -1,0 +1,265 @@
+"use client"
+
+import { useRef, useState } from "react"
+import { FloorGraph } from "./floorPlan"
+import { Pt, ROOM_KIND_COLOURS, RoomBox } from "./houseTypes"
+import type { Structure } from "./structure"
+import styles from "./house.module.scss"
+
+export type Selection = { kind: "wall"; id: string } | { kind: "room"; index: number } | { kind: "box"; id: string } | null
+
+/** what the plan can do here */
+export type CanvasTool = "select" | "draw"
+
+const GRID = 100
+const m2 = (a: number) => `${a.toFixed(1)} m²`
+
+/** The ground floor plan, to scale: rooms coloured by kind and named,
+ * outside and inside walls (load-bearing ones in red, once the structure's
+ * been worked out), and — depending on the step — drawing inside walls,
+ * moving room boxes, or picking a wall or room. mm, y down. */
+const PlanCanvas: React.FC<{
+  graph: FloorGraph
+  /** rooms mode: the boxes, to drag about */
+  boxes?: RoomBox[]
+  structure?: Structure | null
+  tool?: CanvasTool
+  selection: Selection
+  onSelect: (s: Selection) => void
+  /** outline mode: a wall drawn */
+  onDrawWall?: (a: Pt, b: Pt) => void
+  /** rooms mode: a box moved */
+  onMoveBox?: (id: string, x: number, y: number) => void
+}> = ({ graph, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox }) => {
+  const svgRef = useRef<SVGSVGElement>(null)
+  // (state to draw them, refs so a quick pointer-up reads the latest)
+  const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
+  const [drag, setDragState] = useState<{ id: string; dx: number; dy: number; x: number; y: number } | null>(null)
+  const draftRef = useRef(draft)
+  const dragRef = useRef(drag)
+  const setDraft = (d: typeof draft) => {
+    draftRef.current = d
+    setDraftState(d)
+  }
+  const setDrag = (d: typeof drag) => {
+    dragRef.current = d
+    setDragState(d)
+  }
+
+  const pts = [...graph.outline, ...(boxes ?? []).flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }])]
+  if (!pts.length) pts.push({ x: 0, y: 0 }, { x: 10000, y: 8000 })
+  const x0 = Math.min(...pts.map((p) => p.x)) - 1500
+  const x1 = Math.max(...pts.map((p) => p.x)) + 1500
+  const y0 = Math.min(...pts.map((p) => p.y)) - 1500
+  const y1 = Math.max(...pts.map((p) => p.y)) + 1500
+  const span = Math.max(x1 - x0, y1 - y0)
+  const sw = span / 400
+
+  /** a pointer on the plan, in mm */
+  const toPlan = (e: React.PointerEvent): Pt => {
+    const svg = svgRef.current!
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const p = pt.matrixTransform(svg.getScreenCTM()!.inverse())
+    return { x: p.x, y: p.y }
+  }
+  /** how many mm a few screen pixels is, for snapping */
+  const pxMm = (px: number) => {
+    const r = svgRef.current?.getBoundingClientRect()
+    return r ? (px * (x1 - x0)) / r.width : px * 20
+  }
+  // snap to the walls' lines nearby, else the grid
+  const lines = {
+    xs: [...graph.outline.map((p) => p.x), ...graph.walls.flatMap((w) => [w.a.x, w.b.x])],
+    ys: [...graph.outline.map((p) => p.y), ...graph.walls.flatMap((w) => [w.a.y, w.b.y])],
+  }
+  const snap = (v: number, to: number[]) => {
+    const tol = pxMm(10)
+    const near = to.reduce<number | null>((b, x) => (Math.abs(x - v) < tol && (b === null || Math.abs(x - v) < Math.abs(b - v)) ? x : b), null)
+    return near ?? Math.round(v / GRID) * GRID
+  }
+  const snapPt = (p: Pt): Pt => ({ x: snap(p.x, lines.xs), y: snap(p.y, lines.ys) })
+  /** square to the plan: whichever way it's gone furthest */
+  const square = (a: Pt, b: Pt): Pt => (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
+
+  const down = (e: React.PointerEvent) => {
+    if (tool !== "draw" || !onDrawWall) return
+    const a = snapPt(toPlan(e))
+    setDraft({ a, b: a })
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+  }
+  const move = (e: React.PointerEvent) => {
+    const draft = draftRef.current
+    const drag = dragRef.current
+    if (draft) {
+      const b = square(draft.a, snapPt(toPlan(e)))
+      setDraft({ a: draft.a, b })
+    } else if (drag && boxes && onMoveBox) {
+      const p = toPlan(e)
+      const box = boxes.find((b) => b.id === drag.id)!
+      // snap an edge to another room's edge, else the grid
+      const others = boxes.filter((b) => b.id !== drag.id)
+      const ex = others.flatMap((b) => [b.x, b.x + b.w])
+      const ey = others.flatMap((b) => [b.y, b.y + b.h])
+      const tol = pxMm(12)
+      const fit = (v: number, size: number, edges: number[]) => {
+        let best: number | null = null
+        for (const e of edges)
+          for (const cand of [e, e - size]) if (Math.abs(cand - v) < tol && (best === null || Math.abs(cand - v) < Math.abs(best - v))) best = cand
+        return best ?? Math.round(v / GRID) * GRID
+      }
+      setDrag({ ...drag, x: fit(p.x - drag.dx, box.w, ex), y: fit(p.y - drag.dy, box.h, ey) })
+    }
+  }
+  const up = () => {
+    const draft = draftRef.current
+    const drag = dragRef.current
+    if (draft) {
+      if (Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) >= 300) onDrawWall?.(draft.a, draft.b)
+      setDraft(null)
+    }
+    if (drag) {
+      onMoveBox?.(drag.id, drag.x, drag.y)
+      setDrag(null)
+    }
+  }
+
+  const lb = (id: string) => structure?.inside.get(id)?.loadBearing ?? false
+  const n = graph.outline.length
+  const drawing = tool === "draw" && !!onDrawWall
+
+  return (
+    <svg
+      ref={svgRef}
+      className={`${styles.plan} ${drawing ? styles.planDrawing : ""}`}
+      viewBox={`${x0} ${y0} ${x1 - x0} ${y1 - y0}`}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerLeave={up}
+      role="img"
+      aria-label="Ground floor plan"
+    >
+      {/* a metre grid */}
+      {Array.from({ length: Math.ceil((x1 - x0) / 1000) + 1 }, (_, i) => Math.ceil(x0 / 1000) * 1000 + i * 1000).map((x) => (
+        <line key={`gx${x}`} x1={x} y1={y0} x2={x} y2={y1} className={styles.grid} strokeWidth={sw * 0.3} />
+      ))}
+      {Array.from({ length: Math.ceil((y1 - y0) / 1000) + 1 }, (_, i) => Math.ceil(y0 / 1000) * 1000 + i * 1000).map((y) => (
+        <line key={`gy${y}`} x1={x0} y1={y} x2={x1} y2={y} className={styles.grid} strokeWidth={sw * 0.3} />
+      ))}
+
+      {/* rooms */}
+      {boxes
+        ? boxes.map((b) => {
+            const at = drag?.id === b.id ? { x: drag.x, y: drag.y } : b
+            const sel = selection?.kind === "box" && selection.id === b.id
+            return (
+              <rect
+                key={b.id}
+                x={at.x}
+                y={at.y}
+                width={b.w}
+                height={b.h}
+                fill={ROOM_KIND_COLOURS[b.kind]}
+                className={`${styles.box} ${sel ? styles.boxSelected : ""}`}
+                strokeWidth={sel ? sw * 2 : sw * 0.8}
+                onPointerDown={(e) => {
+                  if (tool === "draw") return
+                  e.stopPropagation()
+                  onSelect({ kind: "box", id: b.id })
+                  if (!onMoveBox) return
+                  const p = toPlan(e)
+                  setDrag({ id: b.id, dx: p.x - b.x, dy: p.y - b.y, x: b.x, y: b.y })
+                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                }}
+              />
+            )
+          })
+        : graph.rooms.map((r, i) => {
+            const sel = selection?.kind === "room" && selection.index === i
+            return (
+              <g key={i} onClick={() => tool === "select" && onSelect({ kind: "room", index: i })} className={styles.room}>
+                {r.cells.map((c, k) => (
+                  <rect key={k} x={c.x} y={c.y} width={c.w} height={c.h} fill={ROOM_KIND_COLOURS[r.kind]} opacity={sel ? 1 : 0.75} stroke="none" />
+                ))}
+              </g>
+            )
+          })}
+
+      {/* the outside walls */}
+      {graph.outline.map((a, i) => {
+        const b = graph.outline[(i + 1) % n]
+        const v = structure?.outside[i]
+        return <line key={`o${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={v?.loadBearing ? styles.wallLB : styles.wallOut} strokeWidth={sw * 3.2} strokeLinecap="square" />
+      })}
+
+      {/* the inside walls */}
+      {graph.walls.map((w) => {
+        const sel = selection?.kind === "wall" && selection.id === w.id
+        return (
+          <g key={w.id}>
+            <line x1={w.a.x} y1={w.a.y} x2={w.b.x} y2={w.b.y} className={`${lb(w.id) ? styles.wallLB : styles.wallIn} ${sel ? styles.wallSelected : ""}`} strokeWidth={sw * (sel ? 2.8 : 2)} strokeLinecap="square" />
+            {tool === "select" && (
+              <line
+                x1={w.a.x}
+                y1={w.a.y}
+                x2={w.b.x}
+                y2={w.b.y}
+                stroke="transparent"
+                strokeWidth={sw * 10}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect({ kind: "wall", id: w.id })
+                }}
+                style={{ cursor: "pointer" }}
+              />
+            )}
+          </g>
+        )
+      })}
+
+      {/* which way the roof framing spans */}
+      {structure?.spans.map((s, i) => {
+        const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
+        const d = { x: (s.b.x - s.a.x) / len, y: (s.b.y - s.a.y) / len }
+        const head = (p: Pt, k: 1 | -1) => `M${p.x - d.x * k * sw * 8 + d.y * sw * 5},${p.y - d.y * k * sw * 8 - d.x * sw * 5}L${p.x},${p.y}L${p.x - d.x * k * sw * 8 - d.y * sw * 5},${p.y - d.y * k * sw * 8 + d.x * sw * 5}`
+        return (
+          <g key={`s${i}`} className={styles.span}>
+            <line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} strokeWidth={sw * 0.9} strokeDasharray={`${sw * 4} ${sw * 3}`} />
+            <path d={`${head(s.b, 1)}${head(s.a, -1)}`} strokeWidth={sw * 0.9} fill="none" />
+          </g>
+        )
+      })}
+
+      {/* room names */}
+      {graph.rooms.map((r, i) => {
+        const box = boxes?.find((b) => b.id === r.id)
+        const at = box && drag?.id === box.id ? { x: drag.x + box.w / 2, y: drag.y + box.h / 2 } : box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : r.label
+        return (
+          <text key={`t${i}`} x={at.x} y={at.y} textAnchor="middle" className={styles.roomLabel} fontSize={sw * 9} pointerEvents="none">
+            <tspan x={at.x} dy={-sw * 2}>
+              {r.name}
+            </tspan>
+            <tspan x={at.x} dy={sw * 11} className={styles.roomArea} fontSize={sw * 7}>
+              {m2(r.areaM2)}
+            </tspan>
+          </text>
+        )
+      })}
+
+      {/* the wall being drawn */}
+      {draft && (
+        <g pointerEvents="none">
+          <line x1={draft.a.x} y1={draft.a.y} x2={draft.b.x} y2={draft.b.y} className={styles.wallDraft} strokeWidth={sw * 2} strokeLinecap="square" />
+          <text x={(draft.a.x + draft.b.x) / 2} y={(draft.a.y + draft.b.y) / 2 - sw * 6} textAnchor="middle" fontSize={sw * 8} className={styles.roomLabel}>
+            {(Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) / 1000).toFixed(2)} m
+          </text>
+        </g>
+      )}
+    </svg>
+  )
+}
+
+export default PlanCanvas

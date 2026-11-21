@@ -18,10 +18,11 @@ import { Roof, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "boards" | "trims" | "joinery" | "foundation" | "floor"
+export type HouseRenderMember = "roof" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
+  inside: "Inside walls",
   boards: "Board lines",
   trims: "Facings",
   joinery: "Windows & doors",
@@ -29,7 +30,7 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   floor: "Floor",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "boards", "trims", "joinery", "foundation", "floor"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "inside", "boards", "trims", "joinery", "foundation", "floor"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -66,6 +67,9 @@ export interface HouseRenderInput {
   settings: WeatherboardSettings
   roof: Roof | null
   roofColour: string
+  /** walls inside the house (the House calculator's): a line on plan
+   * (world mm), standing on the floor (z = 0) */
+  extras?: { a: P2; b: P2; height: number; thickness: number; color: string }[]
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -486,6 +490,23 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     const levels = (results.get(from.wallId)?.courses ?? []).filter((c) => c.index > 0).map((c) => c.bottom)
     pieces.push(...sidePieces(s, f, { top: lerp(t0, t1), bottom: lerp(b0, b1), breaks: [] }, null, null, settings, levels, groundZ))
   })
+
+  for (const x of input.extras ?? []) {
+    const len = Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y)
+    if (len < 10) continue
+    const n = { x: (-(x.b.y - x.a.y) / len) * (x.thickness / 2), y: ((x.b.x - x.a.x) / len) * (x.thickness / 2) }
+    const at = (p: P2, side: 1 | -1, z: number): V3 => [p.x + n.x * side, p.y + n.y * side, z]
+    const base = [at(x.a, 1, 0), at(x.b, 1, 0), at(x.b, -1, 0), at(x.a, -1, 0)]
+    const top = [at(x.a, 1, x.height), at(x.b, 1, x.height), at(x.b, -1, x.height), at(x.a, -1, x.height)]
+    pieces.push({
+      member: "inside",
+      solid: makeSolid([
+        { pts: top, color: x.color },
+        { pts: base, color: x.color },
+        ...base.map((_, k) => ({ pts: [base[k], base[(k + 1) % 4], top[(k + 1) % 4], top[k]], color: x.color })),
+      ]),
+    })
+  }
 
   if (input.roof) {
     // ribs a shade darker on a light roof, lighter on a dark one

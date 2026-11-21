@@ -62,6 +62,10 @@ export interface Roof {
   /** gable-end triangles over walls that don't reach the roof (no peaked
    * wall there): world points, flush with the wall line */
   infills: { pts: [number, number, number][]; inward: P2 }[]
+  /** each wing's own rectangle (before it's run into the roof it joins:
+   * together they tile the footprint), at the wall lines, and which way
+   * its ridge runs — trusses, rafters and ceiling joists span square to it */
+  wings: { corners: P2[]; ridge: P2 }[]
   notes: string[]
 }
 
@@ -197,8 +201,8 @@ interface Wing extends Rect {
 }
 
 /** Rectangles covering a footprint whose corners are all square on the
- * (u, v) frame: the biggest first, then the biggest of what's left, each
- * one not overlapping those before. */
+ * (u, v) frame: the biggest (favouring square over long and thin) first,
+ * then the biggest of what's left, each one not overlapping those before. */
 function rectangles(local: P2[]): Rect[] {
   const merge = (vals: number[]) => {
     const s = [...vals].sort((a, b) => a - b)
@@ -228,7 +232,11 @@ function rectangles(local: P2[]): Rect[] {
           while (j < jMax && inCell[i1 - 1][j] && !taken[i1 - 1][j]) j++
           jMax = j
           if (jMax === j0) break
-          const a = (us[i1] - us[i0]) * (vs[jMax] - vs[j0])
+          // the biggest, but squarer first: an L splits into the house and
+          // its wing, not a long strip and a sliver
+          const w = us[i1] - us[i0]
+          const h = vs[jMax] - vs[j0]
+          const a = w * h * Math.sqrt(Math.min(w, h) / Math.max(w, h))
           if (a > bestArea + 1) {
             bestArea = a
             best = [i0, i1, j0, jMax]
@@ -430,6 +438,15 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
       }
     }
 
+  const wingsOut = rects.map((rect, i) => ({
+    corners: [
+      { x: rect.u0, y: rect.v0 },
+      { x: rect.u1, y: rect.v0 },
+      { x: rect.u1, y: rect.v1 },
+      { x: rect.u0, y: rect.v1 },
+    ].map(toWorld),
+    ridge: toWorld(wings[i].alongU ? { x: 1, y: 0 } : { x: 0, y: 1 }),
+  }))
   if (wings.length > 1) notes.push(`${wings.length} roofs meeting in valleys, one over each wing of the footprint.`)
-  return { type, pitchDeg, eavesZ: H, faces, infills, notes }
+  return { type, pitchDeg, eavesZ: H, faces, infills, wings: wingsOut, notes }
 }

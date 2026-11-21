@@ -32,6 +32,15 @@ export interface Calculator {
 
 export const CALCULATORS: readonly Calculator[] = [
   {
+    id: "house",
+    title: "House",
+    description:
+      "A one-storey house from the ground floor plan up: draw the outline and walls or lay out the rooms, see which walls hold the roof up (trusses or rafters) and where a span's too long, walk round it in 3D, and send its outside walls to Weatherboards — kept in step with the plan.",
+    tags: ["Floor plan", "Load-bearing walls", "Roof", "3D", "Feeds Weatherboards"],
+    href: "/house",
+    defaultStatus: "development",
+  },
+  {
     id: "decking",
     title: "Decking",
     description:
