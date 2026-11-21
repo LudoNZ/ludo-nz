@@ -6,11 +6,9 @@ import { useAuth } from "@/context/auth"
 import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
-import { calculateWall } from "@/components/weatherboards/weatherboardCalc"
-import { DEFAULT_SETTINGS as WB_DEFAULTS } from "@/components/weatherboards/data"
 import { loadProject, newProjectId, ProjectLocation, saveProject } from "@/components/weatherboards/projectStore"
 import type { RoofType } from "@/components/weatherboards/types"
-import { floorGraph, inside as isInside, isSquare, roomsToOutline } from "./floorPlan"
+import { floorGraph, isSquare, roomsToOutline } from "./floorPlan"
 import { houseCladding, mergeCladding } from "./houseCladding"
 import {
   FloorPlan,
@@ -30,6 +28,7 @@ import {
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridLine, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
+import { houseRenderInputFrom } from "./houseRenderInput"
 import styles from "./house.module.scss"
 
 const STEPS = ["Start", "Floor plans", "Roof & structure", "3D", "Cladding"] as const
@@ -973,22 +972,6 @@ const StructureStep: React.FC<{
 
 // ── 4. 3D ──────────────────────────────────────────────────────────────
 
-/** the first floor's floor as slabs, one per cell (world mm), held clear
- * of the walls — in from the outside walls by their depth, and either side
- * of an inside wall by half its — so no solid cuts through another */
-const upperFloorCells = (g: ReturnType<typeof floorGraph>) =>
-  g.rooms.flatMap((r) =>
-    r.cells.map((c) => {
-      const outside = (p: Pt) => !isInside(g.outline, p)
-      const inset = (p: Pt) => (outside(p) ? 141 : 56)
-      const l = inset({ x: c.x - 10, y: c.y + c.h / 2 })
-      const rt = inset({ x: c.x + c.w + 10, y: c.y + c.h / 2 })
-      const t = inset({ x: c.x + c.w / 2, y: c.y - 10 })
-      const b = inset({ x: c.x + c.w / 2, y: c.y + c.h + 10 })
-      return { x0: c.x + l, x1: c.x + c.w - rt, y0: -(c.y + c.h - b), y1: -(c.y + t) }
-    }),
-  )
-
 const ThreeDStep: React.FC<{
   house: HouseProject
   graph: ReturnType<typeof floorGraph>
@@ -996,50 +979,7 @@ const ThreeDStep: React.FC<{
   cladding: NonNullable<ReturnType<typeof houseCladding>>
   structures: ReturnType<typeof analyseHouse>
 }> = ({ house, graph, upperGraph, cladding, structures }) => {
-  const input = useMemo(() => {
-    const walls = cladding.walls
-    const results = new Map([...walls.values()].map((w) => [w.id, calculateWall(w, WB_DEFAULTS)]))
-    // (each held short where it meets the outside walls, and where it butts
-    // into another inside wall, so no solid runs through another)
-    const onSeg = (p: Pt, a: Pt, b: Pt) => {
-      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
-      const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len)
-      return t >= -0.001 && t <= 1.001 && Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / len < 5
-    }
-    const trim = (g: typeof graph, w: (typeof graph.walls)[number]) => {
-      const len = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1
-      const d = { x: (w.b.x - w.a.x) / len, y: (w.b.y - w.a.y) / len }
-      const short = (p: Pt) =>
-        g.outline.some((q, i) => onSeg(p, q, g.outline[(i + 1) % g.outline.length])) ? 141 : g.walls.some((o) => o !== w && onSeg(p, o.a, o.b)) ? 56 : 0
-      const sa = short(w.a)
-      const sb = short(w.b)
-      return { a: { x: w.a.x + d.x * sa, y: w.a.y + d.y * sa }, b: { x: w.b.x - d.x * sb, y: w.b.y - d.y * sb } }
-    }
-    const inside = (g: typeof graph, st: Structure, z0: number, height: number, upper: boolean) =>
-      g.walls.map((w) => ({ w, ...trim(g, w) })).filter((x) => Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y) > 20).map(({ w, a, b }) => ({
-        a: { x: a.x, y: -a.y },
-        b: { x: b.x, y: -b.y },
-        height,
-        thickness: 110,
-        z0,
-        upper,
-        color: st.inside.get(w.id)?.loadBearing ? "#c98f7a" : "#ece8df",
-      }))
-    const z1 = cladding.upperFloorZ
-    const extras = [
-      ...inside(graph, structures.ground, 0, house.settings.studHeightMm, false),
-      ...(upperGraph && structures.upper && house.upper ? inside(upperGraph, structures.upper, z1, house.upper.studHeightMm, true) : []),
-    ]
-    const upper =
-      cladding.upper && upperGraph
-        ? {
-            layout: cladding.upper,
-            floorZ: z1,
-            floorCells: upperFloorCells(upperGraph),
-          }
-        : undefined
-    return { layout: cladding.ground, walls, results, settings: WB_DEFAULTS, roof: cladding.roof, moreRoofs: cladding.lowerRoofs, roofColour: house.settings.roof.colour, extras, upper }
-  }, [cladding, graph, upperGraph, house.settings, house.upper, structures])
+  const input = useMemo(() => houseRenderInputFrom(house, graph, upperGraph, cladding, structures), [cladding, graph, upperGraph, house, structures])
   return (
     <section className={styles.card}>
       <h2>The house in 3D</h2>

@@ -20,6 +20,8 @@ export interface SiteSummary {
   stairs: number
   /** decks and floors (missing on projects saved before they existed) */
   decks?: number
+  /** houses (missing on projects saved before they existed) */
+  houses?: number
 }
 
 export interface StoredSiteProject {
@@ -87,6 +89,7 @@ export const summariseSite = (site: SiteProject): SiteSummary => {
     wallCount: site.walls.length,
     stairs: site.stairs.length,
     decks: site.decks.length,
+    houses: site.houses.length,
   }
 }
 

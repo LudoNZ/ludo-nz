@@ -140,7 +140,7 @@ const SiteProjectsPage = () => {
           column="Site"
           subscribe={subscribeToAllSiteProjects}
           hrefFor={siteProjectHref}
-          describe={(s: SiteSummary) => `${plural(s.wallCount ?? 0, "wall")} · ${plural(s.stairs ?? 0, "stair")}${s.decks ? ` · ${plural(s.decks, "deck")}` : ""} · ${s.wall?.wallLengthM ?? 0} m of wall`}
+          describe={(s: SiteSummary) => `${plural(s.wallCount ?? 0, "wall")} · ${plural(s.stairs ?? 0, "stair")}${s.decks ? ` · ${plural(s.decks, "deck")}` : ""}${s.houses ? ` · ${plural(s.houses, "house")}` : ""} · ${s.wall?.wallLengthM ?? 0} m of wall`}
         />
       )}
     </div>

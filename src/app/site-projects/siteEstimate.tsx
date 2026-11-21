@@ -48,8 +48,8 @@ const SiteEstimate: React.FC<{
   // the proposal's render, worked out once each time it's opened on a
   // new version of the site
   const scene = useMemo(
-    () => (proposalOpen ? buildSiteScene(site.walls, placements, { azimuthDeg: -30, elevationDeg: 28 }, site.decks) : null),
-    [proposalOpen, site.walls, placements, site.decks],
+    () => (proposalOpen ? buildSiteScene(site.walls, placements, { azimuthDeg: -30, elevationDeg: 28 }, site.decks, site.houses) : null),
+    [proposalOpen, site.walls, placements, site.decks, site.houses],
   )
 
   if (!estimate) return null

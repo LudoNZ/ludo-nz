@@ -12,6 +12,8 @@ import {
   deckCorners,
   deckToSite,
   newSiteDeck,
+  newSiteHouse,
+  SiteHouse,
   siteDeckOrder,
   newSiteWall,
   placeStair,
@@ -40,6 +42,9 @@ import { SitePlan, WallsCard } from "../siteView"
 import SiteRenderView from "../siteRenderView"
 import SiteEstimate from "../siteEstimate"
 import DecksCard from "../decksCard"
+import HousesCard from "../housesCard"
+import { houseSitePoints } from "../siteView"
+import type { HouseProject } from "@/components/house/houseTypes"
 import styles from "../siteView.module.scss"
 
 const SAVE_DELAY_MS = 1000
@@ -86,6 +91,7 @@ const SiteProjectEditor = () => {
   const [selectedStair, setSelectedStair] = useState<string | null>(null)
   const [selectedWall, setSelectedWall] = useState<string | null>(null)
   const [selectedDeck, setSelectedDeck] = useState<string | null>(null)
+  const [selectedHouse, setSelectedHouse] = useState<string | null>(null)
   // the project lives in `latest` (so the wall editor's own changes don't
   // re-render the page round it); this re-renders when the page needs it
   const [, setVersion] = useState(0)
@@ -465,6 +471,24 @@ const SiteProjectEditor = () => {
     commit({ ...site, decks: [...site.decks, added] })
     setSelectedDeck(added.id)
   }
+  const addHouse = (house: HouseProject, houseName: string, from: SiteHouse["from"]) => {
+    // to the right of whatever's there, its floor a step up off the lowest ground
+    const pts = [
+      ...site.walls.flatMap((w) => w.wall.planPoints.map(toSite(w))),
+      ...site.decks.flatMap((d) => deckCorners(d).map(deckToSite(d))),
+      ...site.houses.flatMap(houseSitePoints),
+    ]
+    const at = pts.length ? { xM: Math.ceil(Math.max(...pts.map((p) => p.xM)) + 2), yM: Math.floor(Math.min(...pts.map((p) => p.yM))) } : { xM: 0, yM: 0 }
+    const grounds = [...site.decks.map((d) => d.groundLevelM), ...placements.map((p) => p.placement.groundLevelM)]
+    const used = new Set(site.houses.map((h) => h.name))
+    let unique = houseName
+    for (let n = 2; used.has(unique); n++) unique = `${houseName} (${n})`
+    const added = newSiteHouse(house, unique, `Copied from the house project "${houseName}"`, from, at, (grounds.length ? Math.min(...grounds) : 0) + 0.2)
+    commit({ ...site, houses: [...site.houses, added] })
+    setSelectedHouse(added.id)
+    setSelectedWall(null)
+    setSelectedDeck(null)
+  }
   const deckOrder = siteDeckOrder(site.decks)
 
   return (
@@ -492,16 +516,37 @@ const SiteProjectEditor = () => {
         walls={site.walls}
         placements={placements}
         decks={site.decks}
+        houses={site.houses}
+        selectedHouseId={selectedHouse}
+        onSelectHouse={(id) => {
+          setSelectedHouse(id)
+          setSelectedWall(null)
+          setSelectedDeck(null)
+        }}
+        onMoveHouse={(id, xM, yM, done) => {
+          const s = latest.current.site
+          if (!s) return
+          const next = { ...s, houses: s.houses.map((h) => (h.id === id ? { ...h, xM, yM } : h)) }
+          if (done) commit(next)
+          else {
+            latest.current.site = next
+            rerender()
+          }
+        }}
         selectedDeckId={selectedDeck}
         onSelectDeck={(id) => {
           setSelectedDeck(id)
           setSelectedWall(null)
+          setSelectedHouse(null)
           document.getElementById("site-decks")?.scrollIntoView({ behavior: "smooth", block: "start" })
         }}
         selectedId={selectedWall}
         onSelect={(id) => {
           setSelectedWall(id)
-          if (id) setSelectedDeck(null)
+          if (id) {
+            setSelectedDeck(null)
+            setSelectedHouse(null)
+          }
         }}
         onOpen={openWall}
         onMove={(id, xM, yM, done) => {
@@ -513,6 +558,18 @@ const SiteProjectEditor = () => {
             latest.current.site = next
             rerender()
           }
+        }}
+      />
+      <HousesCard
+        houses={site.houses}
+        uid={auth?.currentUser?.uid ?? null}
+        selectedId={selectedHouse}
+        onSelect={setSelectedHouse}
+        onChange={(houses) => commit({ ...site, houses })}
+        onAdd={addHouse}
+        onRemove={(id) => {
+          commit({ ...site, houses: site.houses.filter((h) => h.id !== id) })
+          if (selectedHouse === id) setSelectedHouse(null)
         }}
       />
       <WallsCard
@@ -547,7 +604,7 @@ const SiteProjectEditor = () => {
         onSelectStair={setSelectedStair}
         calculatorHref={(stairId) => withOwner(stairCalculatorHref(projectId, stairId), owner, auth?.currentUser?.uid)}
       />
-      <SiteRenderView walls={site.walls} placements={placements} decks={site.decks} />
+      <SiteRenderView walls={site.walls} placements={placements} decks={site.decks} houses={site.houses} />
       {placements.length > 0 && (
         <StairOrderCard
           title="Stair material order — the whole site"

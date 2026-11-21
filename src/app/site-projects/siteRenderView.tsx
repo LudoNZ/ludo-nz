@@ -5,7 +5,7 @@ import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { useFlyCamera } from "@/components/render3d/useFlyCamera"
 import type { CameraFrame } from "@/components/render3d/perspective"
 import { buildSiteScene } from "@/components/site/siteRender3d"
-import type { SiteDeck, SitePlaced, SiteWall } from "@/components/site/siteProject"
+import type { SiteDeck, SiteHouse, SitePlaced, SiteWall } from "@/components/site/siteProject"
 import renderStyles from "@/components/retainingWall/wallRenderView.module.scss"
 import styles from "./siteView.module.scss"
 
@@ -15,7 +15,8 @@ const SiteRenderView: React.FC<{
   walls: SiteWall[]
   placements: SitePlaced[]
   decks: SiteDeck[]
-}> = ({ walls, placements, decks }) => {
+  houses?: SiteHouse[]
+}> = ({ walls, placements, decks, houses = [] }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-30)
   const [elevationDeg, setElevationDeg] = useState(30)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -34,9 +35,10 @@ const SiteRenderView: React.FC<{
   const shownWalls = useDeferredValue(walls)
   const shownPlacements = useDeferredValue(placements)
   const shownDecks = useDeferredValue(decks)
+  const shownHouses = useDeferredValue(houses)
   const scene = useMemo(
-    () => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg, camera }, shownDecks),
-    [shownWalls, shownPlacements, shownDecks, azimuthDeg, elevationDeg, camera],
+    () => buildSiteScene(shownWalls, shownPlacements, { azimuthDeg, elevationDeg, camera }, shownDecks, shownHouses),
+    [shownWalls, shownPlacements, shownDecks, shownHouses, azimuthDeg, elevationDeg, camera],
   )
   frameRef.current = scene?.frame ?? null
 
@@ -65,11 +67,11 @@ const SiteRenderView: React.FC<{
           </div>
           <p className={styles.hint}>
             Each wall&apos;s levels are taken as on one datum, so set walls that meet to the same levels in their own
-            calculators. Posts, boards and stairs only — each wall&apos;s own 3D view has the footings and every board.
+            calculators. Posts, boards and stairs only — each wall&apos;s own 3D view has the footings and every board. A house stands with its ground floor at its floor level.
           </p>
         </div>
       ) : (
-        <p className={styles.hint}>Add a wall with a height to see it here.</p>
+        <p className={styles.hint}>Add a wall with a height, a deck or a house to see it here.</p>
       )}
     </section>
   )

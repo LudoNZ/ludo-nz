@@ -26,6 +26,8 @@ import { planMixedStock } from "../stairs/stairs"
 import { buildFrame, DEFAULT_DECK_FRAME, FrameInput, frameInputFromData, FrameLayout, pinsFromData, rectangleOutline, splitRun } from "../floorFraming/frame"
 import { frameOrder } from "../floorFraming/frameOrder"
 import type { RenderBoard } from "../floorFraming/frameRender3d"
+import { houseFromData, HouseProject, Pt as HousePt } from "../house/houseTypes"
+import { floorGraph } from "../house/floorPlan"
 
 export const MIN_STAIR_ANGLE_DEG = 30
 export const MAX_STAIR_ANGLE_DEG = 150
@@ -116,10 +118,29 @@ export interface SiteDeck {
   frame: FrameInput
 }
 
+/** A house on the site: a copy of a saved House calculator project, put
+ * on the plan by the top-left corner of its outline (`xM`, `yM`), turned
+ * `rotationDeg` (clockwise on screen) about that corner, its ground floor
+ * at RL `floorLevelM`. Drawn on the plan and in 3D only — it's not priced. */
+export interface SiteHouse {
+  id: string
+  name: string
+  /** where it was copied from, for the card ("" for none) */
+  source: string
+  /** the house project it was copied from, to update it from again */
+  from: { kind: "private" | "public"; uid?: string; id: string } | null
+  xM: number
+  yM: number
+  rotationDeg: number
+  floorLevelM: number
+  house: HouseProject
+}
+
 export interface SiteProject {
   walls: SiteWall[]
   stairs: SiteStair[]
   decks: SiteDeck[]
+  houses: SiteHouse[]
   /** what's typed into the decks' live order */
   deckOrderPins: Record<string, Record<string, number>>
   /** pricing for the whole job (markup, extra lines, the proposal's
@@ -127,7 +148,7 @@ export interface SiteProject {
   estimate: EstimateSettings | null
 }
 
-export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [], decks: [], deckOrderPins: {}, estimate: null })
+export const newBlankSite = (): SiteProject => ({ walls: [], stairs: [], decks: [], houses: [], deckOrderPins: {}, estimate: null })
 
 /** The site's pricing, or until it's been set, the first wall's (with
  * every wall's extra lines). */
@@ -200,6 +221,38 @@ const deckFromSiteData = (raw: unknown, n: number): SiteDeck | null => {
   }
 }
 
+export const newSiteHouse = (house: HouseProject, name: string, source: string, from: SiteHouse["from"], at: { xM: number; yM: number }, floorLevelM = 0): SiteHouse => ({
+  id: randomId(),
+  name,
+  source,
+  from,
+  xM: at.xM,
+  yM: at.yM,
+  rotationDeg: 0,
+  floorLevelM,
+  house,
+})
+
+const houseFromSiteData = (raw: unknown, n: number): SiteHouse | null => {
+  if (typeof raw !== "object" || raw === null) return null
+  const h = raw as Record<string, unknown>
+  const f = h.from as Record<string, unknown> | null | undefined
+  return {
+    id: typeof h.id === "string" && h.id ? h.id : randomId(),
+    name: typeof h.name === "string" && h.name ? h.name : `House ${n + 1}`,
+    source: typeof h.source === "string" ? h.source : "",
+    from:
+      f && typeof f === "object" && typeof f.id === "string" && (f.kind === "private" || f.kind === "public")
+        ? { kind: f.kind, id: f.id, ...(typeof f.uid === "string" ? { uid: f.uid } : {}) }
+        : null,
+    xM: num(h.xM, 0),
+    yM: num(h.yM, 0),
+    rotationDeg: num(h.rotationDeg, 0),
+    floorLevelM: num(h.floorLevelM, 0),
+    house: houseFromData(h.house),
+  }
+}
+
 export { stairInputFromData }
 
 const wallFromSiteData = (raw: unknown, n: number): SiteWall | null => {
@@ -251,7 +304,8 @@ export const siteFromData = (raw: unknown): SiteProject => {
         input: stairInputFromData(s.input),
       }),
     )
-  return { walls, stairs, decks, deckOrderPins: pinsFromData(d.deckOrderPins), estimate: typeof d.estimate === "object" && d.estimate !== null ? estimateSettingsFromData(d.estimate) : null }
+  const houses = (Array.isArray(d.houses) ? d.houses : []).map(houseFromSiteData).filter((x): x is SiteHouse => x !== null)
+  return { walls, stairs, decks, houses, deckOrderPins: pinsFromData(d.deckOrderPins), estimate: typeof d.estimate === "object" && d.estimate !== null ? estimateSettingsFromData(d.estimate) : null }
 }
 
 /** A wall's own plan point → the site plan. */
@@ -297,6 +351,42 @@ export const sitePlacements = (site: SiteProject): SitePlaced[] =>
     const placement = placeStair(st, wall.wall.planPoints, wall.wall.retainedSide, siteWallProfile(wall.wall))
     return placement ? [{ wall, deck: null, placement, place: toSite(wall) }] : []
   })
+
+// ── houses ─────────────────────────────────────────────────────────────
+
+/** a house's outlines on its own plan (mm, y down), and the corner it's
+ * placed by: the top left of both storeys together */
+export interface HouseOutlines {
+  ground: HousePt[]
+  upper: HousePt[] | null
+  origin: HousePt
+}
+const outlineCache = new WeakMap<HouseProject, HouseOutlines>()
+export const houseOutlines = (house: HouseProject): HouseOutlines => {
+  let o = outlineCache.get(house)
+  if (!o) {
+    const ground = floorGraph(house.floor).outline
+    const upper = house.upper ? floorGraph(house.upper.plan).outline : null
+    const all = [...ground, ...(upper ?? [])]
+    const origin = all.length ? { x: Math.min(...all.map((p) => p.x)), y: Math.min(...all.map((p) => p.y)) } : { x: 0, y: 0 }
+    o = { ground, upper: upper && upper.length >= 3 ? upper : null, origin }
+    outlineCache.set(house, o)
+  }
+  return o
+}
+
+/** A point on the house's own plan (mm, y down) → the site (m). */
+export const houseToSite = (h: Pick<SiteHouse, "xM" | "yM" | "rotationDeg" | "house">) => {
+  const { origin } = houseOutlines(h.house)
+  const a = (h.rotationDeg * Math.PI) / 180
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  return (p: HousePt): PlanPoint => {
+    const x = (p.x - origin.x) / 1000
+    const y = (p.y - origin.y) / 1000
+    return { xM: h.xM + x * c - y * s, yM: h.yM + x * s + y * c }
+  }
+}
 
 // ── decks ──────────────────────────────────────────────────────────────
 

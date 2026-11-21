@@ -5,7 +5,7 @@ import Button from "@/components/button/button"
 import { PlanPoint, sideNormal, totalLength } from "@/components/retainingWall/wallPlan"
 import { newBlankWall, WallProject } from "@/components/retainingWall/wallProject"
 import { StoredWallProject, subscribeToProjects } from "@/components/retainingWall/wallProjectStore"
-import { deckCorners, deckToSite, newSiteStair, SiteDeck, SitePlaced, siteDeckFrame, SiteStair, SiteWall, toSite } from "@/components/site/siteProject"
+import { deckCorners, deckToSite, houseOutlines, houseToSite, newSiteStair, SiteDeck, SiteHouse, SitePlaced, siteDeckFrame, SiteStair, SiteWall, toSite } from "@/components/site/siteProject"
 import { StoredStairProject, subscribeToStairProjects } from "@/components/stairs/stairProjectStore"
 import { UnitField } from "../retaining-walls/obstructionsCard"
 import { STAIR_COLOR } from "./stairsCard"
@@ -13,6 +13,7 @@ import styles from "./siteView.module.scss"
 
 const WALL_COLOR = "#7a5a3a"
 export const DECK_COLOR = "#a8693f"
+export const HOUSE_COLOR = "#4f5f73"
 const PICKED_COLOR = "#1e6b3a"
 /** a dragged wall's end snaps to another wall's end within this */
 const SNAP_M = 0.25
@@ -23,6 +24,8 @@ const round = (v: number, step: number) => Math.round(v / step) * step
 
 /** every wall's points on the site */
 const sitePoints = (w: SiteWall) => w.wall.planPoints.map(toSite(w))
+/** a house's ground floor outline on the site */
+export const houseSitePoints = (h: SiteHouse) => houseOutlines(h.house).ground.map(houseToSite(h))
 
 /** The site from above: every wall where it's been put (retained side
  * shaded), and the stairs coming off them. Drag a wall to move it — its
@@ -31,6 +34,11 @@ export const SitePlan: React.FC<{
   walls: SiteWall[]
   placements: SitePlaced[]
   decks?: SiteDeck[]
+  houses?: SiteHouse[]
+  selectedHouseId?: string | null
+  onSelectHouse?: (id: string) => void
+  /** a house dragged: live while dragging; `done` once it's let go */
+  onMoveHouse?: (id: string, xM: number, yM: number, done: boolean) => void
   selectedId: string | null
   onSelect: (id: string | null) => void
   selectedDeckId?: string | null
@@ -38,9 +46,9 @@ export const SitePlan: React.FC<{
   /** live while dragging; `done` once it's let go */
   onMove: (id: string, xM: number, yM: number, done: boolean) => void
   onOpen: (id: string) => void
-}> = ({ walls, placements, decks = [], selectedId, onSelect, selectedDeckId = null, onSelectDeck, onMove, onOpen }) => {
+}> = ({ walls, placements, decks = [], houses = [], selectedHouseId = null, onSelectHouse, onMoveHouse, selectedId, onSelect, selectedDeckId = null, onSelectDeck, onMove, onOpen }) => {
   const svgRef = useRef<SVGSVGElement>(null)
-  const drag = useRef<{ id: string; start: PlanPoint; from: { xM: number; yM: number }; at: { xM: number; yM: number } | null } | null>(null)
+  const drag = useRef<{ kind: "wall" | "house"; id: string; start: PlanPoint; from: { xM: number; yM: number }; at: { xM: number; yM: number } | null } | null>(null)
   // the view is fitted to what's there when a drag starts, and held while it
   // goes on (a moving view under the pointer would fight the drag)
   const [heldView, setHeldView] = useState<string | null>(null)
@@ -48,6 +56,7 @@ export const SitePlan: React.FC<{
   const all = [
     ...walls.flatMap(sitePoints),
     ...decks.flatMap((d) => deckCorners(d).map(deckToSite(d))),
+    ...houses.flatMap(houseSitePoints),
     ...placements.flatMap(({ place, placement }) => placement.treads.flat().map(place)),
   ]
   const xs = all.map((p) => p.xM)
@@ -102,6 +111,11 @@ export const SitePlan: React.FC<{
       const dx = p.xM - d.start.xM
       const dy = p.yM - d.start.yM
       if (!d.at && Math.hypot(dx, dy) < stroke * 2) return
+      if (d.kind === "house") {
+        d.at = { xM: round(d.from.xM + dx, STEP_M), yM: round(d.from.yM + dy, STEP_M) }
+        onMoveHouse?.(d.id, d.at.xM, d.at.yM, false)
+        return
+      }
       d.at = placeAt(d.id, d.from.xM + dx, d.from.yM + dy)
       onMove(d.id, d.at.xM, d.at.yM, false)
     }
@@ -109,7 +123,9 @@ export const SitePlan: React.FC<{
       const d = drag.current
       drag.current = null
       setHeldView(null)
-      if (d?.at) onMove(d.id, d.at.xM, d.at.yM, true)
+      if (!d?.at) return
+      if (d.kind === "house") onMoveHouse?.(d.id, d.at.xM, d.at.yM, true)
+      else onMove(d.id, d.at.xM, d.at.yM, true)
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", up)
@@ -135,6 +151,54 @@ export const SitePlan: React.FC<{
             <line key={i} {...l} />
           ))}
         </g>
+        {houses.map((h) => {
+          const t = houseToSite(h)
+          const { ground, upper } = houseOutlines(h.house)
+          if (ground.length < 3) return null
+          const picked = h.id === selectedHouseId
+          const color = picked ? PICKED_COLOR : HOUSE_COLOR
+          const pts = ground.map(t)
+          const mid = { xM: pts.reduce((a, q) => a + q.xM, 0) / pts.length, yM: pts.reduce((a, q) => a + q.yM, 0) / pts.length }
+          const corner = t(houseOutlines(h.house).origin)
+          return (
+            <g
+              key={h.id}
+              className={styles.wall}
+              onPointerDown={(e) => {
+                const p = toPlan(e)
+                if (!p) return
+                e.preventDefault()
+                onSelectHouse?.(h.id)
+                if (!onMoveHouse) return
+                setHeldView(fitted)
+                drag.current = { kind: "house", id: h.id, start: p, from: { xM: h.xM, yM: h.yM }, at: null }
+              }}
+            >
+              <polygon
+                points={pts.map((q) => `${q.xM},${q.yM}`).join(" ")}
+                fill={HOUSE_COLOR}
+                fillOpacity={picked ? 0.3 : 0.18}
+                stroke={color}
+                strokeWidth={stroke * (picked ? 1.4 : 1)}
+                strokeLinejoin="round"
+              />
+              {upper && (
+                <polygon
+                  points={upper.map(t).map((q) => `${q.xM},${q.yM}`).join(" ")}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={stroke * 0.5}
+                  strokeDasharray={`${stroke * 2} ${stroke * 1.5}`}
+                  pointerEvents="none"
+                />
+              )}
+              <circle cx={corner.xM} cy={corner.yM} r={stroke * 1.1} fill={color} />
+              <text x={mid.xM} y={mid.yM} fontSize={font} textAnchor="middle" dominantBaseline="middle" fill={color} fontWeight={600} pointerEvents="none">
+                {h.name}
+              </text>
+            </g>
+          )
+        })}
         {walls.map((wall) => {
           const pts = sitePoints(wall)
           const picked = wall.id === selectedId
@@ -165,7 +229,7 @@ export const SitePlan: React.FC<{
                 e.preventDefault()
                 onSelect(wall.id)
                 setHeldView(fitted)
-                drag.current = { id: wall.id, start: p, from: { xM: wall.xM, yM: wall.yM }, at: null }
+                drag.current = { kind: "wall", id: wall.id, start: p, from: { xM: wall.xM, yM: wall.yM }, at: null }
               }}
               onDoubleClick={() => onOpen(wall.id)}
             >
@@ -251,7 +315,9 @@ export const SitePlan: React.FC<{
           </text>
         </g>
       </svg>
-      {walls.length === 0 && decks.length === 0 && <p className={styles.empty}>Nothing on the site yet — import one of your retaining walls below, add a blank one, or add a deck.</p>}
+      {walls.length === 0 && decks.length === 0 && houses.length === 0 && (
+        <p className={styles.empty}>Nothing on the site yet — import a house or one of your retaining walls below, add a blank wall, or add a deck.</p>
+      )}
     </div>
   )
 }

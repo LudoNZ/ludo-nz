@@ -16,8 +16,10 @@ import { orderSolids, Solid, V3 } from "../stairs/stairRender3d"
 import { CameraState, FIT_CAMERA, makeCamera, surfaceAtCentre } from "../render3d/perspective"
 import type { RenderScene } from "../retainingWall/wallRender3d"
 import { sideNormal } from "../retainingWall/wallPlan"
-import { deckToSite, SiteDeck, siteDeckBoards, siteDeckFrame, SitePlaced, SiteWall, siteWallProfile, stairRenderExtra, toSite } from "./siteProject"
+import { deckToSite, houseToSite, SiteDeck, siteDeckBoards, siteDeckFrame, SiteHouse, SitePlaced, SiteWall, siteWallProfile, stairRenderExtra, toSite } from "./siteProject"
 import { frameSolids } from "../floorFraming/frameRender3d"
+import { HouseModel, housePieces, HouseRenderMember } from "../weatherboards/houseRender3d"
+import { houseRenderInput } from "../house/houseRenderInput"
 
 const NOTHING_HIDDEN = new Set<never>()
 
@@ -96,16 +98,36 @@ const extrude = (at: (u: number, n: number, z: number) => V3, profile: [number, 
   return makeSolid(faces, topColor)
 }
 
+/** on a site, a house is its outside: walls, roof and foundation */
+const HOUSE_HIDDEN: ReadonlySet<HouseRenderMember> = new Set<HouseRenderMember>(["boards", "inside", "floor"])
+// a house's model (its own world, mm), worked out once per version of it
+const houseModels = new WeakMap<SiteHouse["house"], HouseModel | null>()
+const houseModel = (house: SiteHouse["house"]): HouseModel | null => {
+  if (!houseModels.has(house)) {
+    const input = houseRenderInput(house)
+    houseModels.set(house, input ? housePieces(input, HOUSE_HIDDEN) : null)
+  }
+  return houseModels.get(house) ?? null
+}
+
 /** Builds and projects the site. Null when there's nothing to draw. */
-export function buildSiteScene(walls: SiteWall[], placements: SitePlaced[], options: SiteRenderOptions, decks: SiteDeck[] = []): RenderScene | null {
+export function buildSiteScene(walls: SiteWall[], placements: SitePlaced[], options: SiteRenderOptions, decks: SiteDeck[] = [], houses: SiteHouse[] = []): RenderScene | null {
   const built = walls.flatMap((w) => {
     const profile = siteWallProfile(w.wall)
     if (!profile || profile.posts.length < 2 || w.wall.planPoints.length < 2) return []
     return [{ w, profile, pts: w.wall.planPoints.map(toSite(w)) }]
   })
-  if (!built.length && !decks.length) return null
-  // the ground everything stands on: the lowest ground of any wall or deck
-  const base = Math.min(...built.flatMap(({ profile }) => profile.posts.map((p) => p.groundLevelM)), ...decks.map((d) => d.groundLevelM))
+  const placedHouses = houses.flatMap((h) => {
+    const model = houseModel(h.house)
+    return model && model.pieces.length ? [{ h, model }] : []
+  })
+  if (!built.length && !decks.length && !placedHouses.length) return null
+  // the ground everything stands on: the lowest ground of any wall, deck or house
+  const base = Math.min(
+    ...built.flatMap(({ profile }) => profile.posts.map((p) => p.groundLevelM)),
+    ...decks.map((d) => d.groundLevelM),
+    ...placedHouses.map(({ h, model }) => h.floorLevelM + model.groundZ / 1000),
+  )
 
   const solids: Solid[] = []
   /** where the camera looks square-on from: the walls' low sides, by length */
@@ -194,6 +216,31 @@ export function buildSiteScene(walls: SiteWall[], placements: SitePlaced[], opti
     // world y is −plan y)
     const r = (d.rotationDeg * Math.PI) / 180
     facing = add(facing, scale([-Math.sin(r), -Math.cos(r), 0], Math.max(0.1, d.widthM)))
+  }
+
+  // the houses: the House calculator's own model (world mm, y north), put on the site
+  for (const { h, model } of placedHouses) {
+    const place = houseToSite(h)
+    for (const p of model.pieces)
+      solids.push(
+        makeSolid(
+          p.solid.faces.map((face) => ({
+            color: face.color,
+            pts: face.pts.map(([x, y, z]): V3 => {
+              const q = place({ x, y: -y })
+              return [q.xM, -q.yM, h.floorLevelM + z / 1000]
+            }),
+          })),
+        ),
+      )
+    // looking at it from the front of its first wall, turned with it
+    if (model.front) {
+      const r = (h.rotationDeg * Math.PI) / 180
+      const fx = model.front.x
+      const fy = -model.front.y
+      const f = { x: fx * Math.cos(r) - fy * Math.sin(r), y: fx * Math.sin(r) + fy * Math.cos(r) }
+      facing = add(facing, scale([f.x, -f.y, 0], 5))
+    }
   }
 
   // the stairs: the wall's (or deck's) own 3D world, put where it is on the site

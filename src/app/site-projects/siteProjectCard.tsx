@@ -18,7 +18,8 @@ const SiteProjectCard: React.FC<{
   const walls = summary?.wallCount ?? (summary?.wall ? 1 : 0)
   const stairs = summary?.stairs ?? 0
   const decks = summary?.decks ?? 0
-  const parts = [walls ? plural(walls, "wall") : "", decks ? plural(decks, "deck") : "", stairs ? plural(stairs, "stair") : ""].filter(Boolean)
+  const houses = summary?.houses ?? 0
+  const parts = [houses ? plural(houses, "house") : "", walls ? plural(walls, "wall") : "", decks ? plural(decks, "deck") : "", stairs ? plural(stairs, "stair") : ""].filter(Boolean)
   const wall = walls > 0 ? summary?.wall : null
   return (
     <Link href={href} className={styles.card}>
