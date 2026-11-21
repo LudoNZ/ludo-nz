@@ -13,8 +13,9 @@ import type { Opening } from "@/components/weatherboards/types"
 import type { Cladding } from "./houseCladding"
 import renderStyles from "@/components/stairs/stairRenderView.module.scss"
 import { FloorGraph } from "./floorPlan"
-import { Door, FloorPlan, FramingSettings, HOUSE_JOINERY, HouseJoinery, HouseProject, newHouseId, Pt } from "./houseTypes"
-import JoineryModal, { JoineryDraft } from "./joineryModal"
+import { Door, FloorPlan, FramingSettings, HOUSE_JOINERY, HouseProject, newHouseId, Pt } from "./houseTypes"
+import { snapTo } from "./joinery"
+import { JoineryTarget, useJoineryEditor } from "./joineryEditor"
 import PlanCanvas, { Selection } from "./planCanvas"
 import type { Structure } from "./structure"
 import {
@@ -24,7 +25,6 @@ import {
   framingOrder,
   framingSolids,
   cutList,
-  DOOR_SILL,
   HouseFraming,
   houseFraming,
   MEMBER_COLOURS,
@@ -72,10 +72,14 @@ const WallElevation: React.FC<{
   wall: FramedWall
   drawing?: boolean
   onDrawn?: (r: DrawnRect) => void
+  /** drawing: a tap (not a drag) at x along the frame, z up it */
+  onTapAt?: (x: number, z: number) => void
+  /** heights a drawn edge snaps to (heads in use, and the like) */
+  snapZ?: number[]
   /** the openings that can be tapped to change them */
   editable?: (id: string) => boolean
   onPickOpening?: (id: string) => void
-}> = ({ wall, drawing, onDrawn, editable, onPickOpening }) => {
+}> = ({ wall, drawing, onDrawn, onTapAt, snapZ = [], editable, onPickOpening }) => {
   const L = wall.lengthMm
   const H = Math.max(wall.heightMm, ...wall.members.map((m) => m.z1))
   const pad = 250
@@ -92,7 +96,10 @@ const WallElevation: React.FC<{
     pt.y = e.clientY
     const p = pt.matrixTransform(svg.getScreenCTM()!.inverse())
     const r10 = (v: number) => Math.round(v / 10) * 10
-    return { x: r10(Math.min(L, Math.max(0, p.x))), z: r10(Math.min(H, Math.max(0, H - p.y))) }
+    // (near the floor: on it; near a head in use: on that)
+    const z = Math.min(H, Math.max(0, H - p.y))
+    const tol = Math.max(L, H) / 60
+    return { x: r10(Math.min(L, Math.max(0, p.x))), z: r10(z < tol ? 0 : snapTo(z, snapZ, tol)) }
   }
   const rect = drag ? { x0: Math.min(drag.x, drag.x2), x1: Math.max(drag.x, drag.x2), z0: Math.min(drag.z, drag.z2), z1: Math.max(drag.z, drag.z2) } : null
   return (
@@ -117,6 +124,7 @@ const WallElevation: React.FC<{
         }}
         onPointerUp={() => {
           if (rect && rect.x1 - rect.x0 >= 200 && rect.z1 - rect.z0 >= 200) onDrawn?.(rect)
+          else if (rect && rect.x1 - rect.x0 < 60 && rect.z1 - rect.z0 < 60) onTapAt?.((rect.x0 + rect.x1) / 2, (rect.z0 + rect.z1) / 2)
           setDrag(null)
         }}
       >
@@ -344,63 +352,42 @@ const FramingStep: React.FC<{
     setPickedDoor(d.id)
   }
 
-  // ── drawing windows and doors on the picked wall's elevation ──
-  const [drawJoinery, setDrawJoinery] = useState(false)
-  const [draft, setDraft] = useState<JoineryDraft | null>(null)
-  useEffect(() => {
-    // W: drawing on and off (not while typing); Escape: off
-    const key = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (draft || e.ctrlKey || e.metaKey || e.altKey || (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)))) return
-      if (e.key === "w" || e.key === "W") setDrawJoinery((v) => !v)
-      else if (e.key === "Escape") setDrawJoinery(false)
+  // ── windows and doors: drawn on a wall's elevation, or placed on the plan ──
+  const floorOf = (wallId: string) => framing.walls.find((w) => w.id === wallId)?.z0 ?? 0
+  const joinery = useJoineryEditor(house, setHouse, setPlanOf, floorOf)
+  /** a framed wall to put something on, `at` along it (the wall line's / cladding wall's x) */
+  const targetFor = (w: FramedWall, at: number, more: Partial<Pick<JoineryTarget, "drawn" | "editId" | "z">> = {}): JoineryTarget => {
+    if (w.outside) {
+      const taken = (withDrawn?.get(w.id) ?? []).filter((o) => o.id !== more.editId).map((o) => ({ id: o.id, x0: o.x, x1: o.x + o.width }))
+      return { where: "outside", wallId: w.id, floor: w.z0, wallName: w.name, length: cladding?.walls.get(w.id)?.lengthMm ?? w.lengthMm, taken, at, ...more }
     }
-    window.addEventListener("keydown", key)
-    return () => window.removeEventListener("keydown", key)
-  }, [draft])
-  const nextCode = (kind: "window" | "door") => {
-    const p = kind === "door" ? "D" : "W"
-    const used = new Set((house.joinery ?? []).map((j) => j.code))
-    for (let k = 1; ; k++) {
-      const c = `${p}${String(k).padStart(2, "0")}`
-      if (!used.has(c)) return c
-    }
-  }
-  const onDrawn = (r: DrawnRect) => {
-    if (!framed) return
-    if (framed.outside) {
-      const door = r.z0 < DOOR_SILL
-      const kind = door ? "door" : "window"
-      setDraft({ where: "outside", kind, code: nextCode(kind), name: "", x: r.x0 + framed.along, sill: door ? framed.z0 : r.z0 + framed.z0, floor: framed.z0, width: r.x1 - r.x0, height: door ? r.z1 : r.z1 - r.z0 })
-    } else setDraft({ where: "inside", name: "", at: (r.x0 + r.x1) / 2 + framed.along, width: r.x1 - r.x0, height: r.z1 })
-  }
-  const pickOpening = (id: string) => {
-    if (!framed) return
-    const j = (house.joinery ?? []).find((x) => x.id === id)
-    if (j) {
-      setDraft({ where: "outside", id, kind: j.sill - framed.z0 < DOOR_SILL ? "door" : "window", code: j.code ?? "", name: j.name ?? "", x: j.x, sill: j.sill, floor: framed.z0, width: j.width, height: j.height })
-      return
-    }
-    const d = plan.doors.find((x) => x.id === id)
-    if (d) setDraft({ where: "inside", id, name: d.name ?? "", at: d.atMm, width: d.widthMm, height: d.heightMm })
-  }
-  const saveDraft = (d: JoineryDraft) => {
-    if (!framed) return
-    if (d.where === "outside") {
-      const j: HouseJoinery = { id: d.id ?? `${HOUSE_JOINERY}${newHouseId()}`, wallId: framed.id, x: d.x, sill: d.kind === "door" ? d.floor : d.sill, width: d.width, height: d.height, code: d.code.trim() || undefined, name: d.name.trim() || undefined }
-      setHouse((h) => ({ ...h, joinery: d.id ? (h.joinery ?? []).map((x) => (x.id === d.id ? { ...j, wallId: x.wallId } : x)) : [...(h.joinery ?? []), j] }))
-    } else if (d.id) setDoor(d.id, { name: d.name.trim() || undefined, atMm: d.at, widthMm: d.width, heightMm: d.height })
-    else setPlan((f) => ({ ...f, doors: [...f.doors, { id: newHouseId(), wallId: framed.id, name: d.name.trim() || undefined, atMm: d.at, widthMm: d.width, heightMm: d.height }] }))
-    setDraft(null)
-  }
-  const deleteDraft = () => {
-    if (!draft?.id) return
-    const id = draft.id
-    if (draft.where === "outside") setHouse((h) => ({ ...h, joinery: (h.joinery ?? []).filter((x) => x.id !== id) }))
-    else setPlan((f) => ({ ...f, doors: f.doors.filter((x) => x.id !== id) }))
-    setDraft(null)
+    const line = g.walls.find((x) => x.id === w.id)
+    const taken = plan.doors.filter((d) => d.wallId === w.id && d.id !== more.editId).map((d) => ({ id: d.id, x0: d.atMm - d.widthMm / 2, x1: d.atMm + d.widthMm / 2 }))
+    return { where: "inside", storey: level as 0 | 1, lineId: w.id, wallName: w.name, length: line ? Math.hypot(line.b.x - line.a.x, line.b.y - line.a.y) : w.lengthMm, taken, at, ...more }
   }
   const editable = (id: string) => (house.joinery ?? []).some((j) => j.id === id) || plan.doors.some((d) => d.id === id)
+  /** a point on the plan, along a framed wall (its frame's x) */
+  const alongFrame = (w: FramedWall, p: Pt) => {
+    const L = Math.hypot(w.end.x - w.start.x, w.end.y - w.start.y) || 1
+    return ((p.x - w.start.x) * (w.end.x - w.start.x) + (p.y - w.start.y) * (w.end.y - w.start.y)) / L
+  }
+  const placeOnPlan = (hit: { kind: "edge"; index: number } | { kind: "wall"; id: string }, p: Pt) => {
+    const w =
+      hit.kind === "edge"
+        ? storeyWalls.find((x) => x.outside && x.side && onSide({ x: (g.outline[hit.index].x + g.outline[(hit.index + 1) % g.outline.length].x) / 2, y: (g.outline[hit.index].y + g.outline[(hit.index + 1) % g.outline.length].y) / 2 }, x.side.a, x.side.b))
+        : storeyWalls.find((x) => !x.outside && x.id === hit.id)
+    if (!w) return
+    setSelection(hit.kind === "edge" ? { kind: "edge", index: hit.index } : { kind: "wall", id: hit.id })
+    joinery.open(targetFor(w, alongFrame(w, p) + w.along))
+  }
+  // the outside walls' windows and doors on the plan: tap one to change it
+  const planJoinery = storeyWalls
+    .filter((w) => w.outside)
+    .flatMap((w) => {
+      const L = Math.hypot(w.end.x - w.start.x, w.end.y - w.start.y) || 1
+      const at = (x: number) => ({ x: w.start.x + ((w.end.x - w.start.x) * x) / L, y: w.start.y + ((w.end.y - w.start.y) * x) / L })
+      return w.openings.map((o) => ({ id: o.id, a: at(o.x0), b: at(o.x1), door: o.sill === null, wallId: w.id }))
+    })
 
   const totals = memberCounts(framing.walls.flatMap((w) => w.members))
   const studs = (totals.get("stud") ?? 0) + (totals.get("trimmer") ?? 0) + (totals.get("jack") ?? 0) + (totals.get("cripple") ?? 0) + (totals.get("junction") ?? 0)
@@ -523,7 +510,25 @@ const FramingStep: React.FC<{
         }}
         doors={planDoors}
         pickOutside
+        joinery={planJoinery}
+        placing={joinery.placing}
+        onPlace={placeOnPlan}
+        onPickJoinery={(id) => {
+          const j = planJoinery.find((x) => x.id === id)
+          const w = j && storeyWalls.find((x) => x.id === j.wallId)
+          if (w && editable(id)) joinery.open(targetFor(w, 0, { editId: id }))
+        }}
       />
+      <div className={styles.toolbar}>
+        <button type="button" className={`${styles.pill} ${joinery.placing ? styles.pillOn : ""}`} aria-pressed={joinery.placing} onClick={() => joinery.setPlacing((v) => !v)} aria-keyshortcuts="W">
+          Place windows &amp; doors <kbd className={styles.kbd}>W</kbd>
+        </button>
+        <span className={styles.muted}>
+          {joinery.placing
+            ? "Tap a wall on the plan where one goes (or drag one out on a wall's frame below) — it starts like the last one you laid. W or Escape to stop."
+            : "Then tap a wall on the plan, or drag one out on a wall's frame."}
+        </span>
+      </div>
       {g.walls.length === 0 && <p className={styles.hint}>No inside walls on this storey yet — draw them in Floor plans.</p>}
 
       {framed && (
@@ -570,30 +575,25 @@ const FramingStep: React.FC<{
             </p>
           ))}
           <div style={{ flex: "1 1 100%" }}>
-            <div className={styles.toolbar}>
-              <button
-                type="button"
-                className={`${styles.pill} ${drawJoinery ? styles.pillOn : ""}`}
-                aria-pressed={drawJoinery}
-                onClick={() => setDrawJoinery((v) => !v)}
-                aria-keyshortcuts="W"
-              >
-                {framed.outside ? "Draw windows & doors" : "Draw doors"} <kbd className={styles.kbd}>W</kbd>
-              </button>
-              <span className={styles.muted}>
-                {drawJoinery
-                  ? `Drag out where it goes on the wall${framed.outside ? " — from the floor up, it's a door" : ""}; you confirm it next. W or Escape to stop.`
-                  : "Tap a window or door drawn here to change it."}
-              </span>
-            </div>
-            <WallElevation wall={framed} drawing={drawJoinery} onDrawn={onDrawn} editable={editable} onPickOpening={pickOpening} />
+            <p className={styles.muted}>
+              {joinery.placing
+                ? `Tap where ${framed.outside ? "a window or door" : "a door"} goes, or drag one out to its size${framed.outside ? " (from the floor up, it's a door)" : ""} — it snaps to the heads already in use.`
+                : "Tap a window or door to change it — or W to place more."}
+            </p>
+            <WallElevation
+              wall={framed}
+              drawing={joinery.placing}
+              snapZ={[...joinery.heads, ...joinery.heads.map((h) => h - 1000), ...joinery.heads.map((h) => h - 1200)].filter((z) => z > 0)}
+              onDrawn={(r) => joinery.open(targetFor(framed, (r.x0 + r.x1) / 2 + framed.along, { drawn: { x0: r.x0 + framed.along, x1: r.x1 + framed.along, z0: r.z0, z1: r.z1 } }))}
+              onTapAt={(x, z) => joinery.open(targetFor(framed, x + framed.along, { z }))}
+              editable={editable}
+              onPickOpening={(id) => joinery.open(targetFor(framed, 0, { editId: id }))}
+            />
           </div>
         </div>
       )}
 
-      {draft && framed && (
-        <JoineryModal draft={draft} wallName={framed.name} nextCode={nextCode} onSave={saveDraft} onDelete={draft.id ? deleteDraft : undefined} onCancel={() => setDraft(null)} />
-      )}
+      {joinery.modal}
 
       <p className={styles.summary}>
         {outsideCount} outside and {framing.walls.length - outsideCount} inside wall{framing.walls.length - outsideCount === 1 ? "" : "s"}, {allOpenings} opening{allOpenings === 1 ? "" : "s"}: {studs} studs of all kinds, {totals.get("nog") ?? 0} nogs, {totals.get("lintel") ? `${totals.get("lintel")} lintel${totals.get("lintel") === 1 ? "" : "s"}, ` : ""}

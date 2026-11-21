@@ -427,6 +427,8 @@ export interface HouseScene {
   viewBox: { x: number; y: number; w: number; h: number }
   strokeW: number
   frame: CameraFrame
+  /** the wall under a point of the view (its id, x along it from its left end, z up), nearest first */
+  pick: (at: V2) => { wallId: string; x: number; z: number } | null
 }
 
 const hexToRgb = (hex: string): V3 => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]
@@ -437,6 +439,8 @@ const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
  * squares up to (the first wall's outside) */
 export interface HouseModel {
   pieces: Piece[]
+  /** each wall's face, to find what's under the pointer: along its plan side from `a` (at its x0) in `d`, x0 to x1 of the wall, z from lo to hi */
+  faces: { wallId: string; a: P2; d: P2; x0: number; x1: number; lo: number; hi: number; upper: boolean }[]
   front: P2 | null
   groundZ: number
   floor: V3[] | null
@@ -455,7 +459,8 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     return e
   }
   const placed = sides.filter((s) => s.wallId && walls.has(s.wallId))
-  if (!placed.length) return { pieces: [], front: null, groundZ: 0, floor: null }
+  if (!placed.length) return { pieces: [], faces: [], front: null, groundZ: 0, floor: null }
+  const faces: HouseModel["faces"] = []
   const groundZ = Math.min(...placed.map((s) => Math.min(...edgeOf(s.wallId!).bottom.map((p) => p.y)))) - GROUND_DROP
 
   const pieces: Piece[] = []
@@ -463,6 +468,12 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   const storey = (layout: HouseLayout, upper: boolean) => {
     const sides = layout.sides
     const n = sides.length
+    for (const s of sides) {
+      if (!s.wallId || !walls.has(s.wallId)) continue
+      const e = edgeOf(s.wallId)
+      const L = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
+      faces.push({ wallId: s.wallId, a: s.a, d: { x: (s.b.x - s.a.x) / L, y: (s.b.y - s.a.y) / L }, x0: s.x0, x1: s.x1, lo: Math.min(...e.bottom.map((p) => p.y)), hi: Math.max(...e.top.map((p) => p.y)), upper })
+    }
     const near = (i: number, dir: 1 | -1): { wallId: string; x: number } | null => {
       for (let k = 1; k < n; k++) {
         const j = i + dir * k
@@ -570,13 +581,14 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
   const floor = layout.closed && !hidden.has("floor") ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null
-  return { pieces: kept, front: outwardOf(s0), groundZ, floor }
+  // (a hidden storey's walls can't be tapped)
+  return { pieces: kept, faces: faces.filter((f) => !(f.upper && hidden.has("upper"))), front: outwardOf(s0), groundZ, floor }
 }
 
 /** square-on is looking at the first wall's outside (the model is built
  * once by housePieces; this is what turning the camera redoes) */
 export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOptions, "hidden">): HouseScene | null {
-  const { pieces, front, groundZ, floor } = model
+  const { pieces, faces, front, groundZ, floor } = model
   if (!pieces.length || !front) return null
   const solids = pieces.map((p) => p.solid)
   const az = Math.atan2(front.y, front.x) + (options.azimuthDeg * Math.PI) / 180
@@ -655,5 +667,41 @@ export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOpti
     viewBox,
     strokeW: cam.span * 0.0009,
     frame: { ...cam.frame, pivot: options.camera && options.camera !== FIT_CAMERA ? surfaceAtCentre(cam, drawn) : null },
+    pick: (at) => {
+      // each wall's face is a plane: find (x, z) on it that lands on the point (Newton's method), and keep the nearest
+      let best: { wallId: string; x: number; z: number; dist: number } | null = null
+      const tol = cam.span * 1e-4
+      for (const f of faces) {
+        const P = (x: number, z: number): V3 => [f.a.x + f.d.x * (x - f.x0), f.a.y + f.d.y * (x - f.x0), z]
+        let x = (f.x0 + f.x1) / 2
+        let z = (f.lo + f.hi) / 2
+        let ok = false
+        for (let k = 0; k < 30; k++) {
+          if (cam.ahead(P(x, z)) <= 0) break
+          const [u, v] = cam.project(P(x, z))
+          const ex = u - at[0]
+          const ey = v - at[1]
+          if (Math.hypot(ex, ey) < tol) {
+            ok = true
+            break
+          }
+          const h = 10
+          const [ux, vx] = cam.project(P(x + h, z))
+          const [uz, vz] = cam.project(P(x, z + h))
+          const a = (ux - u) / h
+          const b = (uz - u) / h
+          const c = (vx - v) / h
+          const d = (vz - v) / h
+          const det = a * d - b * c
+          if (Math.abs(det) < 1e-12) break
+          x -= (d * ex - b * ey) / det
+          z -= (-c * ex + a * ey) / det
+        }
+        if (!ok || x < f.x0 - 1 || x > f.x1 + 1 || z < f.lo - 1 || z > f.hi + 1) continue
+        const dist = cam.ahead(P(x, z))
+        if (!best || dist < best.dist) best = { wallId: f.wallId, x, z, dist }
+      }
+      return best && { wallId: best.wallId, x: best.x, z: best.z }
+    },
   }
 }

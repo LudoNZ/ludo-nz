@@ -29,6 +29,7 @@ import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
+import { useJoineryEditor } from "./joineryEditor"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -153,7 +154,7 @@ const HouseCalculator: React.FC<{
           setSelection={setSelection}
         />
       )}
-      {step === 3 && cladding && <ThreeDStep house={house} graph={graph} upperGraph={upperGraph} cladding={cladding} structures={structures} />}
+      {step === 3 && cladding && <ThreeDStep house={house} setHouse={setHouse} setPlanOf={setPlanOf} graph={graph} upperGraph={upperGraph} cladding={cladding} structures={structures} />}
       {step === 4 && <CladdingStep house={house} setHouse={setHouse} cladding={cladding} />}
       {step === 5 && (
         <FramingStep
@@ -1206,12 +1207,26 @@ const StructureStep: React.FC<{
 
 const ThreeDStep: React.FC<{
   house: HouseProject
+  setHouse: (u: (h: HouseProject) => HouseProject) => void
+  setPlanOf: (l: number) => (u: (f: FloorPlan) => FloorPlan) => void
   graph: ReturnType<typeof floorGraph>
   upperGraph: ReturnType<typeof floorGraph> | null
   cladding: NonNullable<ReturnType<typeof houseCladding>>
   structures: ReturnType<typeof analyseHouse>
-}> = ({ house, graph, upperGraph, cladding, structures }) => {
+}> = ({ house, setHouse, setPlanOf, graph, upperGraph, cladding, structures }) => {
   const input = useMemo(() => houseRenderInputFrom(house, graph, upperGraph, cladding, structures), [cladding, graph, upperGraph, house, structures])
+  // windows and doors placed on the outside walls straight off the 3D view
+  const floorOf = (wallId: string) => (wallId.startsWith("us") ? cladding.upperFloorZ : 0)
+  const joinery = useJoineryEditor(house, setHouse, setPlanOf, floorOf)
+  const onPick = (hit: { wallId: string; x: number; z: number }) => {
+    const w = cladding.walls.get(hit.wallId)
+    if (!w) return
+    const floor = floorOf(w.id)
+    // on one already there (of the house's own): change it
+    const on = (house.joinery ?? []).find((j) => j.wallId === w.id && hit.x >= j.x && hit.x <= j.x + j.width && hit.z >= j.sill && hit.z <= j.sill + j.height)
+    const taken = w.openings.filter((o) => o.id !== on?.id).map((o) => ({ id: o.id, x0: o.x, x1: o.x + o.width }))
+    joinery.open({ where: "outside", wallId: w.id, floor, wallName: w.name, length: w.lengthMm, taken, at: hit.x, z: hit.z - floor, ...(on ? { editId: on.id } : {}) })
+  }
   return (
     <section className={styles.card}>
       <h2>The house in 3D</h2>
@@ -1219,7 +1234,16 @@ const ThreeDStep: React.FC<{
         Untick Roof to look inside{house.upper ? ", and First floor to see the ground floor" : ""} — load-bearing walls are the warm ones. Drag to swing it
         round; the magnifier flies in.
       </p>
-      <HouseRenderView input={input} fileName={house.name.replace(/\W+/g, "-").toLowerCase() || "house"} />
+      <div className={styles.toolbar}>
+        <button type="button" className={`${styles.pill} ${joinery.placing ? styles.pillOn : ""}`} aria-pressed={joinery.placing} onClick={() => joinery.setPlacing((v) => !v)} aria-keyshortcuts="W">
+          Place windows &amp; doors <kbd className={styles.kbd}>W</kbd>
+        </button>
+        <span className={styles.muted}>
+          {joinery.placing ? "Tap an outside wall where one goes (or one you've placed, to change it) — fly in with the magnifier to get close. W or Escape to stop." : "Then tap an outside wall."}
+        </span>
+      </div>
+      <HouseRenderView input={input} fileName={house.name.replace(/\W+/g, "-").toLowerCase() || "house"} picking={joinery.placing} onPick={onPick} />
+      {joinery.modal}
     </section>
   )
 }

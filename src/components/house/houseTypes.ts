@@ -5,6 +5,7 @@
  * screen, like the footprint editor's. */
 
 import type { Opening, RoofPlan, WingSetting } from "../weatherboards/types"
+import type { JoineryType, LastJoinery } from "./joinery"
 import { gridFromData, type ProjectGrid } from "./grid"
 
 export interface Pt {
@@ -56,6 +57,8 @@ export interface InsideWall {
 export interface Door {
   id: string
   name?: string
+  /** the joinery type it was laid as (see joinery.ts) */
+  typeId?: string
   /** the inside wall's id (outline mode) or key (rooms mode, see floorPlan.ts) */
   wallId: string
   atMm: number
@@ -146,6 +149,8 @@ export const DEFAULT_FRAMING: FramingSettings = {
 }
 
 export interface HouseSettings {
+  /** the head height off the floor windows line up with (unless their type says) */
+  joineryHeadMm?: number
   /** ground floor to its top plate: the eaves height (and ceiling) of a
    * one-storey house, or of the ground floor's own roof under a second */
   studHeightMm: number
@@ -206,10 +211,15 @@ export interface HouseProject {
    * cladding wall (by id) as the weatherboards place them: x from the wall's
    * start, sill up from the ground floor */
   joinery: HouseJoinery[]
+  /** the joinery types to lay from, each with its default size; unset: the usual ones */
+  joineryTypes?: JoineryType[]
+  /** what was laid last, inside and out, for the next to start the same */
+  lastJoinery?: Partial<Record<"inside" | "outside", LastJoinery>>
 }
 
 export interface HouseJoinery extends Opening {
   wallId: string
+  typeId?: string
 }
 
 /** the house's own joinery's ids start so, to tell them from the weatherboard project's */
@@ -295,6 +305,8 @@ export function houseFromData(d: unknown): HouseProject {
     },
     step: typeof o.step === "number" ? o.step : 0,
     link: o.link && typeof o.link === "object" && typeof o.link.id === "string" ? o.link : null,
+    ...(Array.isArray(o.joineryTypes) && o.joineryTypes.length ? { joineryTypes: o.joineryTypes } : {}),
+    ...(o.lastJoinery && typeof o.lastJoinery === "object" ? { lastJoinery: o.lastJoinery } : {}),
     joinery: arr<HouseJoinery>(o.joinery).filter(
       (j) => j && typeof j.id === "string" && typeof j.wallId === "string" && [j.x, j.sill, j.width, j.height].every((v) => typeof v === "number"),
     ),

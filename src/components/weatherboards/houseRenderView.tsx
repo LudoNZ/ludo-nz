@@ -12,7 +12,13 @@ const PRINT_ATTR = "data-print-stair-render"
 
 /** The house in 3D, its walls set out on plan: swing it round, tilt it,
  * hide a layer, fly in full screen, print it or save a PNG. */
-const HouseRenderView: React.FC<{ input: HouseRenderInput; fileName?: string }> = ({ input, fileName = "house" }) => {
+const HouseRenderView: React.FC<{
+  input: HouseRenderInput
+  fileName?: string
+  /** picking: a tap on a wall says which, and where on it (x from its left end, z up) */
+  picking?: boolean
+  onPick?: (hit: { wallId: string; x: number; z: number }) => void
+}> = ({ input, fileName = "house", picking, onPick }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-35)
   const [elevationDeg, setElevationDeg] = useState(25)
   const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set())
@@ -23,6 +29,7 @@ const HouseRenderView: React.FC<{ input: HouseRenderInput; fileName?: string }> 
       return next
     })
   const svgRef = useRef<SVGSVGElement>(null)
+  const downAt = useRef<[number, number] | null>(null)
   const frameRef = useRef<CameraFrame | null>(null)
   const { camera, explore, beforeTurn } = useFlyCamera(svgRef, frameRef)
   const handleOrbit = useCallback(
@@ -100,7 +107,28 @@ const HouseRenderView: React.FC<{ input: HouseRenderInput; fileName?: string }> 
       <div className={styles.printArea}>
         <DiagramExplorer label="3D view" onOrbit={handleOrbit} camera={explore} headerTools={memberToggles}>
           {scene ? (
-            <svg ref={svgRef} viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`} className={styles.svg} role="img" aria-label="Shaded 3D view of the house">
+            <svg
+              ref={svgRef}
+              viewBox={`${scene.viewBox.x} ${scene.viewBox.y} ${scene.viewBox.w} ${scene.viewBox.h}`}
+              className={styles.svg}
+              role="img"
+              aria-label="Shaded 3D view of the house"
+              style={picking ? { cursor: "copy" } : undefined}
+              onPointerDown={(e) => {
+                downAt.current = [e.clientX, e.clientY]
+              }}
+              onClick={(e) => {
+                // (a tap, not the end of a turn)
+                const d = downAt.current
+                if (!picking || !onPick || !svgRef.current || (d && Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 5)) return
+                const pt = svgRef.current.createSVGPoint()
+                pt.x = e.clientX
+                pt.y = e.clientY
+                const p = pt.matrixTransform(svgRef.current.getScreenCTM()!.inverse())
+                const hit = scene.pick([p.x, p.y])
+                if (hit) onPick(hit)
+              }}
+            >
               <defs>
                 <linearGradient id="houseRenderSky" gradientUnits="userSpaceOnUse" x1="0" y1={scene.viewBox.y} x2="0" y2={scene.viewBox.y + scene.viewBox.h}>
                   <stop offset="0" stopColor="#eef3f7" />

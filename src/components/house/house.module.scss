@@ -511,6 +511,16 @@
   stroke: #6d6a62;
 }
 
+.warn {
+  color: #b7410e;
+  font-weight: 600;
+  margin: 0.4rem 0;
+}
+
+.joinery {
+  stroke: #2b6cb0;
+}
+
 .doorPicked {
   stroke: var(--color-primary);
 }

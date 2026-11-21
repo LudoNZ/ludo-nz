@@ -67,7 +67,13 @@ const PlanCanvas: React.FC<{
   snapOn?: boolean
   /** the roof's sections can be picked, by their span arrows */
   pickSections?: boolean
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true, pickSections }) => {
+  /** the outside walls' windows and doors on plan (tap one: onPickJoinery) */
+  joinery?: { id: string; a: Pt; b: Pt; door: boolean }[]
+  onPickJoinery?: (id: string) => void
+  /** placing windows and doors: tapping a wall (outside or inside) places one there */
+  placing?: boolean
+  onPlace?: (hit: { kind: "edge"; index: number } | { kind: "wall"; id: string }, p: Pt) => void
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true, pickSections, joinery, onPickJoinery, placing, onPlace }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -436,9 +442,10 @@ const PlanCanvas: React.FC<{
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onSelect({ kind: "edge", index: i })
+                  if (placing && onPlace) onPlace({ kind: "edge", index: i }, toPlan(e as unknown as React.PointerEvent))
+                  else onSelect({ kind: "edge", index: i })
                 }}
-                style={{ cursor: "pointer" }}
+                style={{ cursor: placing ? "copy" : "pointer" }}
               />
             )}
           </g>
@@ -465,7 +472,7 @@ const PlanCanvas: React.FC<{
                 strokeWidth={sw * 10}
                 onPointerDown={(e) => {
                   e.stopPropagation()
-                  if (!movable || !axis) return
+                  if (placing || !movable || !axis) return
                   onSelect({ kind: "wall", id: w.id })
                   const at = w.a[axis]
                   setWdrag({ id: w.id, axis, base: at, from: toPlan(e)[axis], at })
@@ -473,9 +480,10 @@ const PlanCanvas: React.FC<{
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  onSelect({ kind: "wall", id: w.id })
+                  if (placing && onPlace) onPlace({ kind: "wall", id: w.id }, toPlan(e as unknown as React.PointerEvent))
+                  else onSelect({ kind: "wall", id: w.id })
                 }}
-                style={{ cursor: movable ? (axis === "x" ? "ew-resize" : "ns-resize") : "pointer" }}
+                style={{ cursor: placing ? "copy" : movable ? (axis === "x" ? "ew-resize" : "ns-resize") : "pointer" }}
               />
             )}
             {wdrag?.id === w.id && (
@@ -505,6 +513,40 @@ const PlanCanvas: React.FC<{
             <line x1={d.a.x} y1={d.a.y} x2={d.b.x} y2={d.b.y} className={styles.doorGap} strokeWidth={sw * 2.6} />
             <line x1={d.a.x} y1={d.a.y} x2={tip.x} y2={tip.y} strokeWidth={sw * 0.9} />
             <path d={`M${tip.x},${tip.y} A${L},${L} 0 0 ${n.x * (d.b.y - d.a.y) - n.y * (d.b.x - d.a.x) > 0 ? 0 : 1} ${d.b.x},${d.b.y}`} fill="none" strokeWidth={sw * 0.6} strokeDasharray={`${sw * 2} ${sw * 1.5}`} />
+          </g>
+        )
+      })}
+
+      {/* the outside walls' windows (three lines across the wall) and doors (a leaf swung out) */}
+      {joinery?.map((j) => {
+        const L = Math.hypot(j.b.x - j.a.x, j.b.y - j.a.y) || 1
+        const n = { x: -(j.b.y - j.a.y) / L, y: (j.b.x - j.a.x) / L }
+        const t = sw * 1.6
+        const off = (p: Pt, k: number) => ({ x: p.x + n.x * t * k, y: p.y + n.y * t * k })
+        const line = (k: number) => {
+          const [p, q] = [off(j.a, k), off(j.b, k)]
+          return `M${p.x},${p.y}L${q.x},${q.y}`
+        }
+        return (
+          <g key={`j${j.id}`} className={styles.joinery}>
+            <line x1={j.a.x} y1={j.a.y} x2={j.b.x} y2={j.b.y} className={styles.doorGap} strokeWidth={sw * 3.4} pointerEvents="none" />
+            <path d={j.door ? `${line(-1)}${line(1)}` : `${line(-1)}${line(0)}${line(1)}`} strokeWidth={sw * 0.7} fill="none" pointerEvents="none" />
+            <path d={`M${off(j.a, -1).x},${off(j.a, -1).y}L${off(j.a, 1).x},${off(j.a, 1).y}M${off(j.b, -1).x},${off(j.b, -1).y}L${off(j.b, 1).x},${off(j.b, 1).y}`} strokeWidth={sw * 0.7} pointerEvents="none" />
+            {onPickJoinery && !placing && (
+              <line
+                x1={j.a.x}
+                y1={j.a.y}
+                x2={j.b.x}
+                y2={j.b.y}
+                stroke="transparent"
+                strokeWidth={sw * 8}
+                style={{ cursor: "pointer" }}
+                role="button"
+                aria-label={`${j.door ? "Door" : "Window"} — tap to change it`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => (e.stopPropagation(), onPickJoinery(j.id))}
+              />
+            )}
           </g>
         )
       })}
