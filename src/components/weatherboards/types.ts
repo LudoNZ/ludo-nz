@@ -134,6 +134,23 @@ export interface HousePlan {
   method: "chain" | "footprint"
   chain: ChainPlan
   footprint: FootprintPlan | null
+  /** absent: worked out from the walls (see roof.ts) */
+  roof?: RoofPlan
+}
+
+/** "auto" reads the roof off the walls: a peaked wall is a gable end, a
+ * wall sloping end to end is under a skillion, all flat tops is a hip. */
+export type RoofType = "auto" | "gable" | "hip" | "skillion" | "none"
+
+export interface RoofPlan {
+  type: RoofType
+  /** null: from the gable (or skillion) walls, else a default */
+  pitchDeg: number | null
+  /** overhang past the walls at the eaves, mm (level, measured on plan) */
+  eavesMm: number
+  /** overhang past a gable end wall, mm */
+  vergeMm: number
+  colour: string
 }
 
 /** The elevations in the order they meet going round the house, each

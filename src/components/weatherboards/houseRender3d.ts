@@ -14,12 +14,14 @@
 import { FIT_CAMERA, makeCamera, surfaceAtCentre, type CameraFrame, type CameraState, type V2, type V3 } from "../render3d/perspective"
 import { makeSolid, orderSolids, type Solid } from "../stairs/stairRender3d"
 import { HouseLayout, outwardOf, P2, PlanSide } from "./housePlan"
+import { Roof, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "boards" | "trims" | "joinery" | "foundation" | "floor"
+export type HouseRenderMember = "roof" | "boards" | "trims" | "joinery" | "foundation" | "floor"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
+  roof: "Roof",
   boards: "Board lines",
   trims: "Facings",
   joinery: "Windows & doors",
@@ -27,7 +29,7 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   floor: "Floor",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["boards", "trims", "joinery", "foundation", "floor"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "boards", "trims", "joinery", "foundation", "floor"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -47,6 +49,11 @@ const WALL_T = 140
 const TRIM_PROUD = 20
 /** glass sits this far back from the face */
 const GLASS_BACK = 60
+/** the roof's depth, sheet to soffit: what shows as the fascia */
+const ROOF_T = 200
+/** sheet ribs, this far apart across the fall */
+const RIB_MM = 300
+
 /** the lawn sits this far below the lowest wall bottom */
 const GROUND_DROP = 200
 
@@ -57,6 +64,8 @@ export interface HouseRenderInput {
   walls: Map<string, Wall>
   results: Map<string, WallResult>
   settings: WeatherboardSettings
+  roof: Roof | null
+  roofColour: string
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -129,6 +138,7 @@ interface Piece {
   member: HouseRenderMember | "wall"
   /** lines on the solid's first face (its outside), drawn over it */
   lines?: [V3, V3][]
+  lineColor?: string
 }
 
 /** A convex profile in wall coords (x along, y up) made a slab from
@@ -321,6 +331,74 @@ function sidePieces(
   return out
 }
 
+// ── the roof ───────────────────────────────────────────────────────────
+
+/** a roof plane's piece: sitting on its plane, ROOF_T deep, square-edged
+ * (its sides are the fascia and barge) — the top face first */
+function roofSlab(poly: P2[], z: (p: P2) => number, color: string): Solid | null {
+  if (poly.length < 3) return null
+  const bottom = poly.map((p): V3 => [p.x, p.y, z(p)])
+  const top = poly.map((p): V3 => [p.x, p.y, z(p) + ROOF_T])
+  const faces = [
+    { pts: top, color },
+    { pts: bottom, color },
+    ...poly.map((_, i) => {
+      const j = (i + 1) % poly.length
+      return { pts: [bottom[i], bottom[j], top[j], top[i]], color }
+    }),
+  ]
+  return makeSolid(faces)
+}
+
+/** the sheet's ribs: lines running down the fall, RIB_MM apart (on a grid
+ * fixed to the plane, so they line up across pieces of it) */
+function ribs(poly: P2[], plane: { a: number; b: number; c: number }): [V3, V3][] {
+  const g = Math.hypot(plane.a, plane.b)
+  if (g < 1e-6) return []
+  const fall: P2 = { x: -plane.a / g, y: -plane.b / g }
+  const across: P2 = { x: -fall.y, y: fall.x }
+  const proj = poly.map((p) => p.x * across.x + p.y * across.y)
+  const lo = Math.ceil(Math.min(...proj) / RIB_MM + 0.15)
+  const hi = Math.floor(Math.max(...proj) / RIB_MM - 0.15)
+  const out: [V3, V3][] = []
+  const lift = (p: P2): V3 => [p.x, p.y, plane.a * p.x + plane.b * p.y + plane.c + ROOF_T + 0.5]
+  for (let k = lo; k <= hi; k++) {
+    // the line {across·p = k·RIB_MM}, cut to the (convex) piece
+    const o: P2 = { x: across.x * k * RIB_MM, y: across.y * k * RIB_MM }
+    let t0 = -Infinity
+    let t1 = Infinity
+    for (let i = 0; i < poly.length && t0 < t1; i++) {
+      const p = poly[i]
+      const q = poly[(i + 1) % poly.length]
+      // inside: left of p → q (the pieces wind anticlockwise, or the other way)
+      const nx = -(q.y - p.y)
+      const ny = q.x - p.x
+      const sgn = areaSign(poly)
+      const f0 = sgn * (nx * (o.x - p.x) + ny * (o.y - p.y))
+      const fd = sgn * (nx * fall.x + ny * fall.y)
+      if (Math.abs(fd) < 1e-9) {
+        if (f0 < 0) t1 = -Infinity
+        continue
+      }
+      const tt = -f0 / fd
+      if (fd > 0) t0 = Math.max(t0, tt)
+      else t1 = Math.min(t1, tt)
+    }
+    if (t1 - t0 > 50) out.push([lift({ x: o.x + fall.x * t0, y: o.y + fall.y * t0 }), lift({ x: o.x + fall.x * t1, y: o.y + fall.y * t1 })])
+  }
+  return out
+}
+
+const areaSign = (poly: P2[]) => {
+  let s = 0
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i]
+    const q = poly[(i + 1) % poly.length]
+    s += p.x * q.y - q.x * p.y
+  }
+  return s >= 0 ? 1 : -1
+}
+
 // ── the scene ──────────────────────────────────────────────────────────
 
 export interface HouseRenderOptions {
@@ -409,6 +487,25 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     pieces.push(...sidePieces(s, f, { top: lerp(t0, t1), bottom: lerp(b0, b1), breaks: [] }, null, null, settings, levels, groundZ))
   })
 
+  if (input.roof) {
+    // ribs a shade darker on a light roof, lighter on a dark one
+    const [r, g, b] = hexToRgb(input.roofColour)
+    const ribColor = 0.299 * r + 0.587 * g + 0.114 * b > 120 ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.16)"
+    for (const face of input.roof.faces) {
+      const solid = roofSlab(face.poly, (p) => zAt(face.plane, p), input.roofColour)
+      if (solid) pieces.push({ solid, member: "roof", lines: ribs(face.poly, face.plane), lineColor: ribColor })
+    }
+    for (const inf of input.roof.infills) {
+      const back = inf.pts.map(([x, y, z]): V3 => [x + inf.inward.x * 10, y + inf.inward.y * 10, z])
+      const faces = [
+        { pts: inf.pts, color: COLORS.plain },
+        { pts: back, color: COLORS.plain },
+        ...inf.pts.map((p, k) => ({ pts: [p, inf.pts[(k + 1) % inf.pts.length], back[(k + 1) % back.length], back[k]], color: COLORS.plain })),
+      ]
+      pieces.push({ solid: makeSolid(faces), member: "roof" })
+    }
+  }
+
   const kept = pieces.filter((p) => p.member === "wall" || !hidden.has(p.member))
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
@@ -477,13 +574,14 @@ export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOpti
     p.solid.faces.forEach((f, fi) => {
       if (!cam.sees(f.normal, f.pts[0])) return
       // walls (and their foundations) are cut into strips: no outline on their faces, so the cuts don't show
-      emit(f.pts, f.color, f.normal, (p.member === "wall" || p.member === "foundation") && fi < 2)
+      // and a roof plane can be cut into pieces where other roofs cross it
+      emit(f.pts, f.color, f.normal, ((p.member === "wall" || p.member === "foundation") && fi < 2) || (p.member === "roof" && fi === 0 && !!p.lines))
       if (fi === 0 && p.lines?.length) {
         const d = p.lines
           .filter(([a, b]) => cam.ahead(a) > 0 && cam.ahead(b) > 0)
           .map(([a, b]) => `M${fmt(cam.project(a))}L${fmt(cam.project(b))}`)
           .join("")
-        if (d) items.push({ kind: "lines", d, stroke: "rgba(70,60,45,0.45)" })
+        if (d) items.push({ kind: "lines", d, stroke: p.lineColor ?? "rgba(70,60,45,0.45)" })
       }
     })
   }

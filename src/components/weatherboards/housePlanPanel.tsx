@@ -5,8 +5,9 @@ import PolygonShapeEditor from "@/components/decking/polygonShapeEditor"
 import NumField from "./numField"
 import HouseRenderView from "./houseRenderView"
 import { fillInOrder, chainOrder, chainSteps, chainToFootprint, footprintSides, houseLayout, HouseLayout, planOf, startingFootprint } from "./housePlan"
+import { buildRoof, DEFAULT_ROOF, ROOF_COLOURS, ROOF_TYPE_LABELS } from "./roof"
 import { wallCodes } from "./takeoff"
-import { FootprintPlan, HousePlan, Wall, WeatherboardProject, WeatherboardSettings } from "./types"
+import { FootprintPlan, HousePlan, RoofPlan, RoofType, Wall, WeatherboardProject, WeatherboardSettings } from "./types"
 import { WallResult } from "./weatherboardCalc"
 import styles from "./housePlanPanel.module.scss"
 
@@ -73,7 +74,13 @@ const HousePlanPanel: React.FC<{
     for (const rs of results.values()) for (const r of rs) out.set(r.wall.id, r)
     return out
   }, [results])
-  const renderInput = useMemo(() => ({ layout, walls, results: wallResults, settings }), [layout, walls, wallResults, settings])
+  const roofPlan = plan.roof ?? DEFAULT_ROOF
+  const roof = useMemo(() => buildRoof(layout, walls, roofPlan), [layout, walls, roofPlan])
+  const setRoof = (patch: Partial<RoofPlan>) => setPlan((p) => ({ ...p, roof: { ...(p.roof ?? DEFAULT_ROOF), ...patch } }))
+  const renderInput = useMemo(
+    () => ({ layout, walls, results: wallResults, settings, roof, roofColour: roofPlan.colour }),
+    [layout, walls, wallResults, settings, roof, roofPlan.colour],
+  )
 
   const order = chainOrder(project.elevations, plan.chain).filter((e) => e.walls.length)
   const steps = chainSteps(project.elevations, plan.chain)
@@ -249,6 +256,84 @@ const HousePlanPanel: React.FC<{
             ⚠ {w}
           </p>
         ))}
+      </div>
+
+      <div className={styles.card}>
+        <h2>Roof</h2>
+        <div className={styles.roofGrid}>
+          <label>
+            Roof
+            <select value={roofPlan.type} onChange={(e) => setRoof({ type: e.target.value as RoofType })}>
+              {(Object.keys(ROOF_TYPE_LABELS) as RoofType[]).map((t) => (
+                <option key={t} value={t}>
+                  {t === "auto" && roof ? `${ROOF_TYPE_LABELS.auto} (${ROOF_TYPE_LABELS[roof.type].toLowerCase()})` : ROOF_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Pitch
+            <span className={styles.unit}>
+              <NumField
+                value={Math.round((roofPlan.pitchDeg ?? roof?.pitchDeg ?? 25) * 10) / 10}
+                min={1}
+                max={60}
+                step={0.5}
+                disabled={roofPlan.pitchDeg === null}
+                onChange={(v) => setRoof({ pitchDeg: v })}
+                ariaLabel="Roof pitch"
+              />
+              °
+            </span>
+            <span className={styles.check}>
+              <input
+                type="checkbox"
+                checked={roofPlan.pitchDeg === null}
+                onChange={(e) => setRoof({ pitchDeg: e.target.checked ? null : Math.round((roof?.pitchDeg ?? 25) * 10) / 10 })}
+              />
+              From the walls
+            </span>
+          </label>
+          <label>
+            Eaves overhang
+            <span className={styles.unit}>
+              <NumField value={roofPlan.eavesMm} min={0} step={50} onChange={(v) => setRoof({ eavesMm: v })} ariaLabel="Eaves overhang" />
+              mm
+            </span>
+          </label>
+          <label>
+            Verge overhang
+            <span className={styles.unit}>
+              <NumField value={roofPlan.vergeMm} min={0} step={50} onChange={(v) => setRoof({ vergeMm: v })} ariaLabel="Verge overhang" />
+              mm
+            </span>
+            <span className={styles.muted}>past a gable end</span>
+          </label>
+        </div>
+        <div className={styles.swatches} role="radiogroup" aria-label="Roof colour">
+          {ROOF_COLOURS.map((c) => (
+            <button
+              key={c.hex}
+              type="button"
+              role="radio"
+              aria-checked={roofPlan.colour === c.hex}
+              className={`${styles.swatch} ${roofPlan.colour === c.hex ? styles.swatchOn : ""}`}
+              onClick={() => setRoof({ colour: c.hex })}
+            >
+              <span style={{ background: c.hex }} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+        {roofPlan.type !== "none" && !layout.closed && (
+          <p className={styles.hint}>The roof goes on once the walls go right round the house (or the footprint&apos;s drawn).</p>
+        )}
+        {roof && (
+          <p className={styles.hint}>
+            {ROOF_TYPE_LABELS[roof.type]} at {roof.pitchDeg.toFixed(1)}°, from the eaves at {roof.eavesZ} mm.
+            {roof.notes.length ? ` ${roof.notes.join(" ")}` : ""}
+          </p>
+        )}
       </div>
 
       <div className={styles.card}>
