@@ -5,7 +5,7 @@
  * screen, like the footprint editor's. */
 
 import type { RoofPlan } from "../weatherboards/types"
-import type { ProjectGrid } from "./grid"
+import { gridFromData, type ProjectGrid } from "./grid"
 
 export interface Pt {
   x: number
@@ -267,10 +267,7 @@ export function houseFromData(d: unknown): HouseProject {
   return {
     name: typeof o.name === "string" && o.name ? o.name : DEFAULT_HOUSE.name,
     floor: planFromData(o.floor),
-    grid:
-      o.grid && typeof o.grid === "object" && typeof o.grid.stepMm === "number"
-        ? { stepMm: o.grid.stepMm, moved: o.grid.moved && typeof o.grid.moved === "object" ? o.grid.moved : {} }
-        : { stepMm: 500, moved: {} },
+    grid: gridFromData(o.grid),
     upper: u ? { plan: planFromData(u.plan), studHeightMm: typeof u.studHeightMm === "number" ? u.studHeightMm : DEFAULT_SETTINGS.studHeightMm } : null,
     settings: {
       ...DEFAULT_SETTINGS,

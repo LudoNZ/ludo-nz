@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { FloorGraph, simplify } from "./floorPlan"
-import { GridLine, gridLines, nearestLine, ProjectGrid } from "./grid"
+import { GridLine, gridLines, gridOrigin, gridPointAt, GridPoint, nearestLine, ProjectGrid } from "./grid"
 import { Pt, ROOM_KIND_COLOURS, RoomBox } from "./houseTypes"
 import type { Structure } from "./structure"
 import styles from "./house.module.scss"
@@ -14,10 +14,13 @@ export type Selection =
   /** a side of the outline (outline tool) */
   | { kind: "edge"; index: number }
   | { kind: "gridline"; key: string; axis: "x" | "y" }
+  /** a measurement drawn on the grid */
+  | { kind: "dim"; id: string }
   | null
 
-/** what the plan can do here: pick things, draw inside walls, or shape the outline */
-export type CanvasTool = "select" | "draw" | "outline"
+/** what the plan can do here: pick things, draw inside walls, shape the
+ * outline, measure between grid points, or make a grid point 0,0 */
+export type CanvasTool = "select" | "draw" | "outline" | "measure" | "origin"
 
 const GRID = 100
 const m2 = (a: number) => `${a.toFixed(1)} m²`
@@ -52,7 +55,11 @@ const PlanCanvas: React.FC<{
   doors?: { id: string; a: Pt; b: Pt; picked?: boolean }[]
   /** the outside walls can be picked too (as an edge of the outline) */
   pickOutside?: boolean
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside }) => {
+  /** measure tool: a measurement drawn between two grid points */
+  onAddDim?: (a: GridPoint, b: GridPoint) => void
+  /** origin tool: a grid point made 0,0 */
+  onSetOrigin?: (p: GridPoint) => void
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -89,17 +96,37 @@ const PlanCanvas: React.FC<{
     setGdragState(d)
   }
 
+  // a grid point being measured from, and the one under the pointer
+  const [pending, setPending] = useState<GridPoint | null>(null)
+  const [hover, setHover] = useState<GridPoint | null>(null)
+
   const pts = [...graph.outline, ...(ghost ?? []), ...(boxes ?? []).flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }])]
   if (!pts.length) pts.push({ x: 0, y: 0 }, { x: 10000, y: 8000 })
-  const x0 = Math.min(...pts.map((p) => p.x)) - 1500
-  const x1 = Math.max(...pts.map((p) => p.x)) + 1500
-  const y0 = Math.min(...pts.map((p) => p.y)) - 1500
-  const y1 = Math.max(...pts.map((p) => p.y)) + 1500
+  const cx0 = Math.min(...pts.map((p) => p.x))
+  const cx1 = Math.max(...pts.map((p) => p.x))
+  const cy0 = Math.min(...pts.map((p) => p.y))
+  const cy1 = Math.max(...pts.map((p) => p.y))
+  // (more room left and top, for the grid's measurements)
+  const lead = grid ? 1500 + Math.max(cx1 - cx0, cy1 - cy0) * 0.15 : 1500
+  const x0 = cx0 - lead
+  const x1 = cx1 + 1500
+  const y0 = cy0 - lead
+  const y1 = cy1 + 1500
   const span = Math.max(x1 - x0, y1 - y0)
   const sw = span / 400
   const gl = grid ? gridLines(grid, x0 - 5000, x1 + 5000, y0 - 5000, y1 + 5000) : null
   const gxs = gl?.xs.map((l) => l.at) ?? []
   const gys = gl?.ys.map((l) => l.at) ?? []
+  const origin = grid ? gridOrigin(grid) : { x: 0, y: 0 }
+  /** mm, as a plan's written */
+  const mm = (v: number) => `${Math.round(v)}`
+  /** the gridline crossing nearest a point */
+  const nearestPoint = (p: Pt): GridPoint | null => {
+    if (!gl?.xs.length || !gl.ys.length) return null
+    const near = (ls: GridLine[], v: number) => ls.reduce((b, l) => (Math.abs(l.at - v) < Math.abs(b.at - v) ? l : b), ls[0])
+    return { x: near(gl.xs, p.x).key, y: near(gl.ys, p.y).key }
+  }
+  const pointing = (tool === "measure" && !!onAddDim) || (tool === "origin" && !!onSetOrigin)
 
   /** a pointer on the plan, in mm */
   const toPlan = (e: React.PointerEvent): Pt => {
@@ -131,12 +158,28 @@ const PlanCanvas: React.FC<{
   const square = (a: Pt, b: Pt): Pt => (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
 
   const down = (e: React.PointerEvent) => {
+    if (pointing && grid) {
+      const g = nearestPoint(toPlan(e))
+      if (!g) return
+      if (tool === "origin") onSetOrigin?.(g)
+      else if (!pending) setPending(g)
+      else {
+        if (g.x !== pending.x || g.y !== pending.y) onAddDim?.(pending, g)
+        setPending(null)
+      }
+      return
+    }
     if (tool !== "draw" || !onDrawWall) return
     const a = snapPt(toPlan(e))
     setDraft({ a, b: a })
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
   }
   const move = (e: React.PointerEvent) => {
+    if (pointing) {
+      const g = nearestPoint(toPlan(e))
+      if (g?.x !== hover?.x || g?.y !== hover?.y) setHover(g)
+      return
+    }
     const od = odragRef.current
     if (od) {
       // the corner (or side) goes to the gridlines nearest; the walls either
@@ -268,12 +311,12 @@ const PlanCanvas: React.FC<{
   return (
     <svg
       ref={svgRef}
-      className={`${styles.plan} ${drawing ? styles.planDrawing : ""}`}
+      className={`${styles.plan} ${drawing || pointing ? styles.planDrawing : ""}`}
       viewBox={`${x0} ${y0} ${x1 - x0} ${y1 - y0}`}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
-      onPointerLeave={up}
+      onPointerLeave={() => (up(), setHover(null))}
       role="img"
       aria-label="Ground floor plan"
     >
@@ -549,7 +592,7 @@ const PlanCanvas: React.FC<{
           return (
             <g key={`gt${l.key}`}>
               <circle cx={cx} cy={cy} r={sw * (sel ? 4 : 2.6)} className={sel ? styles.gridTabPicked : l.moved ? styles.gridTabMoved : styles.gridTab} />
-              {(l.moved || sel) && (
+              {(l.moved || sel || Math.abs(at - origin[l.axis]) < 1) && (
                 <text
                   x={l.axis === "x" ? cx : cx + sw * 6}
                   y={l.axis === "x" ? cy + sw * 9 : cy}
@@ -559,26 +602,123 @@ const PlanCanvas: React.FC<{
                   className={styles.gridLabel}
                   pointerEvents="none"
                 >
-                  {(at / 1000).toFixed(2)}
+                  {mm(at - origin[l.axis])}
                 </text>
               )}
-              <circle
+              {!pointing && <circle
                 cx={cx}
                 cy={cy}
                 r={sw * 8}
                 fill="transparent"
                 style={{ cursor: l.axis === "x" ? "ew-resize" : "ns-resize" }}
                 role="button"
-                aria-label={`Gridline at ${(l.at / 1000).toFixed(2)} m — drag to move it, tap to type where`}
+                aria-label={`Gridline at ${mm(l.at - origin[l.axis])} mm — drag to move it, tap to type where`}
                 onPointerDown={(e) => {
                   e.stopPropagation()
                   setGdrag({ line: l, at: l.at })
                   ;(e.target as Element).setPointerCapture?.(e.pointerId)
                 }}
-              />
+              />}
             </g>
           )
         })}
+
+      {/* the grid's measurements down the left and along the top: from 0,0
+          to each moved line and the house's ends, and the gaps between */}
+      {gl &&
+        (["x", "y"] as const).map((axis) => {
+          const ls = axis === "x" ? gl.xs : gl.ys
+          const lo = axis === "x" ? x0 : y0
+          const hi = axis === "x" ? x1 : y1
+          const live = (l: GridLine) => (gdrag?.line.key === l.key ? gdrag.at : l.at)
+          const marks = [
+            origin[axis],
+            ...ls.filter((l) => l.moved || gdrag?.line.key === l.key).map(live),
+            ...(outline.length ? [Math.min(...outline.map((p) => p[axis])), Math.max(...outline.map((p) => p[axis]))] : []),
+          ]
+            .filter((v) => v > lo && v < hi)
+            .sort((a, b) => a - b)
+            .filter((v, i, a) => i === 0 || v - a[i - 1] >= 1)
+          if (marks.length < 2) return null
+          const r = (axis === "x" ? y0 : x0) + sw * 34
+          const t = sw * 3
+          const P = (along: number, across: number) => (axis === "x" ? { x: along, y: across } : { x: across, y: along })
+          const a = P(marks[0], r)
+          const z = P(marks[marks.length - 1], r)
+          return (
+            <g key={`ruler${axis}`} className={styles.ruler} pointerEvents="none">
+              <line x1={a.x} y1={a.y} x2={z.x} y2={z.y} strokeWidth={sw * 0.6} />
+              {marks.map((v) => {
+                const p = P(v, r - t)
+                const q = P(v, r + t)
+                const tk = P(v, r)
+                return (
+                  <g key={v}>
+                    <line x1={p.x} y1={p.y} x2={q.x} y2={q.y} strokeWidth={sw * 0.6} />
+                    <line x1={tk.x - t * 0.7} y1={tk.y + t * 0.7} x2={tk.x + t * 0.7} y2={tk.y - t * 0.7} strokeWidth={sw * 0.9} />
+                  </g>
+                )
+              })}
+              {marks.slice(1).map((v, i) => {
+                const m = (v + marks[i]) / 2
+                const at = P(m, r - sw * 2.5)
+                const gap = v - marks[i]
+                return gap < sw * 14 ? null : (
+                  <text
+                    key={`g${v}`}
+                    x={at.x}
+                    y={at.y}
+                    textAnchor="middle"
+                    fontSize={sw * 5.5}
+                    className={styles.rulerLabel}
+                    transform={axis === "y" ? `rotate(-90 ${at.x} ${at.y})` : undefined}
+                  >
+                    {mm(gap)}
+                  </text>
+                )
+              })}
+            </g>
+          )
+        })}
+
+      {/* 0,0 */}
+      {grid && origin.x > x0 && origin.x < x1 && origin.y > y0 && origin.y < y1 && (
+        <g className={styles.origin} pointerEvents="none">
+          <circle cx={origin.x} cy={origin.y} r={sw * 4} strokeWidth={sw * 0.8} fill="none" />
+          <path d={`M${origin.x - sw * 7},${origin.y}H${origin.x + sw * 7}M${origin.x},${origin.y - sw * 7}V${origin.y + sw * 7}`} strokeWidth={sw * 0.6} />
+          <text x={origin.x - sw * 5} y={origin.y - sw * 5} textAnchor="end" fontSize={sw * 5.5} className={styles.originLabel}>
+            0,0
+          </text>
+        </g>
+      )}
+
+      {/* measurements drawn between grid points */}
+      {grid?.dims?.map((d) => {
+        const live = (p: GridPoint): Pt => {
+          const q = gridPointAt(grid, p)
+          if (gdrag) {
+            if (gdrag.line.key === p.x) q.x = gdrag.at
+            if (gdrag.line.key === p.y) q.y = gdrag.at
+          }
+          return q
+        }
+        const sel = selection?.kind === "dim" && selection.id === d.id
+        return <Dim key={d.id} a={live(d.a)} b={live(d.b)} sw={sw} picked={sel} onPick={tool === "draw" || pointing ? undefined : () => onSelect({ kind: "dim", id: d.id })} />
+      })}
+
+      {/* measuring: the point to measure from, and the one under the pointer */}
+      {pointing && grid && hover && (
+        <g pointerEvents="none">
+          {pending && <Dim a={gridPointAt(grid, pending)} b={gridPointAt(grid, hover)} sw={sw} draft />}
+          {pending && <circle cx={gridPointAt(grid, pending).x} cy={gridPointAt(grid, pending).y} r={sw * 3.5} className={styles.handle} strokeWidth={sw * 1.2} />}
+          <circle cx={gridPointAt(grid, hover).x} cy={gridPointAt(grid, hover).y} r={sw * 3.5} className={styles.handle} strokeWidth={sw * 1.2} />
+          {tool === "origin" && (
+            <text x={gridPointAt(grid, hover).x + sw * 6} y={gridPointAt(grid, hover).y - sw * 6} fontSize={sw * 6} className={styles.originLabel}>
+              make this 0,0
+            </text>
+          )}
+        </g>
+      )}
 
       {/* the wall being drawn */}
       {draft && (
@@ -590,6 +730,53 @@ const PlanCanvas: React.FC<{
         </g>
       )}
     </svg>
+  )
+}
+
+/** A measurement on the plan: the line, a tick at each end, its length in mm
+ * along it (and the across and down, if it's on the slant). */
+const Dim: React.FC<{ a: Pt; b: Pt; sw: number; picked?: boolean; draft?: boolean; onPick?: () => void }> = ({ a, b, sw, picked, draft, onPick }) => {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const L = Math.hypot(dx, dy)
+  if (L < 1) return null
+  const u = { x: dx / L, y: dy / L }
+  const n = { x: -u.y, y: u.x }
+  const t = sw * 4
+  // the writing reads left to right, or upwards
+  let ang = (Math.atan2(dy, dx) * 180) / Math.PI
+  if (ang > 90 || ang <= -90) ang += 180
+  const side = ang === (Math.atan2(dy, dx) * 180) / Math.PI ? -1 : 1
+  const m = { x: (a.x + b.x) / 2 + n.x * sw * 4 * side, y: (a.y + b.y) / 2 + n.y * sw * 4 * side }
+  const slant = Math.abs(dx) >= 1 && Math.abs(dy) >= 1
+  const tick = (p: Pt) => `M${p.x - (u.x + n.x) * t * 0.7},${p.y - (u.y + n.y) * t * 0.7}L${p.x + (u.x + n.x) * t * 0.7},${p.y + (u.y + n.y) * t * 0.7}M${p.x - n.x * t},${p.y - n.y * t}L${p.x + n.x * t},${p.y + n.y * t}`
+  return (
+    <g className={picked ? styles.dimPicked : draft ? styles.dimDraft : styles.dim}>
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} strokeWidth={sw * (picked ? 1.2 : 0.8)} strokeDasharray={draft ? `${sw * 3} ${sw * 2}` : undefined} pointerEvents="none" />
+      <path d={tick(a) + tick(b)} strokeWidth={sw * 0.9} fill="none" pointerEvents="none" />
+      <text x={m.x} y={m.y} textAnchor="middle" dominantBaseline="middle" fontSize={sw * 6} transform={`rotate(${ang} ${m.x} ${m.y})`} className={styles.dimLabel} pointerEvents="none">
+        {Math.round(L)}
+        {slant ? ` (${Math.round(Math.abs(dx))} × ${Math.round(Math.abs(dy))})` : ""}
+      </text>
+      {onPick && (
+        <line
+          x1={a.x}
+          y1={a.y}
+          x2={b.x}
+          y2={b.y}
+          stroke="transparent"
+          strokeWidth={sw * 8}
+          style={{ cursor: "pointer" }}
+          role="button"
+          aria-label={`Measurement, ${Math.round(L)} mm`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onPick()
+          }}
+        />
+      )}
+    </g>
   )
 }
 

@@ -7,13 +7,56 @@
 import { simplify } from "./floorPlan"
 import type { FloorPlan, Pt } from "./houseTypes"
 
+/** a crossing of two gridlines, by their keys — it goes where they go */
+export interface GridPoint {
+  x: string
+  y: string
+}
+
+/** a measurement drawn between two grid points */
+export interface GridDim {
+  id: string
+  a: GridPoint
+  b: GridPoint
+}
+
 export interface ProjectGrid {
   stepMm: number
   /** a moved line, by its key ("x:7" — the 7th line along), to where it is now */
   moved: Record<string, number>
+  /** the crossing everything's measured from (0,0); the plan's own 0,0 if unset */
+  origin?: GridPoint
+  /** measurements drawn on the plan */
+  dims?: GridDim[]
 }
 
 export const DEFAULT_GRID: ProjectGrid = { stepMm: 500, moved: {} }
+
+/** where a gridline is now, by its key */
+export const lineAt = (grid: ProjectGrid, key: string) => grid.moved[key] ?? Number(key.split(":")[1]) * Math.max(50, grid.stepMm)
+/** where a gridline would be unmoved */
+export const lineHome = (grid: ProjectGrid, key: string) => Number(key.split(":")[1]) * Math.max(50, grid.stepMm)
+/** where a grid point is now, on plan */
+export const gridPointAt = (grid: ProjectGrid, p: GridPoint): Pt => ({ x: lineAt(grid, p.x), y: lineAt(grid, p.y) })
+/** the 0,0 everything's measured from, on plan */
+export const gridOrigin = (grid: ProjectGrid): Pt => gridPointAt(grid, grid.origin ?? { x: "x:0", y: "y:0" })
+
+/** whatever storage held, made a grid */
+export function gridFromData(d: unknown): ProjectGrid {
+  const o = (d && typeof d === "object" ? d : {}) as Partial<ProjectGrid>
+  if (typeof o.stepMm !== "number") return { ...DEFAULT_GRID }
+  const gp = (v: unknown): GridPoint | null => {
+    const q = v as GridPoint | null
+    return q && typeof q === "object" && typeof q.x === "string" && typeof q.y === "string" && q.x.startsWith("x:") && q.y.startsWith("y:") ? { x: q.x, y: q.y } : null
+  }
+  const origin = gp(o.origin)
+  const dims = (Array.isArray(o.dims) ? o.dims : []).flatMap((m) => {
+    const a = gp(m?.a)
+    const b = gp(m?.b)
+    return a && b && typeof m.id === "string" ? [{ id: m.id, a, b }] : []
+  })
+  return { stepMm: o.stepMm, moved: o.moved && typeof o.moved === "object" ? o.moved : {}, ...(origin ? { origin } : {}), ...(dims.length ? { dims } : {}) }
+}
 
 export interface GridLine {
   key: string

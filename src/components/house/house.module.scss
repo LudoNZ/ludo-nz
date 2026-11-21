@@ -569,6 +569,55 @@
   stroke-width: 20;
 }
 
+.ruler {
+  stroke: #2b6cb0;
+  stroke-opacity: 0.8;
+}
+
+.rulerLabel {
+  fill: #2b6cb0;
+  stroke: none;
+}
+
+.origin {
+  stroke: #b7410e;
+}
+
+.originLabel {
+  fill: #b7410e;
+  stroke: none;
+  font-weight: 700;
+}
+
+.dim {
+  stroke: #2d2a26;
+}
+
+.dimDraft {
+  stroke: var(--color-primary);
+}
+
+.dimPicked {
+  stroke: var(--color-primary);
+}
+
+.dimLabel {
+  fill: currentColor;
+  stroke: #fbfaf6;
+  stroke-width: 18;
+  paint-order: stroke;
+  font-weight: 600;
+}
+
+.dim .dimLabel {
+  fill: #2d2a26;
+}
+
+.dimDraft .dimLabel,
+.dimPicked .dimLabel {
+  fill: var(--color-primary);
+}
+
 .gridLabel {
   fill: #2b6cb0;
   font-weight: 700;

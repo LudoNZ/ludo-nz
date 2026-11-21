@@ -26,7 +26,7 @@ import {
   STARTING_OUTLINE,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
-import { GridLine, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
+import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
 import FramingStep from "./framingStep"
@@ -290,7 +290,8 @@ const FloorsStep: React.FC<{
         upper: h.upper ? { ...h.upper, plan: movePlanLine(h.upper.plan, line.axis, line.at, to) } : null,
       }
     })
-  const gridProps = { grid: house.grid, onMoveGridline: moveGridline }
+  const setGrid = (u: (g: ProjectGrid) => ProjectGrid) => setHouse((h) => ({ ...h, grid: u(h.grid) }))
+  const gridProps = { grid: house.grid, onMoveGridline: moveGridline, setGrid }
   return (
     <>
       <div className={styles.toggle} role="tablist" aria-label="Storey">
@@ -374,7 +375,8 @@ const FloorStep: React.FC<{
   setSelection: (s: Selection) => void
   grid: ProjectGrid
   onMoveGridline: (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset?: boolean) => void
-}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection, grid, onMoveGridline }) => {
+  setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void
+}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection, grid, onMoveGridline, setGrid }) => {
   const floor = plan
   const [part, setPart] = useState<"outside" | "inside">("inside")
   const [tool, setTool] = useState<CanvasTool>("draw")
@@ -491,6 +493,10 @@ const FloorStep: React.FC<{
     })
   }
   const vertical = wall ? Math.abs(wall.a.x - wall.b.x) < 1 : false
+  // (the fields measure from 0,0)
+  const o = gridOrigin(grid)
+  const op = vertical ? o.x : o.y
+  const or = vertical ? o.y : o.x
 
   return (
     <section className={styles.card}>
@@ -512,6 +518,7 @@ const FloorStep: React.FC<{
           ghost={ghost}
           grid={grid}
           onMoveGridline={onMoveGridline}
+          setGrid={setGrid}
           selection={selection}
           setSelection={setSelection}
         />
@@ -520,7 +527,9 @@ const FloorStep: React.FC<{
           <p className={styles.hint}>
             {tool === "draw"
               ? "Drag across the plan to draw a wall — it snaps square, to the grid and to the walls nearby. Switch to Select to name a room or change a wall."
-              : "Tap a room to name it, or a wall to move it, set whether it's load-bearing, or remove it."}
+              : tool === "select"
+                ? "Tap a room to name it, or a wall to move it, set whether it's load-bearing, or remove it."
+                : GRID_TOOL_HINTS[tool]}
           </p>
           <div className={styles.toolbar}>
             <div className={styles.toggle} role="radiogroup" aria-label="Tool">
@@ -530,6 +539,7 @@ const FloorStep: React.FC<{
               <button type="button" role="radio" aria-checked={tool === "select"} className={tool === "select" ? styles.toggleOn : ""} onClick={() => setTool("select")}>
                 Select
               </button>
+              <GridToolButtons tool={tool} setTool={setTool} />
             </div>
           </div>
           <PlanCanvas
@@ -540,17 +550,20 @@ const FloorStep: React.FC<{
             selection={selection}
             onSelect={setSelection}
             onDrawWall={(a, b) => setFloor((f) => ({ ...f, walls: [...f.walls, { id: newHouseId(), a, b, loadBearing: "auto" }] }))}
+            {...gridToolProps(setGrid, setSelection, () => setTool("select"))}
           />
+          <DimPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
           {wall && (
             <div className={styles.panel}>
               <div className={styles.fields}>
                 <label>
-                  {vertical ? "Across from the left" : "Down from the top"}
+                  {grid.origin ? (vertical ? "Across from 0,0" : "Down from 0,0") : vertical ? "Across from the left" : "Down from the top"}
                   <span className={styles.unit}>
                     <NumField
-                      value={Math.round(vertical ? wall.a.x : wall.a.y)}
+                      value={Math.round(vertical ? wall.a.x : wall.a.y) - op}
                       step={100}
-                      onChange={(v) => {
+                      onChange={(n) => {
+                        const v = n + op
                         if (vertical) setWall(wall.id, { ...wall.a, x: v }, { ...wall.b, x: v })
                         else setWall(wall.id, { ...wall.a, y: v }, { ...wall.b, y: v })
                       }}
@@ -562,9 +575,10 @@ const FloorStep: React.FC<{
                   From
                   <span className={styles.unit}>
                     <NumField
-                      value={Math.round(vertical ? Math.min(wall.a.y, wall.b.y) : Math.min(wall.a.x, wall.b.x))}
+                      value={Math.round(vertical ? Math.min(wall.a.y, wall.b.y) : Math.min(wall.a.x, wall.b.x)) - or}
                       step={100}
-                      onChange={(v) => {
+                      onChange={(n) => {
+                        const v = n + or
                         const hi = vertical ? Math.max(wall.a.y, wall.b.y) : Math.max(wall.a.x, wall.b.x)
                         if (v >= hi) return
                         if (vertical) setWall(wall.id, { ...wall.a, y: v }, { ...wall.b, y: hi })
@@ -578,9 +592,10 @@ const FloorStep: React.FC<{
                   To
                   <span className={styles.unit}>
                     <NumField
-                      value={Math.round(vertical ? Math.max(wall.a.y, wall.b.y) : Math.max(wall.a.x, wall.b.x))}
+                      value={Math.round(vertical ? Math.max(wall.a.y, wall.b.y) : Math.max(wall.a.x, wall.b.x)) - or}
                       step={100}
-                      onChange={(v) => {
+                      onChange={(n) => {
+                        const v = n + or
                         const lo = vertical ? Math.min(wall.a.y, wall.b.y) : Math.min(wall.a.x, wall.b.x)
                         if (v <= lo) return
                         if (vertical) setWall(wall.id, { ...wall.a, y: lo }, { ...wall.b, y: v })
@@ -648,15 +663,18 @@ const OutlineEditor: React.FC<{
   ghost?: Pt[]
   grid: ProjectGrid
   onMoveGridline: (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset?: boolean) => void
+  setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ outline, setOutline, graph, ghost, grid, onMoveGridline, selection, setSelection }) => {
+}> = ({ outline, setOutline, graph, ghost, grid, onMoveGridline, setGrid, selection, setSelection }) => {
+  const [tool, setTool] = useState<CanvasTool>("outline")
   const lines = linesAround(grid, [...outline, ...(ghost ?? [])])
   const edge = selection?.kind === "edge" && selection.index < outline.length ? selection.index : null
   const gridline = selection?.kind === "gridline" ? selection : null
-  // where a picked gridline is now, and where it'd be unmoved
-  const lineAt = gridline ? (grid.moved[gridline.key] ?? Number(gridline.key.split(":")[1]) * grid.stepMm) : 0
-  const lineHome = gridline ? Number(gridline.key.split(":")[1]) * grid.stepMm : 0
+  // where a picked gridline is now, and where it'd be unmoved (from 0,0)
+  const o = gridline ? gridOrigin(grid)[gridline.axis] : 0
+  const lineAt = gridline ? gridLineAt(grid, gridline.key) : 0
+  const lineHome = gridline ? gridLineHome(grid, gridline.key) : 0
 
   /** a picked side split in three, on the gridlines nearest its thirds — drag the middle out for a step */
   const addStep = (i: number) => {
@@ -688,18 +706,31 @@ const OutlineEditor: React.FC<{
       <p className={styles.hint}>
         The outside face of the outside walls, on the grid. Drag a corner or a wall — it snaps to the gridlines and every corner stays square.
         Tap a wall to put a step in it. The gridlines are every {grid.stepMm / 1000} m: drag one by its dot along the top or side to where a wall
-        should go (whatever&apos;s on it comes too), or tap the dot to type where.
+        should go (whatever&apos;s on it comes too), or tap the dot to type where. The measurements down the left and along the top run from 0,0
+        to each line you&apos;ve moved.
       </p>
+      <div className={styles.toolbar}>
+        <div className={styles.toggle} role="radiogroup" aria-label="Tool">
+          <button type="button" role="radio" aria-checked={tool === "outline"} className={tool === "outline" ? styles.toggleOn : ""} onClick={() => setTool("outline")}>
+            Shape walls
+          </button>
+          <GridToolButtons tool={tool} setTool={setTool} />
+        </div>
+      </div>
       <PlanCanvas
         graph={graph}
         ghost={ghost}
         grid={grid}
-        tool="outline"
+        tool={tool}
         selection={selection}
         onSelect={setSelection}
         onOutlineChange={setOutline}
         onMoveGridline={(line: GridLine, to: number) => onMoveGridline(line, to)}
+        {...gridToolProps(setGrid, setSelection, () => setTool("outline"))}
       />
+      {/* (below the plan, so it doesn't shift under the pointer as the tool changes) */}
+      {tool !== "outline" && <p className={styles.hint}>{GRID_TOOL_HINTS[tool]}</p>}
+      <DimPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
       <div className={styles.toolbar}>
         <button type="button" className={styles.pill} disabled={square} onClick={() => {
             setOutline(squareUp(outline, lines))
@@ -725,20 +756,120 @@ const OutlineEditor: React.FC<{
         <div className={styles.panel}>
           <div className={styles.fields}>
             <label>
-              {gridline.axis === "x" ? "Gridline across from the left" : "Gridline down from the top"}
+              {grid.origin ? (gridline.axis === "x" ? "Gridline across from 0,0" : "Gridline down from 0,0") : gridline.axis === "x" ? "Gridline across from the left" : "Gridline down from the top"}
               <span className={styles.unit}>
-                <NumField value={lineAt} step={10} onChange={(v) => onMoveGridline({ key: gridline.key, axis: gridline.axis, at: lineAt }, v)} /> mm
+                <NumField value={lineAt - o} step={10} onChange={(v) => onMoveGridline({ key: gridline.key, axis: gridline.axis, at: lineAt }, v + o)} /> mm
               </span>
             </label>
           </div>
           {lineAt !== lineHome && (
             <button type="button" className={styles.pill} onClick={() => onMoveGridline({ key: gridline.key, axis: gridline.axis, at: lineAt }, lineHome, true)}>
-              Put it back to {(lineHome / 1000).toFixed(1)} m
+              Put it back to {lineHome - o} mm
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.pill}
+            onClick={() => setGrid((g) => ({ ...g, origin: { ...(g.origin ?? { x: "x:0", y: "y:0" }), [gridline.axis]: gridline.key } }))}
+            disabled={Math.abs(lineAt - o) < 1}
+          >
+            Make this line 0
+          </button>
+        </div>
+      )}
+      {!isSquare(outline) && <Warnings list={["A corner isn't square — Square it up, or rooms and load-bearing walls can't be worked out."]} />}
+    </>
+  )
+}
+
+const GRID_TOOL_HINTS: Partial<Record<CanvasTool, string>> = {
+  measure: "Tap a grid point, then another — the measurement stays on the plan (every storey) and follows its gridlines when they move. Tap a measurement afterwards to remove it.",
+  origin: "Tap the grid point everything should be measured from — it becomes 0,0, and the measurements and fields all count from it.",
+}
+
+/** the grid's own tools, beside a plan's others */
+const GridToolButtons: React.FC<{ tool: CanvasTool; setTool: (t: CanvasTool) => void }> = ({ tool, setTool }) => (
+  <>
+    <button type="button" role="radio" aria-checked={tool === "measure"} className={tool === "measure" ? styles.toggleOn : ""} onClick={() => setTool("measure")}>
+      Measure
+    </button>
+    <button type="button" role="radio" aria-checked={tool === "origin"} className={tool === "origin" ? styles.toggleOn : ""} onClick={() => setTool("origin")}>
+      Set 0,0
+    </button>
+  </>
+)
+
+/** what a plan needs to measure and set 0,0; `done` is the tool to go back to once 0,0's set */
+const gridToolProps = (setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void, setSelection: (s: Selection) => void, done: () => void) => ({
+  onAddDim: (a: GridPoint, b: GridPoint) => {
+    const id = newHouseId()
+    setGrid((g) => ({ ...g, dims: [...(g.dims ?? []), { id, a, b } satisfies GridDim] }))
+  },
+  onSetOrigin: (p: GridPoint) => {
+    setGrid((g) => ({ ...g, origin: p }))
+    setSelection(null)
+    done()
+  },
+})
+
+/** a measurement picked: what it measures, and to take it off */
+const DimPanel: React.FC<{ grid: ProjectGrid; setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void; selection: Selection; setSelection: (s: Selection) => void }> = ({
+  grid,
+  setGrid,
+  selection,
+  setSelection,
+}) => {
+  const d = selection?.kind === "dim" ? grid.dims?.find((x) => x.id === selection.id) : undefined
+  const o = gridOrigin(grid)
+  const isOrigin = !grid.origin || (grid.origin.x === "x:0" && grid.origin.y === "y:0")
+  return (
+    <>
+      {d &&
+        (() => {
+          const a = gridPointAt(grid, d.a)
+          const b = gridPointAt(grid, d.b)
+          const at = (p: { x: number; y: number }) => `${Math.round(p.x - o.x)}, ${Math.round(p.y - o.y)}`
+          return (
+            <div className={styles.panel}>
+              <p>
+                <strong>{Math.round(Math.hypot(b.x - a.x, b.y - a.y))} mm</strong> — from {at(a)} to {at(b)}
+                {Math.abs(b.x - a.x) >= 1 && Math.abs(b.y - a.y) >= 1 && ` (${Math.round(Math.abs(b.x - a.x))} across, ${Math.round(Math.abs(b.y - a.y))} down)`}
+              </p>
+              <button
+                type="button"
+                className={styles.danger}
+                onClick={() => {
+                  setSelection(null)
+                  setGrid((g) => ({ ...g, dims: (g.dims ?? []).filter((x) => x.id !== d.id) }))
+                }}
+              >
+                Remove measurement
+              </button>
+            </div>
+          )
+        })()}
+      {(!!grid.dims?.length || !isOrigin) && (
+        <div className={styles.toolbar}>
+          {!!grid.dims?.length && (
+            <button
+              type="button"
+              className={styles.pill}
+              onClick={() => {
+                if (!window.confirm(`Take all ${grid.dims!.length} measurements off the plan?`)) return
+                setSelection(null)
+                setGrid((g) => ({ ...g, dims: [] }))
+              }}
+            >
+              Clear measurements
+            </button>
+          )}
+          {!isOrigin && (
+            <button type="button" className={styles.pill} onClick={() => setGrid((g) => ({ ...g, origin: undefined }))}>
+              Put 0,0 back to the start
             </button>
           )}
         </div>
       )}
-      {!isSquare(outline) && <Warnings list={["A corner isn't square — Square it up, or rooms and load-bearing walls can't be worked out."]} />}
     </>
   )
 }
