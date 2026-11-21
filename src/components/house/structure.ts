@@ -221,3 +221,159 @@ export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roo
   notes.push("A guide for laying out the plan: confirm sizes and spans with NZS 3604's tables (or your truss maker, or an engineer).")
   return { outside, inside: insideV, spans, warnings, notes }
 }
+
+// ── a first floor ───────────────────────────────────────────────────────
+
+const onSeg = (p: Pt, a: Pt, b: Pt, tol: number) => {
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len)
+  if (t < -tol / len || t > 1 + tol / len) return false
+  return Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / len < tol
+}
+
+/** the rooms either side of a wall, to name it by */
+const describeWall = (graph: FloorGraph, a: Pt, b: Pt) => {
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  const n = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len }
+  const at = (p: Pt) => graph.rooms.find((r) => r.cells.some((c) => p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h))?.name
+  const names = [...new Set([at({ x: mid.x + n.x * 200, y: mid.y + n.y * 200 }), at({ x: mid.x - n.x * 200, y: mid.y - n.y * 200 })].filter(Boolean))]
+  return names.length === 2 ? `the wall between ${names[0]} and ${names[1]}` : names.length ? `the ${names[0]} wall` : "a wall"
+}
+
+export interface HouseStructure {
+  ground: Structure
+  upper: Structure | null
+}
+
+/** What holds a one- or two-storey house up. With a first floor:
+ *  - upstairs is worked out like a one-storey house under the main roof;
+ *  - the first floor's joists span between the ground floor's walls (the
+ *    shorter way, over the first floor) — walls they need are load-bearing,
+ *    and a span past the joists' limit is flagged;
+ *  - a load-bearing wall upstairs needs a wall (or a beam) under it;
+ *  - the ground floor's own lower roof is worked out as before. */
+export function analyseHouse(
+  graph: FloorGraph,
+  upperGraph: FloorGraph | null,
+  settings: HouseSettings,
+  roof: Roof | null,
+  lowerRoofs: Roof[],
+): HouseStructure {
+  if (!upperGraph || upperGraph.outline.length < 3) return { ground: analyseStructure(graph, settings, roof), upper: null }
+  const upper = analyseStructure(upperGraph, settings, roof)
+  // the ground floor under its own roofs (if any of it's uncovered)
+  const lower: Roof | null = lowerRoofs.length ? { ...lowerRoofs[0], faces: lowerRoofs.flatMap((r) => r.faces), wings: lowerRoofs.flatMap((r) => r.wings) } : null
+  const ground = analyseStructure(graph, settings, lower)
+  // (the lean-to's high side bears on the storey above, not a girder)
+  ground.notes = ground.notes.filter((n) => !n.includes("girder") && !n.includes("no roof"))
+  const out = graph.outline
+  const n = out.length
+  const up = upperGraph.outline
+  const m = (mm: number) => `${(mm / 1000).toFixed(1)} m`
+  const mark = (v: Verdict | undefined, reason: string): Verdict =>
+    !v || !v.loadBearing ? { loadBearing: true, reason } : v.reason.includes(reason) ? v : { loadBearing: true, reason: `${v.reason} ${reason}` }
+  // not under the lower roof: an outside wall carries the storey above
+  out.forEach((a, i) => {
+    const b = out[(i + 1) % n]
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    if (up.some((p, k) => onSeg(mid, p, up[(k + 1) % up.length], 5))) ground.outside[i] = mark(ground.outside[i], "Carries the first floor's wall above.")
+  })
+
+  // ── the first floor's joists ─────────────────────────────────────────
+  type Seg = { a: Pt; b: Pt; side?: number; wall?: string }
+  const segs: Seg[] = [...out.map((a, i) => ({ a, b: out[(i + 1) % n], side: i })), ...graph.walls.filter((w) => w.loadBearing !== "no").map((w) => ({ a: w.a, b: w.b, wall: w.id }))]
+  const roomAt = (p: Pt) => graph.rooms.find((r) => r.cells.some((c) => p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h))
+  /** the joists running along `axis`: per line across the first floor, the
+   * runs of supports inside both floors */
+  const runsAlong = (axis: "x" | "y") => {
+    const other = axis === "x" ? "y" : "x"
+    const lo = Math.min(...up.map((p) => p[other]))
+    const hi = Math.max(...up.map((p) => p[other]))
+    const lines: { t: number; runs: Seg[][]; sig: (s: Seg) => number }[] = []
+    const sig = (s: Seg) => s.a[axis]
+    for (let t = lo + 150; t < hi - 149; t += 300) {
+      const at = (v: number): Pt => (axis === "x" ? { x: v, y: t } : { x: t, y: v })
+      const sup = segs
+        .filter((s) => Math.abs(s.a[axis] - s.b[axis]) < 1 && Math.min(s.a[other], s.b[other]) <= t + 1 && Math.max(s.a[other], s.b[other]) >= t - 1)
+        .sort((p, q) => sig(p) - sig(q))
+      const runs: Seg[][] = []
+      let run: Seg[] = []
+      for (let k = 0; k + 1 < sup.length; k++) {
+        if (sig(sup[k + 1]) - sig(sup[k]) < 5) continue
+        const mid = at((sig(sup[k]) + sig(sup[k + 1])) / 2)
+        if (inside(out, mid) && inside(up, mid)) {
+          if (!run.length) run.push(sup[k])
+          run.push(sup[k + 1])
+        } else if (run.length) {
+          runs.push(run)
+          run = []
+        }
+      }
+      if (run.length) runs.push(run)
+      lines.push({ t, runs, sig })
+    }
+    const worst = Math.max(0, ...lines.flatMap((l) => l.runs.flatMap((r) => r.slice(1).map((s, k) => sig(s) - sig(r[k])))))
+    return { lines, worst, at: (t: number, v: number): Pt => (axis === "x" ? { x: v, y: t } : { x: t, y: v }) }
+  }
+  const byX = runsAlong("x")
+  const byY = runsAlong("y")
+  const joists = byY.worst < byX.worst ? byY : byX
+  const max = settings.floorJoistSpanMm
+  const seen = new Set<string>()
+  let longest: { a: Pt; b: Pt; len: number } | null = null
+  for (const line of joists.lines)
+    for (const run of line.runs) {
+      const A = run[0]
+      const B = run[run.length - 1]
+      for (const e of [A, B]) if (e.side !== undefined) ground.outside[e.side] = mark(ground.outside[e.side], "Carries the first floor's joists.")
+      const len = line.sig(B) - line.sig(A)
+      if (!longest || len > longest.len) longest = { a: joists.at(line.t, line.sig(A)), b: joists.at(line.t, line.sig(B)), len }
+      let k = 0
+      while (line.sig(run[run.length - 1]) - line.sig(run[k]) > max + 1) {
+        let pick = -1
+        for (let j = k + 1; j < run.length - 1; j++) if (line.sig(run[j]) - line.sig(run[k]) <= max + 1) pick = j
+        if (pick < 0) {
+          const gap = line.sig(run[k + 1]) - line.sig(run[k])
+          const room = roomAt(joists.at(line.t, (line.sig(run[k]) + line.sig(run[k + 1])) / 2))
+          const text = `The first floor's joists over ${room ? room.name : "the ground floor"} would span ${m(gap)} — more than the ${m(max)} set. Add a load-bearing wall or a beam under them.`
+          if (!seen.has(text)) {
+            seen.add(text)
+            ground.warnings.push(text)
+          }
+          pick = k + 1
+        }
+        const w = run[pick].wall
+        if (w) ground.inside.set(w, mark(ground.inside.get(w), "Carries the first floor's joists."))
+        k = pick
+      }
+    }
+  if (longest) ground.spans.push({ a: longest.a, b: longest.b })
+
+  // ── load-bearing walls upstairs need something under them ───────────
+  const below = [...out.map((a, i) => ({ a, b: out[(i + 1) % n], side: i as number | undefined, wall: undefined as string | undefined })), ...graph.walls.map((w) => ({ a: w.a, b: w.b, side: undefined, wall: w.id }))]
+  const check = (a: Pt, b: Pt, what: string) => {
+    const len = Math.hypot(b.x - a.x, b.y - a.y)
+    let bare = 0
+    const steps = Math.max(2, Math.round(len / 300))
+    for (let k = 0; k <= steps; k++) {
+      const p = { x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps }
+      // (only walls running the same way: one crossing under it isn't holding it up)
+      const under = below.filter((s) => Math.abs((s.b.x - s.a.x) * (b.y - a.y) - (s.b.y - s.a.y) * (b.x - a.x)) < 1e-3 * len * Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) && onSeg(p, s.a, s.b, 60))
+      if (!under.length) bare++
+      for (const s of under) {
+        if (s.wall) ground.inside.set(s.wall, mark(ground.inside.get(s.wall), "Carries the load-bearing wall above."))
+        if (s.side !== undefined) ground.outside[s.side] = mark(ground.outside[s.side], "Carries the load-bearing wall above.")
+      }
+    }
+    if (bare / (steps + 1) > 0.15)
+      ground.warnings.push(`Upstairs, ${what} is load-bearing, but ${m((len * bare) / (steps + 1))} of it has no wall under it on the ground floor — add a wall or a beam below.`)
+  }
+  for (const w of upperGraph.walls) if (upper.inside.get(w.id)?.loadBearing) check(w.a, w.b, describeWall(upperGraph, w.a, w.b))
+  up.forEach((a, i) => {
+    const b = up[(i + 1) % up.length]
+    if (upper.outside[i]?.loadBearing) check(a, b, `the outside wall of ${describeWall(upperGraph, a, b).replace(/^the | wall$/g, "")}`)
+  })
+  ground.outside = ground.outside.map((v) => (v.loadBearing || v.reason ? v : { loadBearing: false, reason: "Doesn't carry the roof or the floor above." }))
+  return { ground, upper }
+}

@@ -315,3 +315,55 @@ export function roomsToOutline(floor: FloorPlan): FloorPlan {
     tags: g.rooms.map((r) => ({ id: r.id, name: r.name, kind: r.kind, at: r.label })),
   }
 }
+
+/** The parts of the ground floor's outline the first floor's doesn't
+ * cover — each its own outline, for a lower roof — and whether the first
+ * floor reaches out past the ground floor anywhere (it'd need holding up).
+ * Square-cornered outlines only. */
+export function uncovered(ground: Pt[], upper: Pt[]): { regions: Pt[][]; overhangs: boolean } {
+  if (ground.length < 3 || upper.length < 3 || !isSquare(ground) || !isSquare(upper)) return { regions: [], overhangs: false }
+  const xs = sortedUnique([...ground, ...upper].map((p) => p.x))
+  const ys = sortedUnique([...ground, ...upper].map((p) => p.y))
+  const ni = xs.length - 1
+  const nj = ys.length - 1
+  const comp: number[][] = []
+  let overhangs = false
+  for (let i = 0; i < ni; i++) {
+    comp.push([])
+    for (let j = 0; j < nj; j++) {
+      const c = { x: (xs[i] + xs[i + 1]) / 2, y: (ys[j] + ys[j + 1]) / 2 }
+      const g = inside(ground, c)
+      const u = inside(upper, c)
+      if (u && !g) overhangs = true
+      comp[i].push(g && !u ? -2 : -1)
+    }
+  }
+  // the bare cells, in joined-up groups
+  let count = 0
+  for (let i0 = 0; i0 < ni; i0++)
+    for (let j0 = 0; j0 < nj; j0++) {
+      if (comp[i0][j0] !== -2) continue
+      const stack: [number, number][] = [[i0, j0]]
+      comp[i0][j0] = count
+      while (stack.length) {
+        const [i, j] = stack.pop()!
+        for (const [a, b] of [
+          [i + 1, j],
+          [i - 1, j],
+          [i, j + 1],
+          [i, j - 1],
+        ])
+          if (a >= 0 && b >= 0 && a < ni && b < nj && comp[a][b] === -2) {
+            comp[a][b] = count
+            stack.push([a, b])
+          }
+      }
+      count++
+    }
+  const regions: Pt[][] = []
+  for (let c = 0; c < count; c++) {
+    const loop = outlineOf({ xs, ys, room: comp.map((col) => col.map((v) => (v === c ? 0 : -1))) })
+    if (loop.length >= 4) regions.push(loop)
+  }
+  return { regions, overhangs }
+}

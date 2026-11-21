@@ -94,8 +94,17 @@ export const ROOF_FRAME_LABELS: Record<RoofFrame, string> = {
 }
 
 export interface HouseSettings {
-  /** floor to the top plate: the eaves height (and ceiling) */
+  /** ground floor to its top plate: the eaves height (and ceiling) of a
+   * one-storey house, or of the ground floor's own roof under a second */
   studHeightMm: number
+  /** a second storey: its floor's depth over the ground floor's top plate
+   * (joists, flooring) */
+  floorDepthMm: number
+  /** the most the first floor's joists span between walls below */
+  floorJoistSpanMm: number
+  /** the roof over the parts of the ground floor the first floor doesn't
+   * cover: a lean-to up against the storey above, or a hip */
+  lowerRoof: { type: "skillion" | "hip"; pitchDeg: number }
   roofFrame: RoofFrame
   /** the roof itself — the same as the weatherboards' 3D roof, minus "auto" */
   roof: RoofPlan
@@ -116,9 +125,19 @@ export interface CladdingLink {
   id: string
 }
 
+/** the storey over the ground floor */
+export interface UpperFloor {
+  plan: FloorPlan
+  /** its floor to its top plate */
+  studHeightMm: number
+}
+
 export interface HouseProject {
   name: string
+  /** the ground floor */
   floor: FloorPlan
+  /** a first floor over it, or none */
+  upper: UpperFloor | null
   settings: HouseSettings
   /** the step the walk-through's on */
   step: number
@@ -127,6 +146,9 @@ export interface HouseProject {
 
 export const DEFAULT_SETTINGS: HouseSettings = {
   studHeightMm: 2400,
+  floorDepthMm: 300,
+  floorJoistSpanMm: 4200,
+  lowerRoof: { type: "skillion", pitchDeg: 15 },
   roofFrame: "trusses",
   roof: { type: "gable", pitchDeg: 25, eavesMm: 450, vergeMm: 300, colour: "#3f4449" },
   maxTrussSpanMm: 12000,
@@ -139,6 +161,7 @@ export const newHouseId = () => Math.random().toString(36).slice(2, 10)
 export const DEFAULT_HOUSE: HouseProject = {
   name: "My house",
   floor: { mode: null, outline: [], lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes: [], overrides: {} },
+  upper: null,
   settings: DEFAULT_SETTINGS,
   step: 0,
   link: null,
@@ -164,23 +187,35 @@ export const STARTING_BOXES = (): RoomBox[] => [
 ]
 
 /** whatever an older version (or a hand-edit) left in storage, made whole */
+const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+
+const planFromData = (d: unknown): FloorPlan => {
+  const f = (d && typeof d === "object" ? d : {}) as Partial<FloorPlan>
+  return {
+    mode: f.mode === "outline" || f.mode === "rooms" ? f.mode : null,
+    outline: arr<Pt>(f.outline),
+    lockedEdgeLengths: f.lockedEdgeLengths ?? {},
+    lockedVertexAngles: f.lockedVertexAngles ?? {},
+    walls: arr<InsideWall>(f.walls),
+    tags: arr<RoomTag>(f.tags),
+    boxes: arr<RoomBox>(f.boxes),
+    overrides: f.overrides ?? {},
+  }
+}
+
 export function houseFromData(d: unknown): HouseProject {
   const o = (d && typeof d === "object" ? d : {}) as Partial<HouseProject>
-  const f = (o.floor ?? {}) as Partial<FloorPlan>
-  const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+  const u = o.upper && typeof o.upper === "object" ? o.upper : null
   return {
     name: typeof o.name === "string" && o.name ? o.name : DEFAULT_HOUSE.name,
-    floor: {
-      mode: f.mode === "outline" || f.mode === "rooms" ? f.mode : null,
-      outline: arr<Pt>(f.outline),
-      lockedEdgeLengths: f.lockedEdgeLengths ?? {},
-      lockedVertexAngles: f.lockedVertexAngles ?? {},
-      walls: arr<InsideWall>(f.walls),
-      tags: arr<RoomTag>(f.tags),
-      boxes: arr<RoomBox>(f.boxes),
-      overrides: f.overrides ?? {},
+    floor: planFromData(o.floor),
+    upper: u ? { plan: planFromData(u.plan), studHeightMm: typeof u.studHeightMm === "number" ? u.studHeightMm : DEFAULT_SETTINGS.studHeightMm } : null,
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(o.settings ?? {}),
+      roof: { ...DEFAULT_SETTINGS.roof, ...(o.settings?.roof ?? {}) },
+      lowerRoof: { ...DEFAULT_SETTINGS.lowerRoof, ...(o.settings?.lowerRoof ?? {}) },
     },
-    settings: { ...DEFAULT_SETTINGS, ...(o.settings ?? {}), roof: { ...DEFAULT_SETTINGS.roof, ...(o.settings?.roof ?? {}) } },
     step: typeof o.step === "number" ? o.step : 0,
     link: o.link && typeof o.link === "object" && typeof o.link.id === "string" ? o.link : null,
   }

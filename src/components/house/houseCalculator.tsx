@@ -6,15 +6,15 @@ import { useAuth } from "@/context/auth"
 import PolygonShapeEditor from "@/components/decking/polygonShapeEditor"
 import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
-import { houseLayout } from "@/components/weatherboards/housePlan"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
 import { calculateWall } from "@/components/weatherboards/weatherboardCalc"
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "@/components/weatherboards/data"
 import { loadProject, newProjectId, ProjectLocation, saveProject } from "@/components/weatherboards/projectStore"
 import type { RoofType } from "@/components/weatherboards/types"
-import { floorGraph, isSquare, roomsToOutline } from "./floorPlan"
+import { floorGraph, inside as isInside, isSquare, roomsToOutline } from "./floorPlan"
 import { houseCladding, mergeCladding } from "./houseCladding"
 import {
+  FloorPlan,
   HouseProject,
   HouseSettings,
   LoadBearing,
@@ -29,10 +29,12 @@ import {
   STARTING_OUTLINE,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
-import { analyseStructure } from "./structure"
+import { analyseHouse, Structure } from "./structure"
 import styles from "./house.module.scss"
 
-const STEPS = ["Start", "Ground floor", "Roof & structure", "3D", "Cladding"] as const
+const STEPS = ["Start", "Floor plans", "Roof & structure", "3D", "Cladding"] as const
+
+const LEVEL_NAMES = ["Ground floor", "First floor"] as const
 
 const ROOF_TYPES: { value: Exclude<RoofType, "auto">; label: string }[] = [
   { value: "gable", label: "Gable" },
@@ -66,15 +68,29 @@ const HouseCalculator: React.FC<{
 }> = ({ house, setHouse, header }) => {
   const floor = house.floor
   const graph = useMemo(() => floorGraph(floor), [floor])
-  const cladding = useMemo(() => houseCladding(house, graph), [house, graph])
-  const structure = useMemo(() => analyseStructure(graph, house.settings, cladding?.roof ?? null), [graph, house.settings, cladding])
+  const upperPlan = house.upper?.plan ?? null
+  const upperGraph = useMemo(() => (upperPlan ? floorGraph(upperPlan) : null), [upperPlan])
+  const cladding = useMemo(() => houseCladding(house, graph, upperGraph), [house, graph, upperGraph])
+  const structures = useMemo(
+    () => analyseHouse(graph, upperGraph, house.settings, cladding?.roof ?? null, cladding?.lowerRoofs ?? []),
+    [graph, upperGraph, house.settings, cladding],
+  )
   const [selection, setSelection] = useState<Selection>(null)
+  // which storey the plan and structure steps are on
+  const [levelState, setLevelState] = useState(0)
+  const level = house.upper ? levelState : 0
+  const setLevel = (l: number) => {
+    setSelection(null)
+    setLevelState(l)
+  }
+  /** the plan of a storey */
+  const setPlanOf = (l: number) => (update: (f: FloorPlan) => FloorPlan) =>
+    setHouse((h) => (l === 0 ? { ...h, floor: update(h.floor) } : h.upper ? { ...h, upper: { ...h.upper, plan: update(h.upper.plan) } } : h))
   const step = Math.min(house.step, floor.mode ? STEPS.length - 1 : 0)
   const setStep = (s: number) => {
     setSelection(null)
     setHouse((h) => ({ ...h, step: s }))
   }
-  const setFloor = (update: (f: HouseProject["floor"]) => HouseProject["floor"]) => setHouse((h) => ({ ...h, floor: update(h.floor) }))
   const setSettings = (patch: Partial<HouseSettings>) => setHouse((h) => ({ ...h, settings: { ...h.settings, ...patch } }))
 
   const canGoOn = [!!floor.mode, graph.outline.length >= 3, true, true, false]
@@ -106,11 +122,37 @@ const HouseCalculator: React.FC<{
       </ol>
 
       {step === 0 && <StartStep house={house} setHouse={setHouse} />}
-      {step === 1 && <FloorStep house={house} setFloor={setFloor} graph={graph} selection={selection} setSelection={setSelection} />}
-      {step === 2 && (
-        <StructureStep house={house} setSettings={setSettings} setFloor={setFloor} graph={graph} structure={structure} roofOk={!!cladding?.roof} selection={selection} setSelection={setSelection} />
+      {step === 1 && (
+        <FloorsStep
+          house={house}
+          setHouse={setHouse}
+          level={level}
+          setLevel={setLevel}
+          graph={graph}
+          upperGraph={upperGraph}
+          setPlanOf={setPlanOf}
+          selection={selection}
+          setSelection={setSelection}
+        />
       )}
-      {step === 3 && cladding && <ThreeDStep house={house} graph={graph} cladding={cladding} structure={structure} />}
+      {step === 2 && (
+        <StructureStep
+          house={house}
+          setSettings={setSettings}
+          setHouse={setHouse}
+          level={level}
+          setLevel={setLevel}
+          setFloor={setPlanOf(level)}
+          graph={level === 1 && upperGraph ? upperGraph : graph}
+          ghost={level === 1 ? graph.outline : undefined}
+          structure={level === 1 && structures.upper ? structures.upper : structures.ground}
+          lowerRoofs={!!cladding?.lowerRoofs.length}
+          roofOk={!!cladding?.roof}
+          selection={selection}
+          setSelection={setSelection}
+        />
+      )}
+      {step === 3 && cladding && <ThreeDStep house={house} graph={graph} upperGraph={upperGraph} cladding={cladding} structures={structures} />}
       {step === 4 && <CladdingStep house={house} setHouse={setHouse} cladding={cladding} />}
 
       <div className={styles.nav}>
@@ -173,14 +215,135 @@ const StartStep: React.FC<{ house: HouseProject; setHouse: (u: (h: HouseProject)
 
 // ── 2. ground floor ────────────────────────────────────────────────────
 
-const FloorStep: React.FC<{
+/** The floor plans: a tab per storey (and adding a first floor), the
+ * plan of the one that's open, and the first floor's own heights. */
+const FloorsStep: React.FC<{
   house: HouseProject
-  setFloor: (u: (f: HouseProject["floor"]) => HouseProject["floor"]) => void
+  setHouse: (u: (h: HouseProject) => HouseProject) => void
+  level: number
+  setLevel: (l: number) => void
   graph: ReturnType<typeof floorGraph>
+  upperGraph: ReturnType<typeof floorGraph> | null
+  setPlanOf: (l: number) => (u: (f: FloorPlan) => FloorPlan) => void
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ house, setFloor, graph, selection, setSelection }) => {
-  const floor = house.floor
+}> = ({ house, setHouse, level, setLevel, graph, upperGraph, setPlanOf, selection, setSelection }) => {
+  const [adding, setAdding] = useState(false)
+  const addUpper = (mode: "outline" | "rooms") => {
+    const outline = graph.outline.length >= 3 ? graph.outline : STARTING_OUTLINE
+    const xs = outline.map((p) => p.x)
+    const ys = outline.map((p) => p.y)
+    const [x0, y0] = [Math.min(...xs), Math.min(...ys)]
+    const [w, h] = [Math.max(...xs) - x0, Math.max(...ys) - y0]
+    // rooms to start from: two bedrooms and a bathroom off a landing, over the ground floor
+    const boxes: RoomBox[] = [
+      { id: newHouseId(), name: "Bedroom", kind: "bedroom", x: x0, y: y0, w: Math.round(w / 2 / 100) * 100, h: Math.round((h * 0.6) / 100) * 100 },
+      { id: newHouseId(), name: "Bedroom 2", kind: "bedroom", x: x0 + Math.round(w / 2 / 100) * 100, y: y0, w: w - Math.round(w / 2 / 100) * 100, h: Math.round((h * 0.6) / 100) * 100 },
+      { id: newHouseId(), name: "Bathroom", kind: "bathroom", x: x0, y: y0 + Math.round((h * 0.6) / 100) * 100, w: Math.round(w / 3 / 100) * 100, h: h - Math.round((h * 0.6) / 100) * 100 },
+      {
+        id: newHouseId(),
+        name: "Landing",
+        kind: "hall",
+        x: x0 + Math.round(w / 3 / 100) * 100,
+        y: y0 + Math.round((h * 0.6) / 100) * 100,
+        w: w - Math.round(w / 3 / 100) * 100,
+        h: h - Math.round((h * 0.6) / 100) * 100,
+      },
+    ]
+    setHouse((hs) => ({
+      ...hs,
+      upper: {
+        studHeightMm: hs.settings.studHeightMm,
+        plan: { mode, outline: outline.map((p) => ({ ...p })), lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes, overrides: {} },
+      },
+    }))
+    setAdding(false)
+    setLevel(1)
+  }
+  const upper = house.upper
+  return (
+    <>
+      <div className={styles.toggle} role="tablist" aria-label="Storey">
+        <button type="button" role="tab" aria-selected={level === 0 && !adding} className={level === 0 && !adding ? styles.toggleOn : ""} onClick={() => (setAdding(false), setLevel(0))}>
+          Ground floor
+        </button>
+        {upper ? (
+          <button type="button" role="tab" aria-selected={level === 1} className={level === 1 ? styles.toggleOn : ""} onClick={() => setLevel(1)}>
+            First floor
+          </button>
+        ) : (
+          <button type="button" role="tab" aria-selected={adding} className={adding ? styles.toggleOn : ""} onClick={() => setAdding(true)}>
+            + Add a first floor
+          </button>
+        )}
+      </div>
+
+      {adding && !upper ? (
+        <section className={styles.card}>
+          <h2>A first floor</h2>
+          <p className={styles.hint}>Over the ground floor — all of it, or part (the rest gets its own lower roof). Start it either way:</p>
+          <div className={styles.choices}>
+            <button type="button" className={styles.choice} onClick={() => addUpper("outline")}>
+              <strong>The ground floor&apos;s outline, then walls</strong>
+              <span>Starts the same shape as the ground floor — move the corners in to set it back — then draw its walls.</span>
+            </button>
+            <button type="button" className={styles.choice} onClick={() => addUpper("rooms")}>
+              <strong>Lay out the rooms</strong>
+              <span>Bedrooms, a bathroom and a landing to start, over the ground floor — drag and resize them; the ground floor shows faintly under them.</span>
+            </button>
+          </div>
+        </section>
+      ) : level === 1 && upper && upperGraph ? (
+        <>
+          <FloorStep plan={upper.plan} title="First floor" setFloor={setPlanOf(1)} graph={upperGraph} ghost={graph.outline} selection={selection} setSelection={setSelection} />
+          <section className={styles.card}>
+            <div className={styles.fields}>
+              <label>
+                First floor stud height
+                <span className={styles.unit}>
+                  <NumField value={upper.studHeightMm} min={1800} step={50} onChange={(v) => setHouse((h) => (h.upper ? { ...h, upper: { ...h.upper, studHeightMm: v } } : h))} /> mm
+                </span>
+              </label>
+              <label>
+                Floor depth between storeys
+                <span className={styles.unit}>
+                  <NumField value={house.settings.floorDepthMm} min={100} step={10} onChange={(v) => setHouse((h) => ({ ...h, settings: { ...h.settings, floorDepthMm: v } }))} /> mm
+                </span>
+                <span className={styles.muted}>joists and flooring, over the ground floor&apos;s top plate</span>
+              </label>
+            </div>
+            <button
+              type="button"
+              className={styles.danger}
+              onClick={() => {
+                if (!window.confirm("Remove the first floor and everything on it?")) return
+                setSelection(null)
+                setLevel(0)
+                setHouse((h) => ({ ...h, upper: null }))
+              }}
+            >
+              Remove the first floor
+            </button>
+          </section>
+        </>
+      ) : (
+        <FloorStep plan={house.floor} title="Ground floor" setFloor={setPlanOf(0)} graph={graph} selection={selection} setSelection={setSelection} />
+      )}
+    </>
+  )
+}
+
+const FloorStep: React.FC<{
+  plan: FloorPlan
+  title: string
+  setFloor: (u: (f: FloorPlan) => FloorPlan) => void
+  graph: ReturnType<typeof floorGraph>
+  /** the storey below's outline, shown faintly to line up with */
+  ghost?: Pt[]
+  selection: Selection
+  setSelection: (s: Selection) => void
+}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection }) => {
+  const floor = plan
   const [part, setPart] = useState<"outside" | "inside">("inside")
   const [tool, setTool] = useState<CanvasTool>("draw")
   const [newKind, setNewKind] = useState<RoomKind>("bedroom")
@@ -199,11 +362,11 @@ const FloorStep: React.FC<{
     }
     return (
       <section className={styles.card}>
-        <h2>Ground floor — rooms</h2>
+        <h2>{title} — rooms</h2>
         <p className={styles.hint}>
           Drag a room to move it, or tap it and drag a corner to resize it — both snap to the grid and to the rooms beside it. Tap one to name it or type its size.
         </p>
-        <PlanCanvas graph={graph} boxes={floor.boxes} selection={selection} onSelect={setSelection} onMoveBox={(id, x, y) => setBox(id, { x, y })} onResizeBox={(id, r) => setBox(id, r)} />
+        <PlanCanvas graph={graph} ghost={ghost} boxes={floor.boxes} selection={selection} onSelect={setSelection} onMoveBox={(id, x, y) => setBox(id, { x, y })} onResizeBox={(id, r) => setBox(id, r)} />
         <div className={styles.toolbar}>
           <select value={newKind} onChange={(e) => setNewKind(e.target.value as RoomKind)} aria-label="Kind of room to add">
             {(Object.keys(ROOM_KIND_LABELS) as RoomKind[]).map((k) => (
@@ -290,7 +453,7 @@ const FloorStep: React.FC<{
 
   return (
     <section className={styles.card}>
-      <h2>Ground floor — outline and walls</h2>
+      <h2>{title} — outline and walls</h2>
       <div className={styles.toggle} role="tablist">
         <button type="button" role="tab" aria-selected={part === "outside"} className={part === "outside" ? styles.toggleOn : ""} onClick={() => setPart("outside")}>
           Outside walls
@@ -334,6 +497,7 @@ const FloorStep: React.FC<{
           </div>
           <PlanCanvas
             graph={graph}
+            ghost={ghost}
             tool={tool}
             selection={selection}
             onSelect={setSelection}
@@ -481,13 +645,18 @@ const Warnings: React.FC<{ list: string[] }> = ({ list }) =>
 const StructureStep: React.FC<{
   house: HouseProject
   setSettings: (p: Partial<HouseSettings>) => void
-  setFloor: (u: (f: HouseProject["floor"]) => HouseProject["floor"]) => void
+  setHouse: (u: (h: HouseProject) => HouseProject) => void
+  level: number
+  setLevel: (l: number) => void
+  setFloor: (u: (f: FloorPlan) => FloorPlan) => void
   graph: ReturnType<typeof floorGraph>
-  structure: ReturnType<typeof analyseStructure>
+  ghost?: Pt[]
+  structure: Structure
+  lowerRoofs: boolean
   roofOk: boolean
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ house, setSettings, setFloor, graph, structure, roofOk, selection, setSelection }) => {
+}> = ({ house, setSettings, setHouse, level, setLevel, setFloor, graph, ghost, structure, lowerRoofs, roofOk, selection, setSelection }) => {
   const st = house.settings
   const roof = st.roof
   const setRoof = (patch: Partial<HouseSettings["roof"]>) => setSettings({ roof: { ...roof, ...patch } })
@@ -523,11 +692,19 @@ const StructureStep: React.FC<{
           </span>
         </label>
         <label>
-          Stud height
+          {house.upper ? "Ground floor stud height" : "Stud height"}
           <span className={styles.unit}>
             <NumField value={st.studHeightMm} min={1800} step={50} onChange={(v) => setSettings({ studHeightMm: v })} /> mm
           </span>
         </label>
+        {house.upper && (
+          <label>
+            First floor stud height
+            <span className={styles.unit}>
+              <NumField value={house.upper.studHeightMm} min={1800} step={50} onChange={(v) => setHouse((h) => (h.upper ? { ...h, upper: { ...h.upper, studHeightMm: v } } : h))} /> mm
+            </span>
+          </label>
+        )}
         <label>
           Eaves
           <span className={styles.unit}>
@@ -549,6 +726,25 @@ const StructureStep: React.FC<{
           </button>
         ))}
       </div>
+
+      {house.upper && lowerRoofs && (
+        <div className={styles.fields}>
+          <label>
+            Lower roof
+            <select value={st.lowerRoof.type} onChange={(e) => setSettings({ lowerRoof: { ...st.lowerRoof, type: e.target.value as "skillion" | "hip" } })}>
+              <option value="skillion">Lean-to, up against the first floor</option>
+              <option value="hip">Hip</option>
+            </select>
+            <span className={styles.muted}>over the ground floor the first floor doesn&apos;t cover</span>
+          </label>
+          <label>
+            Lower roof pitch
+            <span className={styles.unit}>
+              <NumField value={st.lowerRoof.pitchDeg} min={1} max={60} step={0.5} onChange={(v) => setSettings({ lowerRoof: { ...st.lowerRoof, pitchDeg: v } })} /> °
+            </span>
+          </label>
+        </div>
+      )}
 
       <h3>What holds it up</h3>
       <div className={styles.toggle} role="radiogroup" aria-label="Roof framing">
@@ -587,11 +783,32 @@ const StructureStep: React.FC<{
         )}
       </div>
 
+      {house.upper && (
+        <div className={styles.fields}>
+          <label>
+            First floor joists span up to
+            <span className={styles.unit}>
+              <NumField value={st.floorJoistSpanMm} min={1000} step={100} onChange={(v) => setSettings({ floorJoistSpanMm: v })} /> mm
+            </span>
+            <span className={styles.muted}>between the ground floor&apos;s walls — from the span tables</span>
+          </label>
+        </div>
+      )}
+
+      {house.upper && (
+        <div className={styles.toggle} role="tablist" aria-label="Storey">
+          {LEVEL_NAMES.map((n, l) => (
+            <button key={n} type="button" role="tab" aria-selected={level === l} className={level === l ? styles.toggleOn : ""} onClick={() => setLevel(l)}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
       <p className={styles.hint}>
-        Load-bearing walls are in red; the dashed arrows are the way the {st.roofFrame === "trusses" ? "trusses" : "ceiling joists and rafters"} span. Tap an
-        inside wall to see why, or to set it by hand.
+        Load-bearing walls are in red; the dashed arrows are the way the {st.roofFrame === "trusses" ? "trusses" : "ceiling joists and rafters"}
+        {house.upper && level === 0 ? " and the first floor's joists" : ""} span. Tap an inside wall to see why, or to set it by hand.
       </p>
-      <PlanCanvas graph={graph} structure={structure} selection={selection} onSelect={(s) => setSelection(s?.kind === "wall" ? s : null)} />
+      <PlanCanvas graph={graph} ghost={ghost} structure={structure} selection={selection} onSelect={(s) => setSelection(s?.kind === "wall" ? s : null)} />
       {wall && verdict && (
         <div className={styles.panel}>
           <p>
@@ -621,29 +838,64 @@ const StructureStep: React.FC<{
 
 // ── 4. 3D ──────────────────────────────────────────────────────────────
 
+/** the first floor's floor as slabs, one per cell (world mm), held clear
+ * of the walls — in from the outside walls by their depth, and either side
+ * of an inside wall by half its — so no solid cuts through another */
+const upperFloorCells = (g: ReturnType<typeof floorGraph>) =>
+  g.rooms.flatMap((r) =>
+    r.cells.map((c) => {
+      const outside = (p: Pt) => !isInside(g.outline, p)
+      const inset = (p: Pt) => (outside(p) ? 141 : 56)
+      const l = inset({ x: c.x - 10, y: c.y + c.h / 2 })
+      const rt = inset({ x: c.x + c.w + 10, y: c.y + c.h / 2 })
+      const t = inset({ x: c.x + c.w / 2, y: c.y - 10 })
+      const b = inset({ x: c.x + c.w / 2, y: c.y + c.h + 10 })
+      return { x0: c.x + l, x1: c.x + c.w - rt, y0: -(c.y + c.h - b), y1: -(c.y + t) }
+    }),
+  )
+
 const ThreeDStep: React.FC<{
   house: HouseProject
   graph: ReturnType<typeof floorGraph>
+  upperGraph: ReturnType<typeof floorGraph> | null
   cladding: NonNullable<ReturnType<typeof houseCladding>>
-  structure: ReturnType<typeof analyseStructure>
-}> = ({ house, graph, cladding, structure }) => {
+  structures: ReturnType<typeof analyseHouse>
+}> = ({ house, graph, upperGraph, cladding, structures }) => {
   const input = useMemo(() => {
-    const layout = houseLayout(cladding.project)
-    const walls = new Map(cladding.project.elevations.flatMap((e) => e.walls).map((w) => [w.id, w]))
+    const walls = cladding.walls
     const results = new Map([...walls.values()].map((w) => [w.id, calculateWall(w, WB_DEFAULTS)]))
-    const extras = graph.walls.map((w) => ({
-      a: { x: w.a.x, y: -w.a.y },
-      b: { x: w.b.x, y: -w.b.y },
-      height: house.settings.studHeightMm,
-      thickness: 110,
-      color: structure.inside.get(w.id)?.loadBearing ? "#c98f7a" : "#ece8df",
-    }))
-    return { layout, walls, results, settings: WB_DEFAULTS, roof: cladding.roof, roofColour: house.settings.roof.colour, extras }
-  }, [cladding, graph, house.settings, structure])
+    const inside = (g: typeof graph, st: Structure, z0: number, height: number, upper: boolean) =>
+      g.walls.map((w) => ({
+        a: { x: w.a.x, y: -w.a.y },
+        b: { x: w.b.x, y: -w.b.y },
+        height,
+        thickness: 110,
+        z0,
+        upper,
+        color: st.inside.get(w.id)?.loadBearing ? "#c98f7a" : "#ece8df",
+      }))
+    const z1 = cladding.upperFloorZ
+    const extras = [
+      ...inside(graph, structures.ground, 0, house.settings.studHeightMm, false),
+      ...(upperGraph && structures.upper && house.upper ? inside(upperGraph, structures.upper, z1, house.upper.studHeightMm, true) : []),
+    ]
+    const upper =
+      cladding.upper && upperGraph
+        ? {
+            layout: cladding.upper,
+            floorZ: z1,
+            floorCells: upperFloorCells(upperGraph),
+          }
+        : undefined
+    return { layout: cladding.ground, walls, results, settings: WB_DEFAULTS, roof: cladding.roof, moreRoofs: cladding.lowerRoofs, roofColour: house.settings.roof.colour, extras, upper }
+  }, [cladding, graph, upperGraph, house.settings, house.upper, structures])
   return (
     <section className={styles.card}>
       <h2>The house in 3D</h2>
-      <p className={styles.hint}>Untick Roof to look inside — load-bearing walls are the warm ones. Drag to swing it round; the magnifier flies in.</p>
+      <p className={styles.hint}>
+        Untick Roof to look inside{house.upper ? ", and First floor to see the ground floor" : ""} — load-bearing walls are the warm ones. Drag to swing it
+        round; the magnifier flies in.
+      </p>
       <HouseRenderView input={input} fileName={house.name.replace(/\W+/g, "-").toLowerCase() || "house"} />
     </section>
   )

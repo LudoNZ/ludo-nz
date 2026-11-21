@@ -268,7 +268,10 @@ function shared(r: Rect, s: Side, o: Rect): number {
 
 const SIDES: Side[] = ["u0", "u1", "v0", "v1"]
 
-export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: RoofPlan | undefined): Roof | null {
+/** `abut`: lines on plan (world) where this roof runs into a wall above
+ * it — a storey over part of the house. No overhang along them, and a
+ * skillion rises toward them: a lean-to. */
+export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: RoofPlan | undefined, opts: { abut?: { a: P2; b: P2 }[] } = {}): Roof | null {
   const r = plan ?? DEFAULT_ROOF
   if (r.type === "none" || !layout.closed || layout.sides.length < 3) return null
   const notes: string[] = []
@@ -353,12 +356,30 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         wing.buried.add(s)
       }
     }
+    // up against a storey above: no overhang there, and a lean-to rises to it
+    for (const seg of opts.abut ?? []) {
+      const a = toLocal(seg.a)
+      const b = toLocal(seg.b)
+      for (const s of SIDES) {
+        const k = s[0] === "u" ? "x" : "y"
+        const o = k === "x" ? "y" : "x"
+        const [lo, hi] = k === "x" ? [rect.v0, rect.v1] : [rect.u0, rect.u1]
+        const overlap = Math.min(hi, Math.max(a[o], b[o])) - Math.max(lo, Math.min(a[o], b[o]))
+        if (Math.abs(a[k] - rect[s]) < 5 && Math.abs(b[k] - rect[s]) < 5 && overlap > 100) {
+          wing.buried.add(s)
+          if (type === "skillion") {
+            wing.alongU = k === "y"
+            wing.risesToHigh = s.endsWith("1")
+          }
+        }
+      }
+    }
     if (type === "gable") {
       // a peaked wall on a side: the ridge runs square to it
       if (wallOn(rect, "u0", "peak") || wallOn(rect, "u1", "peak")) wing.alongU = true
       else if (wallOn(rect, "v0", "peak") || wallOn(rect, "v1", "peak")) wing.alongU = false
     }
-    if (type === "skillion") {
+    if (type === "skillion" && !(opts.abut ?? []).length) {
       // a wall sloping end to end on a side: the roof falls along it
       for (const s of SIDES) {
         const w = wallOn(rect, s, "slope")

@@ -24,6 +24,7 @@ const HouseProjectCard: React.FC<{
       <>
         <p className={styles.meta}>
           {summary.areaM2.toFixed(1)} m² · {summary.rooms} room{summary.rooms === 1 ? "" : "s"}
+          {(summary.storeys ?? 1) > 1 ? ` · ${summary.storeys} storeys` : ""}
         </p>
         <p className={styles.order}>
           <strong>{ROOF[summary.roof] ?? "roof"}</strong> on {summary.frame.toLowerCase()} · {summary.loadBearing} load-bearing walls

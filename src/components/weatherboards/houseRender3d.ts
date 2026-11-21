@@ -12,16 +12,17 @@
  * elevations' datum. Pure — no React. */
 
 import { FIT_CAMERA, makeCamera, surfaceAtCentre, type CameraFrame, type CameraState, type V2, type V3 } from "../render3d/perspective"
-import { makeSolid, orderSolids, type Solid } from "../stairs/stairRender3d"
+import { makeSolid, orderSolids, worldBox, type Solid } from "../stairs/stairRender3d"
 import { HouseLayout, outwardOf, P2, PlanSide } from "./housePlan"
 import { Roof, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor"
+export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
+  upper: "First floor",
   inside: "Inside walls",
   boards: "Board lines",
   trims: "Facings",
@@ -30,7 +31,7 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   floor: "Floor",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "inside", "boards", "trims", "joinery", "foundation", "floor"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -68,8 +69,13 @@ export interface HouseRenderInput {
   roof: Roof | null
   roofColour: string
   /** walls inside the house (the House calculator's): a line on plan
-   * (world mm), standing on the floor (z = 0) */
-  extras?: { a: P2; b: P2; height: number; thickness: number; color: string }[]
+   * (world mm), standing on its floor (z0, default 0) */
+  extras?: { a: P2; b: P2; height: number; thickness: number; color: string; z0?: number; upper?: boolean }[]
+  /** more roofs: with a first floor, the lower ones over the ground floor */
+  moreRoofs?: Roof[]
+  /** a storey above: its own walls round (in `walls`), its floor (cells on
+   * plan, world mm) at `floorZ` */
+  upper?: { layout: HouseLayout; floorZ: number; floorCells: { x0: number; x1: number; y0: number; y1: number }[] }
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -143,6 +149,8 @@ interface Piece {
   /** lines on the solid's first face (its outside), drawn over it */
   lines?: [V3, V3][]
   lineColor?: string
+  /** part of the storey above (hidden with it) */
+  upper?: boolean
 }
 
 /** A convex profile in wall coords (x along, y up) made a slab from
@@ -211,7 +219,8 @@ function sidePieces(
   result: WallResult | null,
   settings: WeatherboardSettings,
   courseLevels: number[],
-  groundZ: number,
+  /** null: no foundation under it (a storey above) */
+  groundZ: number | null,
 ): Piece[] {
   const out: Piece[] = []
   const push = (member: Piece["member"], solid: Solid | null, lines?: [V3, V3][]) => solid && out.push({ solid, member, lines })
@@ -269,7 +278,7 @@ function sidePieces(
     // the foundation under it, down to the lawn
     const bu = heights.bottom(u)
     const bv = heights.bottom(v)
-    if (bu - groundZ > 1 || bv - groundZ > 1) push("foundation", slab(f, quad(u, v, groundZ, groundZ, bu, bv), -WALL_T, -10, COLORS.foundation, true))
+    if (groundZ !== null && (bu - groundZ > 1 || bv - groundZ > 1)) push("foundation", slab(f, quad(u, v, groundZ, groundZ, bu, bv), -WALL_T, -10, COLORS.foundation, true))
   }
 
   if (!wall) return out
@@ -449,57 +458,72 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   if (!placed.length) return { pieces: [], front: null, groundZ: 0, floor: null }
   const groundZ = Math.min(...placed.map((s) => Math.min(...edgeOf(s.wallId!).bottom.map((p) => p.y)))) - GROUND_DROP
 
-  const n = sides.length
-  const near = (i: number, dir: 1 | -1): { wallId: string; x: number } | null => {
-    for (let k = 1; k < n; k++) {
-      const j = i + dir * k
-      if (!layout.closed && (j < 0 || j >= n)) return null
-      const s = sides[(j + n) % n]
-      if (s.wallId && walls.has(s.wallId)) return { wallId: s.wallId, x: dir < 0 ? s.x1 : s.x0 }
-    }
-    return null
-  }
-
   const pieces: Piece[] = []
-  sides.forEach((s, i) => {
-    const prev = layout.closed || i > 0 ? sides[(i - 1 + n) % n] : null
-    const next = layout.closed || i < n - 1 ? sides[(i + 1) % n] : null
-    const f = sideFrame(s, prev, next)
-    const wall = s.wallId ? (walls.get(s.wallId) ?? null) : null
-    if (wall) {
-      const e = edgeOf(wall.id)
-      const breaks = [...e.top, ...e.bottom].map((p) => p.x)
-      pieces.push(
-        ...sidePieces(s, f, { top: (x) => valueAt(e.top, x), bottom: (x) => valueAt(e.bottom, x), breaks }, wall, results.get(wall.id) ?? null, settings, [], groundZ),
-      )
-      return
+  /** a storey's walls round, from its layout */
+  const storey = (layout: HouseLayout, upper: boolean) => {
+    const sides = layout.sides
+    const n = sides.length
+    const near = (i: number, dir: 1 | -1): { wallId: string; x: number } | null => {
+      for (let k = 1; k < n; k++) {
+        const j = i + dir * k
+        if (!layout.closed && (j < 0 || j >= n)) return null
+        const s = sides[(j + n) % n]
+        if (s.wallId && walls.has(s.wallId)) return { wallId: s.wallId, x: dir < 0 ? s.x1 : s.x0 }
+      }
+      return null
     }
-    // a plain side: its top and bottom run from the wall before to the wall after
-    const a = near(i, -1)
-    const b = near(i, 1) ?? a
-    const from = a ?? b
-    if (!from || !b) return
-    const ea = edgeOf(from.wallId)
-    const eb = edgeOf(b.wallId)
-    const t0 = valueAt(ea.top, from.x)
-    const t1 = valueAt(eb.top, b.x)
-    const b0 = valueAt(ea.bottom, from.x)
-    const b1 = valueAt(eb.bottom, b.x)
-    const span = f.x1 - f.x0 || 1
-    const lerp = (p: number, q: number) => (x: number) => p + ((q - p) * (x - f.x0)) / span
-    const levels = (results.get(from.wallId)?.courses ?? []).filter((c) => c.index > 0).map((c) => c.bottom)
-    pieces.push(...sidePieces(s, f, { top: lerp(t0, t1), bottom: lerp(b0, b1), breaks: [] }, null, null, settings, levels, groundZ))
-  })
+    const found = upper ? null : groundZ
+    const add = (ps: Piece[]) => pieces.push(...(upper ? ps.map((p) => ({ ...p, upper: true })) : ps))
+    sides.forEach((s, i) => {
+      const prev = layout.closed || i > 0 ? sides[(i - 1 + n) % n] : null
+      const next = layout.closed || i < n - 1 ? sides[(i + 1) % n] : null
+      const f = sideFrame(s, prev, next)
+      const wall = s.wallId ? (walls.get(s.wallId) ?? null) : null
+      if (wall) {
+        const e = edgeOf(wall.id)
+        const breaks = [...e.top, ...e.bottom].map((p) => p.x)
+        add(sidePieces(s, f, { top: (x) => valueAt(e.top, x), bottom: (x) => valueAt(e.bottom, x), breaks }, wall, results.get(wall.id) ?? null, settings, [], found))
+        return
+      }
+      // a plain side: its top and bottom run from the wall before to the wall after
+      const a = near(i, -1)
+      const b = near(i, 1) ?? a
+      const from = a ?? b
+      if (!from || !b) return
+      const ea = edgeOf(from.wallId)
+      const eb = edgeOf(b.wallId)
+      const t0 = valueAt(ea.top, from.x)
+      const t1 = valueAt(eb.top, b.x)
+      const b0 = valueAt(ea.bottom, from.x)
+      const b1 = valueAt(eb.bottom, b.x)
+      const span = f.x1 - f.x0 || 1
+      const lerp = (p: number, q: number) => (x: number) => p + ((q - p) * (x - f.x0)) / span
+      const levels = (results.get(from.wallId)?.courses ?? []).filter((c) => c.index > 0).map((c) => c.bottom)
+      add(sidePieces(s, f, { top: lerp(t0, t1), bottom: lerp(b0, b1), breaks: [] }, null, null, settings, levels, found))
+    })
+  }
+  storey(layout, false)
+  if (input.upper) {
+    storey(input.upper.layout, true)
+    // its floor, a slab on the walls below
+    const z = input.upper.floorZ
+    for (const c of input.upper.floorCells) {
+      const solid = worldBox(c.x0, c.x1, c.y0, c.y1, z - 150, z, COLORS.floor)
+      if (solid) pieces.push({ solid, member: "floor", upper: true })
+    }
+  }
 
   for (const x of input.extras ?? []) {
     const len = Math.hypot(x.b.x - x.a.x, x.b.y - x.a.y)
     if (len < 10) continue
     const n = { x: (-(x.b.y - x.a.y) / len) * (x.thickness / 2), y: ((x.b.x - x.a.x) / len) * (x.thickness / 2) }
     const at = (p: P2, side: 1 | -1, z: number): V3 => [p.x + n.x * side, p.y + n.y * side, z]
-    const base = [at(x.a, 1, 0), at(x.b, 1, 0), at(x.b, -1, 0), at(x.a, -1, 0)]
-    const top = [at(x.a, 1, x.height), at(x.b, 1, x.height), at(x.b, -1, x.height), at(x.a, -1, x.height)]
+    const z0 = x.z0 ?? 0
+    const base = [at(x.a, 1, z0), at(x.b, 1, z0), at(x.b, -1, z0), at(x.a, -1, z0)]
+    const top = [at(x.a, 1, z0 + x.height), at(x.b, 1, z0 + x.height), at(x.b, -1, z0 + x.height), at(x.a, -1, z0 + x.height)]
     pieces.push({
       member: "inside",
+      upper: x.upper,
       solid: makeSolid([
         { pts: top, color: x.color },
         { pts: base, color: x.color },
@@ -508,15 +532,16 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     })
   }
 
-  if (input.roof) {
+  for (const roof of [input.roof, ...(input.moreRoofs ?? [])]) {
+    if (!roof) continue
     // ribs a shade darker on a light roof, lighter on a dark one
     const [r, g, b] = hexToRgb(input.roofColour)
     const ribColor = 0.299 * r + 0.587 * g + 0.114 * b > 120 ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.16)"
-    for (const face of input.roof.faces) {
+    for (const face of roof.faces) {
       const solid = roofSlab(face.poly, (p) => zAt(face.plane, p), input.roofColour)
       if (solid) pieces.push({ solid, member: "roof", lines: ribs(face.poly, face.plane), lineColor: ribColor })
     }
-    for (const inf of input.roof.infills) {
+    for (const inf of roof.infills) {
       const back = inf.pts.map(([x, y, z]): V3 => [x + inf.inward.x * 10, y + inf.inward.y * 10, z])
       const faces = [
         { pts: inf.pts, color: COLORS.plain },
@@ -527,7 +552,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     }
   }
 
-  const kept = pieces.filter((p) => p.member === "wall" || !hidden.has(p.member))
+  const kept = pieces.filter((p) => (p.member === "wall" || !hidden.has(p.member)) && !(p.upper && hidden.has("upper")))
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
   const floor = layout.closed && !hidden.has("floor") ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null

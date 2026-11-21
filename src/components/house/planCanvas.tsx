@@ -20,6 +20,8 @@ const m2 = (a: number) => `${a.toFixed(1)} m²`
  * moving room boxes, or picking a wall or room. mm, y down. */
 const PlanCanvas: React.FC<{
   graph: FloorGraph
+  /** the storey below's outline, faint, to line up with (and snap to) */
+  ghost?: Pt[]
   /** rooms mode: the boxes, to drag about */
   boxes?: RoomBox[]
   structure?: Structure | null
@@ -32,7 +34,7 @@ const PlanCanvas: React.FC<{
   onMoveBox?: (id: string, x: number, y: number) => void
   /** rooms mode: a box resized by a corner */
   onResizeBox?: (id: string, rect: { x: number; y: number; w: number; h: number }) => void
-}> = ({ graph, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox }) => {
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -55,7 +57,7 @@ const PlanCanvas: React.FC<{
     setDragState(d)
   }
 
-  const pts = [...graph.outline, ...(boxes ?? []).flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }])]
+  const pts = [...graph.outline, ...(ghost ?? []), ...(boxes ?? []).flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }])]
   if (!pts.length) pts.push({ x: 0, y: 0 }, { x: 10000, y: 8000 })
   const x0 = Math.min(...pts.map((p) => p.x)) - 1500
   const x1 = Math.max(...pts.map((p) => p.x)) + 1500
@@ -80,8 +82,8 @@ const PlanCanvas: React.FC<{
   }
   // snap to the walls' lines nearby, else the grid
   const lines = {
-    xs: [...graph.outline.map((p) => p.x), ...graph.walls.flatMap((w) => [w.a.x, w.b.x])],
-    ys: [...graph.outline.map((p) => p.y), ...graph.walls.flatMap((w) => [w.a.y, w.b.y])],
+    xs: [...graph.outline.map((p) => p.x), ...graph.walls.flatMap((w) => [w.a.x, w.b.x]), ...(ghost ?? []).map((p) => p.x)],
+    ys: [...graph.outline.map((p) => p.y), ...graph.walls.flatMap((w) => [w.a.y, w.b.y]), ...(ghost ?? []).map((p) => p.y)],
   }
   const snap = (v: number, to: number[]) => {
     const tol = pxMm(10)
@@ -113,8 +115,8 @@ const PlanCanvas: React.FC<{
         return near ?? Math.round(v / GRID) * GRID
       }
       const MIN = 600
-      let cx = fit(p.x, others.flatMap((b) => [b.x, b.x + b.w]))
-      let cy = fit(p.y, others.flatMap((b) => [b.y, b.y + b.h]))
+      let cx = fit(p.x, [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x)])
+      let cy = fit(p.y, [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y)])
       // never smaller than a cupboard, nor turned inside out
       if (Math.abs(cx - resize.fx) < MIN) cx = resize.fx + (cx >= resize.fx ? MIN : -MIN)
       if (Math.abs(cy - resize.fy) < MIN) cy = resize.fy + (cy >= resize.fy ? MIN : -MIN)
@@ -129,8 +131,8 @@ const PlanCanvas: React.FC<{
       const box = boxes.find((b) => b.id === drag.id)!
       // snap an edge to another room's edge, else the grid
       const others = boxes.filter((b) => b.id !== drag.id)
-      const ex = others.flatMap((b) => [b.x, b.x + b.w])
-      const ey = others.flatMap((b) => [b.y, b.y + b.h])
+      const ex = [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x)]
+      const ey = [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y)]
       const tol = pxMm(12)
       const fit = (v: number, size: number, edges: number[]) => {
         let best: number | null = null
@@ -220,6 +222,11 @@ const PlanCanvas: React.FC<{
               </g>
             )
           })}
+
+      {/* the storey below */}
+      {ghost && ghost.length > 2 && (
+        <polygon points={ghost.map((p) => `${p.x},${p.y}`).join(" ")} className={styles.ghost} strokeWidth={sw * 1.6} strokeDasharray={`${sw * 5} ${sw * 3}`} pointerEvents="none" />
+      )}
 
       {/* the outside walls */}
       {graph.outline.map((a, i) => {

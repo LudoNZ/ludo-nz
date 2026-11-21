@@ -1,26 +1,30 @@
 /** The house's outside walls as a weatherboard project: a wall for every
- * side of the outline, each in the elevation it faces (North, East…),
- * named after the room behind it, with its top traced off the roof — so
- * a gable end comes out raked — and facings or scribers at its corners
- * from which way the corner turns. The footprint and roof go across too,
- * so the weatherboards' 3D view is the same house.
+ * side of each storey's outline, each in the elevation it faces (North,
+ * East…), named after the room behind it, with facings or scribers at its
+ * corners from which way the corner turns.
+ *
+ * Tops come off the roof over them — so a gable end comes out raked: the
+ * main roof over the top storey, and with a first floor, the lower roof
+ * over the parts of the ground floor it doesn't cover. A first-floor wall
+ * standing flush over a ground-floor one starts where that finishes (the
+ * cladding runs on past the floor); one set back starts at the lower roof.
  *
  * Linked, the house owns each wall's shape and the weatherboard project
  * keeps everything else: openings, skips, its settings, walls added there.
  * Pure — no React. */
 
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
-import { footprintSides, houseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
+import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
 import { buildRoof, Roof, zAt } from "../weatherboards/roof"
-import { Elevation, Wall, WallEdge, WeatherboardProject } from "../weatherboards/types"
-import { FloorGraph, simplify } from "./floorPlan"
-import { HouseProject, Pt } from "./houseTypes"
+import { Elevation, RoofPlan, Wall, WallEdge, WeatherboardProject } from "../weatherboards/types"
+import { FloorGraph, simplify, uncovered } from "./floorPlan"
+import { HouseProject } from "./houseTypes"
 
 const COMPASS = ["North", "East", "South", "West"] as const
+type Face = (typeof COMPASS)[number]
 
 /** the face a side looks out on: world outward normal → compass */
-const compassOf = (n: P2): (typeof COMPASS)[number] =>
-  Math.abs(n.y) >= Math.abs(n.x) ? (n.y > 0 ? "North" : "South") : n.x > 0 ? "East" : "West"
+const compassOf = (n: P2): Face => (Math.abs(n.y) >= Math.abs(n.x) ? (n.y > 0 ? "North" : "South") : n.x > 0 ? "East" : "West")
 
 const inConvex = (poly: P2[], p: P2) => {
   let sign = 0
@@ -36,92 +40,137 @@ const inConvex = (poly: P2[], p: P2) => {
   return true
 }
 
-/** the roof's underside over a point on plan (world) — the highest face
+/** the roofs' underside over a point on plan (world) — the highest face
  * over it — or null where there's no roof */
-const roofAt = (roof: Roof, p: P2): number | null => {
+const roofAt = (roofs: Roof[], p: P2): number | null => {
   let z: number | null = null
-  for (const f of roof.faces) if (inConvex(f.poly, p)) z = Math.max(z ?? -Infinity, zAt(f.plane, p))
+  for (const r of roofs) for (const f of r.faces) if (inConvex(f.poly, p)) z = Math.max(z ?? -Infinity, zAt(f.plane, p))
   return z
 }
 
-/** a wall's top, along the wall from a to b, traced off the roof */
-function topFromRoof(roof: Roof, a: P2, b: P2, eaves: number): WallEdge {
+/** where a wall line (a → b) crosses the edges of the roofs' faces, mm along it */
+const roofBends = (roofs: Roof[], a: P2, b: P2): number[] => {
   const len = Math.hypot(b.x - a.x, b.y - a.y)
-  const at = (x: number): P2 => ({ x: a.x + ((b.x - a.x) * x) / len, y: a.y + ((b.y - a.y) * x) / len })
-  // every place the roof can bend over the wall: where the wall line
-  // crosses a face's edge, and its ends
-  const xs = new Set<number>([0, len])
   const d = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
-  for (const f of roof.faces)
-    f.poly.forEach((p, i) => {
-      const q = f.poly[(i + 1) % f.poly.length]
-      const e = { x: q.x - p.x, y: q.y - p.y }
-      const den = d.x * e.y - d.y * e.x
-      if (Math.abs(den) < 1e-9) return
-      const t = ((p.x - a.x) * e.y - (p.y - a.y) * e.x) / den
-      const u = ((p.x - a.x) * d.y - (p.y - a.y) * d.x) / den
-      if (t > 1 && t < len - 1 && u >= -1e-6 && u <= 1 + 1e-6) xs.add(Math.round(t))
-    })
-  const pts = [...xs]
-    .sort((p, q) => p - q)
-    .map((x) => ({ x, y: Math.round(Math.max(eaves, roofAt(roof, at(x)) ?? eaves)) }))
-  // keep the bends only
+  const out: number[] = []
+  for (const r of roofs)
+    for (const f of r.faces)
+      f.poly.forEach((p, i) => {
+        const q = f.poly[(i + 1) % f.poly.length]
+        const e = { x: q.x - p.x, y: q.y - p.y }
+        const den = d.x * e.y - d.y * e.x
+        if (Math.abs(den) < 1e-9) return
+        const t = ((p.x - a.x) * e.y - (p.y - a.y) * e.x) / den
+        const u = ((p.x - a.x) * d.y - (p.y - a.y) * d.x) / den
+        if (t > 1 && t < len - 1 && u >= -1e-6 && u <= 1 + 1e-6) out.push(t)
+      })
+  return out
+}
+
+/** an edge along a wall from height samples: keep the bends only */
+function edgeFrom(samples: { x: number; y: number }[]): WallEdge {
+  // (one sample per place: a ridge is met by both its faces, and a doubled
+  // point would hide the bend it's on)
+  const pts = [...samples]
+    .sort((p, q) => p.x - q.x)
+    .map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }))
+    .filter((p, i, all) => i === 0 || p.x !== all[i - 1].x)
   const kept = pts.filter((p, i) => {
     if (i === 0 || i === pts.length - 1) return true
     const a0 = pts[i - 1]
     const b0 = pts[i + 1]
-    const expect = a0.y + ((b0.y - a0.y) * (p.x - a0.x)) / (b0.x - a0.x || 1)
+    if (b0.x === a0.x) return true
+    const expect = a0.y + ((b0.y - a0.y) * (p.x - a0.x)) / (b0.x - a0.x)
     return Math.abs(expect - p.y) > 2
   })
-  return {
-    left: kept[0].y,
-    right: kept[kept.length - 1].y,
-    breaks: kept.slice(1, -1).map((p, i) => ({ id: `r${i}`, x: p.x, y: p.y })),
+  // (a sheer step needs two points a hair apart)
+  const out = kept.filter((p, i) => i === 0 || p.x !== kept[i - 1].x || p.y !== kept[i - 1].y)
+  return { left: out[0].y, right: out[out.length - 1].y, breaks: out.slice(1, -1).map((p, i) => ({ id: `e${i}`, x: p.x, y: p.y })) }
+}
+
+/** a wall's top along it, off the roofs over it (eaves where there's
+ * none, and wherever `held` says the storey above stands on it) */
+function topFromRoofs(roofs: Roof[], a: P2, b: P2, eaves: number, held?: { at: (p: P2, a: P2, b: P2) => boolean; corners: P2[] }): WallEdge {
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  const at = (x: number): P2 => ({ x: a.x + ((b.x - a.x) * x) / len, y: a.y + ((b.y - a.y) * x) / len })
+  // where it can change: the roofs' bends, and the storey above's corners
+  // along it — either side of each too (a roof can start part way along)
+  const cuts = [...roofBends(roofs, a, b), ...(held?.corners ?? []).map((p) => ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / len).filter((t) => t > 1 && t < len - 1)]
+  const xs = [0, len, ...cuts.flatMap((x) => [x - 10, x, x + 10])].filter((x) => x >= 0 && x <= len)
+  return edgeFrom(xs.map((x) => ({ x, y: held?.at(at(x), a, b) ? eaves : Math.max(eaves, roofAt(roofs, at(x)) ?? eaves) })))
+}
+
+const onSegment = (p: P2, a: P2, b: P2, tol = 5) => {
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len)
+  if (t < -tol / len || t > 1 + tol / len) return false
+  return Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) / len < tol
+}
+
+/** a first-floor wall's bottom: where it stands flush over a ground-floor
+ * wall, the top of that wall; elsewhere, the lower roof under it (or the
+ * floor, where there's none) */
+function bottomOver(ground: P2[], lowerRoofs: Roof[], a: P2, b: P2, groundTop: number, floorZ: number): WallEdge {
+  const len = Math.hypot(b.x - a.x, b.y - a.y)
+  const at = (x: number): P2 => ({ x: a.x + ((b.x - a.x) * x) / len, y: a.y + ((b.y - a.y) * x) / len })
+  const flush = (x: number) => ground.some((g, i) => onSegment(at(x), g, ground[(i + 1) % ground.length]))
+  // the places it can change: ground corners along it, roof bends, its ends
+  const cuts = new Set<number>([0, len, ...roofBends(lowerRoofs, a, b)])
+  for (const g of ground) {
+    const t = ((g.x - a.x) * (b.x - a.x) + (g.y - a.y) * (b.y - a.y)) / len
+    if (t > 1 && t < len - 1 && onSegment(g, a, b, 5)) cuts.add(t)
   }
+  const xs = [...cuts].sort((p, q) => p - q)
+  const height = (x: number, mid: number) => (flush(mid) ? groundTop : Math.max(floorZ, roofAt(lowerRoofs, at(x)) ?? floorZ))
+  const samples: { x: number; y: number }[] = []
+  for (let k = 0; k + 1 < xs.length; k++) {
+    const mid = (xs[k] + xs[k + 1]) / 2
+    samples.push({ x: k === 0 ? xs[k] : xs[k] + 1, y: height(xs[k] + (k === 0 ? 0 : 1), mid) })
+    samples.push({ x: k + 2 === xs.length ? xs[k + 1] : xs[k + 1] - 1, y: height(xs[k + 1] - (k + 2 === xs.length ? 0 : 1), mid) })
+  }
+  return edgeFrom(samples)
 }
 
-export interface Cladding {
-  project: WeatherboardProject
-  roof: Roof | null
+const flat = (y: number): WallEdge => ({ left: y, right: y, breaks: [] })
+
+interface StoreyWalls {
+  outline: P2[]
+  walls: Wall[]
+  /** wall ids in the order round the storey */
+  layout: HouseLayout
+  byFace: Map<Face, Wall[]>
 }
 
-/** The weatherboard project for the house as it stands (no openings yet). */
-export function houseCladding(house: HouseProject, graph: FloorGraph): Cladding | null {
-  const outline = simplify(graph.outline)
-  if (outline.length < 3) return null
-  const H = house.settings.studHeightMm
+/** a storey's walls: one per side of its outline, ids `${prefix}${side}` */
+function storeyWalls(outline: P2[], graph: FloorGraph, prefix: string, bottom: number, top: number, suffix: string): StoreyWalls {
   const n = outline.length
-  // which way each corner turns, going round with the outside on the right
   const sides = footprintSides({ points: outline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: [] })
   const order = sides.map((s) => s.index)
   const turnAfter = new Map<number, number>()
   sides.forEach((s, k) => {
     const t = sides[(k + 1) % sides.length]
-    const cross = (s.b.x - s.a.x) * (t.b.y - t.a.y) - (s.b.y - s.a.y) * (t.b.x - t.a.x)
-    turnAfter.set(s.index, cross)
+    turnAfter.set(s.index, (s.b.x - s.a.x) * (t.b.y - t.a.y) - (s.b.y - s.a.y) * (t.b.x - t.a.x))
   })
   /** the room just inside a side, to name its wall after */
-  const roomBehind = (i: number): string | null => {
+  const roomBehind = (i: number, k: number): string | null => {
     const a = outline[i]
     const b = outline[(i + 1) % n]
-    const s = sides.find((x) => x.index === i)!
-    const o = outwardOf(s)
-    const mid: Pt = { x: (a.x + b.x) / 2 - o.x * 300, y: (a.y + b.y) / 2 + o.y * 300 }
-    const r = graph.rooms.find((rm) => rm.cells.some((c) => mid.x >= c.x && mid.x <= c.x + c.w && mid.y >= c.y && mid.y <= c.y + c.h))
-    return r?.name ?? null
+    const o = outwardOf(sides[k])
+    const mid = { x: (a.x + b.x) / 2 - o.x * 300, y: (a.y + b.y) / 2 + o.y * 300 }
+    return graph.rooms.find((rm) => rm.cells.some((c) => mid.x >= c.x && mid.x <= c.x + c.w && mid.y >= c.y && mid.y <= c.y + c.h))?.name ?? null
   }
-
-  const flat = (y: number): WallEdge => ({ left: y, right: y, breaks: [] })
+  const byFace = new Map<Face, Wall[]>()
   const walls: Wall[] = order.map((i, k) => {
     const a = outline[i]
     const b = outline[(i + 1) % n]
     const prev = order[(k - 1 + order.length) % order.length]
-    return {
-      id: `hs${i}`,
-      name: "",
+    const face = compassOf(outwardOf(sides[k]))
+    const w: Wall = {
+      id: `${prefix}${i}`,
+      name: `${roomBehind(i, k) ?? `${face} wall`}${suffix}`,
       lengthMm: Math.round(Math.hypot(b.x - a.x, b.y - a.y)),
-      top: flat(H),
-      bottom: flat(0),
+      top: flat(top),
+      bottom: flat(bottom),
       openings: [],
       // an outside corner gets a facing on each wall; an inside one a
       // scriber, on the wall before it
@@ -129,18 +178,114 @@ export function houseCladding(house: HouseProject, graph: FloorGraph): Cladding 
       rightEnd: (turnAfter.get(i) ?? 1) > 0 ? "externalFacing" : "internalScriber",
       coverMm: null,
     }
-  })
-  // elevations by the way each wall faces, walls in order left to right
-  const byFace = new Map<string, Wall[]>()
-  order.forEach((i, k) => {
-    const face = compassOf(outwardOf(sides[k]))
-    const w = walls[k]
     byFace.set(face, [...(byFace.get(face) ?? []), w])
-    const room = roomBehind(i)
-    w.name = room ? `${room}` : `${face} wall`
+    return w
   })
-  const elevations: Elevation[] = COMPASS.filter((c) => byFace.has(c)).map((c) => {
-    const ws = byFace.get(c)!
+  // each face's walls left to right: the way round, starting after a gap
+  for (const [face, ws] of byFace) {
+    const idx = (w: Wall) => order.indexOf(Number(w.id.slice(prefix.length)))
+    ws.sort((p, q) => idx(p) - idx(q))
+    const ids = ws.map(idx)
+    const gap = ids.findIndex((v, k) => k > 0 && v !== ids[k - 1] + 1)
+    if (gap > 0 && ids[0] === 0 && ids[ids.length - 1] === order.length - 1) byFace.set(face, [...ws.slice(gap), ...ws.slice(0, gap)])
+  }
+  const layout = houseLayout({
+    settings: WB_DEFAULTS,
+    elevations: [{ id: "x", name: "x", walls }],
+    plan: { method: "footprint", chain: { order: [], steps: {} }, footprint: { points: outline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: outline.map((_, i) => `${prefix}${i}`) } },
+  })
+  return { outline, walls, layout, byFace }
+}
+
+export interface Cladding {
+  project: WeatherboardProject
+  /** the main roof, over the top storey */
+  roof: Roof | null
+  /** with a first floor: the roofs over the ground floor it doesn't cover */
+  lowerRoofs: Roof[]
+  ground: HouseLayout
+  upper: HouseLayout | null
+  /** the first floor's floor level (z) */
+  upperFloorZ: number
+  walls: Map<string, Wall>
+}
+
+/** The weatherboard project for the house as it stands (no openings yet). */
+export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph: FloorGraph | null = null): Cladding | null {
+  const groundOutline = simplify(graph.outline)
+  if (groundOutline.length < 3) return null
+  const st = house.settings
+  const H0 = st.studHeightMm
+  const upperOutline = house.upper && upperGraph ? simplify(upperGraph.outline) : []
+  const twoStorey = upperOutline.length >= 3
+  const floorZ = H0 + st.floorDepthMm
+  const top = twoStorey ? floorZ + (house.upper?.studHeightMm ?? H0) : H0
+
+  const g = storeyWalls(groundOutline, graph, "hs", 0, H0, "")
+  const u = twoStorey ? storeyWalls(upperOutline, upperGraph!, "us", floorZ, top, " (upstairs)") : null
+  const walls = new Map([...g.walls, ...(u?.walls ?? [])].map((w) => [w.id, w]))
+
+  // the main roof over the top storey: built once to trace the walls' tops
+  // off, then again so it knows the gable walls are peaked now
+  const topStorey = u ?? g
+  const topWalls = new Map(topStorey.walls.map((w) => [w.id, w]))
+  let roof = buildRoof(topStorey.layout, topWalls, st.roof)
+  if (roof) {
+    for (const s of topStorey.layout.sides) {
+      const w = s.wallId ? topWalls.get(s.wallId) : undefined
+      if (w) w.top = topFromRoofs([roof], s.a, s.b, top)
+    }
+    roof = buildRoof(topStorey.layout, topWalls, st.roof)
+  }
+
+  // the lower roofs, over what the first floor doesn't cover, up against it
+  const lowerRoofs: Roof[] = []
+  if (u) {
+    const toWorld = (p: P2): P2 => ({ x: p.x, y: -p.y })
+    const abut = u.layout.sides.map((s) => ({ a: s.a, b: s.b }))
+    const lowerPlan: RoofPlan = { ...st.roof, type: st.lowerRoof.type, pitchDeg: st.lowerRoof.pitchDeg }
+    for (const region of uncovered(groundOutline, upperOutline).regions) {
+      // (stand-in walls along it at the ground floor's eaves: all the roof reads off them)
+      const ws: Wall[] = region.map((p, i) => {
+        const q = region[(i + 1) % region.length]
+        return { id: `lr${i}`, name: "", lengthMm: Math.round(Math.hypot(q.x - p.x, q.y - p.y)), top: flat(H0), bottom: flat(0), openings: [], leftEnd: "none", rightEnd: "none", coverMm: null }
+      })
+      const layout = houseLayout({
+        settings: WB_DEFAULTS,
+        elevations: [{ id: "x", name: "x", walls: ws }],
+        plan: { method: "footprint", chain: { order: [], steps: {} }, footprint: { points: region, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: ws.map((w) => w.id) } },
+      })
+      const r = buildRoof(layout, new Map(ws.map((w) => [w.id, w])), lowerPlan, { abut })
+      if (r) lowerRoofs.push(r)
+    }
+    // the ground floor's walls: their tops off the lower roof (eaves
+    // elsewhere) — bar those standing under the storey above
+    const upperWorld = upperOutline.map(toWorld)
+    // (a wall's held where it runs along one of the storey above's walls,
+    // not where it only meets one end on)
+    const parallel = (a: P2, b: P2, c: P2, d: P2) => Math.abs((b.x - a.x) * (d.y - c.y) - (b.y - a.y) * (d.x - c.x)) < 1e-3 * Math.hypot(b.x - a.x, b.y - a.y) * Math.hypot(d.x - c.x, d.y - c.y)
+    const held = {
+      at: (p: P2, a: P2, b: P2) =>
+        upperWorld.some((q, i) => {
+          const r = upperWorld[(i + 1) % upperWorld.length]
+          return parallel(a, b, q, r) && onSegment(p, q, r)
+        }),
+      corners: upperWorld,
+    }
+    for (const s of g.layout.sides) {
+      const w = s.wallId ? walls.get(s.wallId) : undefined
+      if (w) w.top = topFromRoofs(lowerRoofs, s.a, s.b, H0, held)
+    }
+    // the first floor's: their bottoms on the wall below, or the lower roof
+    const groundWorld = groundOutline.map(toWorld)
+    for (const s of u.layout.sides) {
+      const w = s.wallId ? walls.get(s.wallId) : undefined
+      if (w) w.bottom = bottomOver(groundWorld, lowerRoofs, s.a, s.b, H0, floorZ)
+    }
+  }
+
+  const elevations: Elevation[] = COMPASS.filter((c) => g.byFace.has(c) || u?.byFace.has(c)).map((c) => {
+    const ws = [...(g.byFace.get(c) ?? []), ...(u?.byFace.get(c) ?? [])]
     // the same room behind two walls on one face: number them
     const counts = new Map<string, number>()
     for (const w of ws) counts.set(w.name, (counts.get(w.name) ?? 0) + 1)
@@ -153,16 +298,6 @@ export function houseCladding(house: HouseProject, graph: FloorGraph): Cladding 
       }
     return { id: `house-${c.toLowerCase()}`, name: c, walls: ws }
   })
-  // (sides go round from the first stored one: put each face's walls in
-  // order left to right, which is the way round, starting after a corner)
-  for (const e of elevations) {
-    const idx = (w: Wall) => order.indexOf(Number(w.id.slice(2)))
-    e.walls.sort((p, q) => idx(p) - idx(q))
-    // a face whose run wraps past the first side: rotate it to start after the gap
-    const ids = e.walls.map(idx)
-    const gap = ids.findIndex((v, k) => k > 0 && v !== ids[k - 1] + 1)
-    if (gap > 0 && ids[0] === 0 && ids[ids.length - 1] === order.length - 1) e.walls = [...e.walls.slice(gap), ...e.walls.slice(0, gap)]
-  }
 
   const project: WeatherboardProject = {
     settings: WB_DEFAULTS,
@@ -170,21 +305,12 @@ export function houseCladding(house: HouseProject, graph: FloorGraph): Cladding 
     plan: {
       method: "footprint",
       chain: { order: [], steps: {} },
-      footprint: { points: outline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: outline.map((_, i) => `hs${i}`) },
-      roof: house.settings.roof,
+      footprint: { points: groundOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: groundOutline.map((_, i) => `hs${i}`) },
+      // (the weatherboards' 3D view is one storey: two storeys go without its roof)
+      roof: twoStorey ? { ...st.roof, type: "none" } : st.roof,
     },
   }
-  const layout = houseLayout(project)
-  const byId = new Map(walls.map((w) => [w.id, w]))
-  const first = buildRoof(layout, byId, house.settings.roof)
-  if (!first) return { project, roof: null }
-  for (const s of layout.sides) {
-    const w = s.wallId ? byId.get(s.wallId) : undefined
-    if (w) w.top = topFromRoof(first, s.a, s.b, H)
-  }
-  // again, now the gable walls are peaked (so it doesn't fill in gables
-  // they already reach)
-  return { project, roof: buildRoof(layout, byId, house.settings.roof) }
+  return { project, roof, lowerRoofs, ground: g.layout, upper: u?.layout ?? null, upperFloorZ: floorZ, walls }
 }
 
 /** The house's cladding folded into the linked weatherboard project as it

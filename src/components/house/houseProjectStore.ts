@@ -11,7 +11,7 @@ import { AdminProjectRow, subscribeToAllOf } from "../projects/adminProjects"
 import { floorGraph } from "./floorPlan"
 import { houseCladding } from "./houseCladding"
 import { houseFromData, HouseProject, ROOF_FRAME_LABELS } from "./houseTypes"
-import { analyseStructure } from "./structure"
+import { analyseHouse, Structure } from "./structure"
 
 export type { ProjectLocation }
 
@@ -19,6 +19,8 @@ export type { ProjectLocation }
 export interface HouseSummary {
   areaM2: number
   rooms: number
+  /** absent on houses saved before storeys */
+  storeys?: number
   roof: string
   frame: string
   loadBearing: number
@@ -27,15 +29,19 @@ export interface HouseSummary {
 
 export const summariseHouse = (house: HouseProject): HouseSummary => {
   const graph = floorGraph(house.floor)
-  const cladding = houseCladding(house, graph)
-  const st = analyseStructure(graph, house.settings, cladding?.roof ?? null)
+  const upperGraph = house.upper ? floorGraph(house.upper.plan) : null
+  const cladding = houseCladding(house, graph, upperGraph)
+  const st = analyseHouse(graph, upperGraph, house.settings, cladding?.roof ?? null, cladding?.lowerRoofs ?? [])
+  const lb = (s: Structure | null) => (s ? s.outside.filter((v) => v.loadBearing).length + [...s.inside.values()].filter((v) => v.loadBearing).length : 0)
+  const graphs = upperGraph ? [graph, upperGraph] : [graph]
   return {
-    areaM2: Math.round(graph.rooms.reduce((s, r) => s + r.areaM2, 0) * 10) / 10,
-    rooms: graph.rooms.length,
+    areaM2: Math.round(graphs.flatMap((g) => g.rooms).reduce((s, r) => s + r.areaM2, 0) * 10) / 10,
+    rooms: graphs.reduce((s, g) => s + g.rooms.length, 0),
+    storeys: graphs.length,
     roof: house.settings.roof.type,
     frame: ROOF_FRAME_LABELS[house.settings.roofFrame],
-    loadBearing: st.outside.filter((v) => v.loadBearing).length + [...st.inside.values()].filter((v) => v.loadBearing).length,
-    warnings: st.warnings.length + graph.warnings.length,
+    loadBearing: lb(st.ground) + lb(st.upper),
+    warnings: st.ground.warnings.length + (st.upper?.warnings.length ?? 0) + graphs.reduce((s, g) => s + g.warnings.length, 0),
   }
 }
 
