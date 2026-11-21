@@ -10,6 +10,7 @@ import EditorHeader from "@/components/weatherboards/editorHeader"
 import { StairInput } from "@/components/stairs/stairs"
 import { copyStairToPublic, deleteStairProject, loadStairProject, moveStairToPublic, ProjectLocation, saveStairProject } from "@/components/stairs/stairProjectStore"
 import MakePublicButton from "@/components/projects/makePublicButton"
+import CopyLinkButton from "@/components/projects/copyLinkButton"
 import StairsPage from "../stairsPage"
 
 const SAVE_DELAY_MS = 1000
@@ -189,7 +190,9 @@ const StairProjectEditor = () => {
                   Delete stair
                 </Button>
               </>
-            ) : null
+            ) : (
+              <CopyLinkButton />
+            )
           }
         />
       }

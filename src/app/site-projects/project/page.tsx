@@ -32,6 +32,7 @@ import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
 import type { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
 import { copySiteToPublic, deleteSiteProject, loadSiteProject, moveSiteToPublic, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
 import MakePublicButton from "@/components/projects/makePublicButton"
+import CopyLinkButton from "@/components/projects/copyLinkButton"
 import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../retaining-walls/retainingWallEditor"
 import StairsCard, { StairsPlanOverlay, wallHostInfo } from "../stairsCard"
 import { stairCalculatorHref } from "../stairLink"
@@ -418,6 +419,7 @@ const SiteProjectEditor = () => {
             }}
             badge="Wall on a site"
             status={status}
+            actions={location.kind === "public" ? <CopyLinkButton /> : null}
           />
         }
       />
@@ -481,7 +483,9 @@ const SiteProjectEditor = () => {
                 Delete project
               </Button>
             </>
-          ) : null
+          ) : (
+            <CopyLinkButton url={siteHref} />
+          )
         }
       />
       <SitePlan

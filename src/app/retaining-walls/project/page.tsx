@@ -23,6 +23,7 @@ import { activityProject, logWallActivity, logWallMilestone } from "@/components
 import type { WallActivity } from "@/components/retainingWall/wallHistory"
 import RetainingWallEditor from "../retainingWallEditor"
 import MakePublicButton from "@/components/projects/makePublicButton"
+import CopyLinkButton from "@/components/projects/copyLinkButton"
 
 const SAVE_DELAY_MS = 1000
 
@@ -85,7 +86,6 @@ const ProjectEditor = () => {
   const [failed, setFailed] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState(false)
-  const [copied, setCopied] = useState<"yes" | "failed" | null>(null)
 
   // latest values for the debounced / unmount save to read
   const latest = useRef<{ location: ProjectLocation | null; wall: WallProject | null; name: string }>({
@@ -221,33 +221,6 @@ const ProjectEditor = () => {
   }
 
   /** Puts this project's link on the clipboard, for sharing. */
-  const copyLink = async () => {
-    const url = window.location.href
-    let ok = false
-    try {
-      await navigator.clipboard.writeText(url)
-      ok = true
-    } catch {
-      // older browsers, or a page not served over https: fall back to
-      // copying out of a throwaway text box
-      const box = document.createElement("textarea")
-      box.value = url
-      box.setAttribute("readonly", "")
-      box.style.position = "fixed"
-      box.style.opacity = "0"
-      document.body.appendChild(box)
-      box.select()
-      try {
-        ok = document.execCommand("copy")
-      } catch {
-        ok = false
-      }
-      document.body.removeChild(box)
-    }
-    setCopied(ok ? "yes" : "failed")
-    setTimeout(() => setCopied(null), 2500)
-  }
-
   /** A private copy of this project, as it is now, in the signed-in
    * person's own projects — then opens it. The original is left as it is. */
   const [copying, setCopying] = useState<"idle" | "busy" | "failed">("idle")
@@ -372,9 +345,7 @@ const ProjectEditor = () => {
               </>
             ) : (
               <>
-                <Button size="small" variant="secondary" onClick={copyLink}>
-                  {copied === "yes" ? "Link copied ✓" : copied === "failed" ? "Couldn't copy — use the address bar" : "Copy link"}
-                </Button>
+                <CopyLinkButton />
                 {copyButton}
               </>
             )

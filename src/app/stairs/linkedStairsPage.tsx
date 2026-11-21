@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/context/auth"
 import { StairInput } from "@/components/stairs/stairs"
 import { loadSiteProject, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
+import CopyLinkButton from "@/components/projects/copyLinkButton"
 import StairsPage from "./stairsPage"
 import StairProjectsPage from "./stairProjectsPage"
 import styles from "./stairsPage.module.scss"
@@ -133,6 +134,11 @@ const LinkedStairs: React.FC<{ projectId: string; stairId: string; owner: string
               {status === "failed" ? "Couldn't save — it'll try again on the next change" : status === "unsaved" ? "Unsaved changes…" : status === "saving" ? "Saving…" : "All changes saved"}
               {state.location.kind === "public" && " · a public project: anyone with the link can edit it"}
             </span>
+            {state.location.kind === "public" && (
+              <span style={{ display: "block", marginTop: "0.5rem" }}>
+                <CopyLinkButton />
+              </span>
+            )}
           </p>
         </div>
       }

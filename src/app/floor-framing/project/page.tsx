@@ -10,6 +10,7 @@ import EditorHeader from "@/components/weatherboards/editorHeader"
 import { FloorInput } from "@/components/floorFraming/floorData"
 import { copyFloorToPublic, deleteFloorProject, loadFloorProject, moveFloorToPublic, ProjectLocation, saveFloorProject } from "@/components/floorFraming/floorProjectStore"
 import MakePublicButton from "@/components/projects/makePublicButton"
+import CopyLinkButton from "@/components/projects/copyLinkButton"
 import FloorFramingPage from "../floorFramingPage"
 
 const SAVE_DELAY_MS = 1000
@@ -189,7 +190,9 @@ const FloorProjectEditor = () => {
                   Delete floor
                 </Button>
               </>
-            ) : null
+            ) : (
+              <CopyLinkButton />
+            )
           }
         />
       }
