@@ -158,7 +158,7 @@ const OpeningsEditor: React.FC<{
           <span className={o.auto ? styles.tagAuto : styles.tagPinned} title={o.auto ? "Auto-placed" : "Pinned where you put it"}>
             {o.auto ? "auto" : "pinned"}
           </span>
-          <OpeningFields opening={o} onChange={(next) => onChange(openings.map((p) => (p.id === o.id ? next : p)))} />
+          <OpeningFields opening={o} wallLength={wall.lengthMm} onChange={(next) => onChange(openings.map((p) => (p.id === o.id ? next : p)))} />
           <button
             type="button"
             className={styles.iconButton}

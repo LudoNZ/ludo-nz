@@ -7,7 +7,7 @@ import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
 import { loadProject, newProjectId, ProjectLocation, saveProject } from "@/components/weatherboards/projectStore"
-import type { RoofType, WeatherboardProject, WingSetting } from "@/components/weatherboards/types"
+import type { Opening, RoofType, WeatherboardProject, WingSetting } from "@/components/weatherboards/types"
 import { floorGraph, isSquare, roomsToOutline } from "./floorPlan"
 import { houseCladding, mergeCladding, splitCladdingEdit } from "./houseCladding"
 import WeatherboardEditor from "@/components/weatherboards/weatherboardEditor"
@@ -31,6 +31,7 @@ import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, MeasureChain, pa
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
 import { claddingFloorOf, insideTarget, outsideAt, outsideTarget, planJoinery, useJoineryEditor } from "./joineryEditor"
+import { joineryTypesOf } from "./joinery"
 import JoinerySettings from "./joinerySettings"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
@@ -1607,7 +1608,23 @@ const CladdingStep: React.FC<{
       {!cladding || !project ? (
         <p className={styles.muted}>The outside walls need a closed outline first — draw it in Floor plans.</p>
       ) : (
-        <WeatherboardEditor project={project} setProject={setProject} header={null} embedded />
+        <WeatherboardEditor
+          project={project}
+          setProject={setProject}
+          header={null}
+          embedded
+          openingTypeDefault={(o) => {
+            // (the house's own windows and doors carry their type)
+            const typeId = (o as Opening & { typeId?: string }).typeId
+            const type = typeId ? joineryTypesOf(house).find((t) => t.id === typeId) : undefined
+            if (!type) return undefined
+            return {
+              name: type.name,
+              place: type.place,
+              save: (place) => setHouse((h) => ({ ...h, joineryTypes: joineryTypesOf(h).map((t) => (t.id === type.id ? { ...t, place } : t)) })),
+            }
+          }}
+        />
       )}
 
       <h3>A weatherboard project of its own</h3>

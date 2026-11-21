@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { DEFAULT_JOINERY_TYPES, fitIn, freeGap, headsUsed, houseHeadOf, JoineryType, joineryTypesOf } from "./joinery"
 import JoineryModal, { JoineryDraft } from "./joineryModal"
+import { DEFAULT_PLACE, remeasure } from "../weatherboards/openingPlace"
 import { FloorPlan, HOUSE_JOINERY, HouseJoinery, HouseProject, newHouseId } from "./houseTypes"
 import type { Cladding } from "./houseCladding"
 import type { FloorGraph } from "./floorPlan"
@@ -120,7 +121,10 @@ export function useJoineryEditor(
     const t = open.target
     if (t.where === "outside") {
       const sill = d.kind === "door" ? t.floor : t.floor + d.head - d.height
-      const j: HouseJoinery = {
+      // measured the way it was (or its type's way, or the default), where it's gone
+      const was = d.id ? (house.joinery ?? []).find((x) => x.id === d.id) : undefined
+      const typePlace = types.find((x) => x.id === d.typeId)?.place
+      const j0: HouseJoinery = {
         id: d.id ?? `${HOUSE_JOINERY}${newHouseId()}`,
         wallId: t.wallId,
         ...(d.typeId ? { typeId: d.typeId } : {}),
@@ -130,7 +134,9 @@ export function useJoineryEditor(
         height: d.height,
         ...(d.code.trim() ? { code: d.code.trim() } : {}),
         ...(d.name.trim() ? { name: d.name.trim() } : {}),
+        ...(was?.place ? { place: was.place } : {}),
       }
+      const j = { ...j0, ...remeasure(j0, t.length, typePlace ?? DEFAULT_PLACE) } as HouseJoinery
       setHouse((h) => ({ ...h, joinery: d.id ? (h.joinery ?? []).map((x) => (x.id === d.id ? j : x)) : [...(h.joinery ?? []), j] }))
     } else {
       const door = { id: d.id ?? newHouseId(), wallId: t.lineId, ...(d.typeId ? { typeId: d.typeId } : {}), ...(d.name.trim() ? { name: d.name.trim() } : {}), atMm: d.x + d.width / 2, widthMm: d.width, heightMm: d.height }

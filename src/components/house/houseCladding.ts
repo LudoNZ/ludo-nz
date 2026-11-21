@@ -16,6 +16,7 @@
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
 import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
+import { held } from "../weatherboards/openingPlace"
 import { Elevation, Opening, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
 import { HOUSE_JOINERY, HouseJoinery, HouseProject } from "./houseTypes"
@@ -255,8 +256,10 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
   // the windows and doors drawn on them (as still fit)
   for (const j of house.joinery ?? []) {
     const w = walls.get(j.wallId)
-    if (!w || j.x < 0 || j.x + j.width > w.lengthMm + 1) continue
-    const o: Opening & { wallId?: string } = { ...j }
+    // (held where its locks say on the wall as it is now: from its right end, say)
+    const h = w ? held(j, w.lengthMm) : j
+    if (!w || h.x < -1 || h.x + h.width > w.lengthMm + 1) continue
+    const o: Opening & { wallId?: string } = { ...j, x: h.x, sill: h.sill }
     delete o.wallId
     w.openings.push(o)
   }

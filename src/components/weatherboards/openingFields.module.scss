@@ -78,3 +78,64 @@
     color: var(--background);
   }
 }
+
+// a measurement's label: what it's measured from, and its lock
+.placeLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.placeSelect {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lock {
+  display: inline-flex;
+  padding: 0.1rem;
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.35;
+  cursor: pointer;
+
+  svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    fill: none;
+  }
+
+  &:hover,
+  &:focus-visible {
+    opacity: 0.8;
+  }
+}
+
+.lockOn {
+  opacity: 0.6;
+
+  svg rect {
+    fill: currentColor;
+  }
+}
+
+.typeDefault {
+  align-self: flex-end;
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.76rem;
+  text-decoration: underline;
+  cursor: pointer;
+}

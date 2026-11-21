@@ -15,6 +15,7 @@ import { houseLayouts } from "./housePlan"
 import WallMinimap from "./wallMinimap"
 import MiniElevations from "./miniElevations"
 import OpeningFields from "./openingFields"
+import { held, remeasure } from "./openingPlace"
 import QuickAddWall from "./quickAddWall"
 import { defaultQuickForm, QuickLinkField, QuickWallForm, relayoutAutoOpenings } from "./quickWall"
 import { applyQuickForm, detachQuick, formFromWall } from "./quickEdit"
@@ -36,7 +37,7 @@ import {
   unlinkMeasure,
 } from "./measures"
 import { DEFAULT_PROJECT, ELEVATION_NAMES, STOCK_LENGTHS_MM, newBlankProject, newElevation, newId } from "./data"
-import { Elevation, Opening, Wall, WeatherboardProject, WeatherboardSettings } from "./types"
+import { Elevation, Opening, OpeningPlace, Wall, WeatherboardProject, WeatherboardSettings } from "./types"
 import styles from "./weatherboardEditor.module.scss"
 
 const NEW_WALL_TAB = "__new__"
@@ -61,7 +62,9 @@ const WeatherboardEditor: React.FC<{
    * Cladding step): no adding or removing elevations, no Plan & 3D tab, and
    * its own intro instead of this one's */
   embedded?: boolean
-}> = ({ project, setProject, header, embedded = false }) => {
+  /** a window or door's type, where it has one (the House's joinery): its name, and what it's measured from by default, to set */
+  openingTypeDefault?: (o: Opening) => { name: string; place: Omit<OpeningPlace, "xMm" | "zMm"> | undefined; save: (place: Omit<OpeningPlace, "xMm" | "zMm">) => void } | undefined
+}> = ({ project, setProject, header, embedded = false, openingTypeDefault }) => {
   const [activeElevationId, setActiveElevationId] = useState<string | null>(null)
   // which wall sub-tab each elevation has open: a wall id, or NEW_WALL_TAB
   const [wallTabs, setWallTabs] = useState<Record<string, string>>({})
@@ -233,7 +236,8 @@ const WeatherboardEditor: React.FC<{
       const reshaped =
         before.lengthMm !== wall.lengthMm ||
         JSON.stringify([before.top, before.bottom, before.corners]) !== JSON.stringify([wall.top, wall.bottom, wall.corners])
-      const after = reshaped ? relayoutAutoOpenings(wall) : wall
+      // (reshaped: the ones placed by hand held where their locks say, the rest laid out again)
+      const after = reshaped ? relayoutAutoOpenings({ ...wall, openings: wall.openings.map((o) => (o.auto ? o : held(o, wall.lengthMm))) }) : wall
       const next = {
         ...p,
         elevations: p.elevations.map((e) =>
@@ -313,9 +317,9 @@ const WeatherboardEditor: React.FC<{
     updateElevation(elevationId, (e) => ({
       ...e,
       walls: e.walls.map((w) =>
-        // dragged into place by hand — pinned from now on
+        // dragged into place by hand — pinned from now on, and measured again where it's gone
         w.id === wallId
-          ? { ...w, openings: (w.openings ?? []).map((o) => (o.id === opening.id ? { ...opening, auto: false } : o)) }
+          ? { ...w, openings: (w.openings ?? []).map((o) => (o.id === opening.id ? { ...remeasure(opening, w.lengthMm, openingTypeDefault?.(opening)?.place), auto: false } : o)) }
           : w,
       ),
     }))
@@ -618,7 +622,12 @@ const WeatherboardEditor: React.FC<{
                         ×
                       </button>
                     </div>
-                    <OpeningFields opening={o} onChange={(next) => updateOpening(activeElevation.id, wall.id, next)} />
+                    <OpeningFields
+                      opening={o}
+                      wallLength={wall.lengthMm}
+                      typeDefault={openingTypeDefault?.(o)}
+                      onChange={(next) => updateOpening(activeElevation.id, wall.id, next)}
+                    />
                   </div>
                 )
               })()}

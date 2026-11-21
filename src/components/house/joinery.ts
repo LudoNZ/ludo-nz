@@ -3,6 +3,7 @@
  * head heights already in use to line up with. mm. Pure. */
 
 import type { HouseProject } from "./houseTypes"
+import type { OpeningPlace } from "../weatherboards/types"
 
 export interface JoineryType {
   id: string
@@ -14,6 +15,8 @@ export interface JoineryType {
   height: number
   /** a window's head off the floor; unset: the house's head height */
   headMm?: number
+  /** what a unit of this type is measured from, and what's held, to start with (unset: from the left, by its head, both held) */
+  place?: Omit<OpeningPlace, "xMm" | "zMm">
 }
 
 /** the usual NZ sizes to start from: each can be changed, and more added */

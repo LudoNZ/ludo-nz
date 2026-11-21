@@ -37,6 +37,21 @@ export interface Opening {
   /** the joinery schedule's ID ("W01") and a name ("Kitchen window") */
   code?: string
   name?: string
+  /** what its place is measured from, and which of that's held (see openingPlace.ts) */
+  place?: OpeningPlace
+}
+
+export interface OpeningPlace {
+  /** along: its left edge from the left end, its right edge from the right end, or its middle off the wall's */
+  x: "left" | "right" | "centre"
+  /** up: to its sill, or its head */
+  z: "sill" | "head"
+  /** held as the wall or the unit changes */
+  lockX: boolean
+  lockZ: boolean
+  /** the measurements held, mm */
+  xMm: number
+  zMm: number
 }
 
 /** The trim parts a window or door brings: facings (two jambs and a
