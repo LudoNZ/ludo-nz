@@ -234,11 +234,21 @@ interface Wing extends Rect {
   /** off a gable end: the roof it's against (its index), which always wins
    * where the two overlap — this one's trimmed, not that */
   against?: number
-  /** off a gable end, raised to cross it: the roof it's against (its index),
-   * which this one's `front` plane covers — that's trimmed wherever it'd
-   * poke up through it (no little gable of it sticking out) */
+  /** off a gable end, raised to cross it: the roof it's against (its index)
+   * and this one's `front` plane (rising from its eaves to its ridge) */
   over?: number
   front?: number
+  /** that roof's planes that are gone in front of this one's ridge (this
+   * one's front slope is the roof there, out to that roof's eaves lines) */
+  covers?: { plane: number; rect: Rect }[]
+  /** behind this one's ridge, on plan (where those planes still are) */
+  behind?: { onU: boolean; at: number; sign: number }
+  /** ends flush with that roof's eaves side: hipped, the hip carrying that
+   * roof's slope on out to this one's eaves */
+  hipEnds?: Side[]
+  /** ends set in from that roof's eaves side: the overhang that brings the
+   * verge out to that roof's eaves line */
+  widen?: Partial<Record<Side, number>>
   /** sides run into the roof they join: no overhang, no gable end */
   buried: Set<Side>
 }
@@ -438,6 +448,27 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
             if (s === "u1") wing.u1 += run
             if (s === "v0") wing.v0 -= run
             if (s === "v1") wing.v1 += run
+            // its ends: flush with that roof's eaves side, hipped (that
+            // slope carried on out); set in from it, its verge brought out to
+            // that roof's eaves line — so its front slope is the roof from
+            // its ridge out, the whole width of that one
+            const [lo, hi, plo, phi] = across ? [rect.v0, rect.v1, parent.v0, parent.v1] : [rect.u0, rect.u1, parent.u0, parent.u1]
+            const [sLo, sHi]: Side[] = across ? ["v0", "v1"] : ["u0", "u1"]
+            wing.hipEnds = []
+            wing.widen = {}
+            if (Math.abs(lo - plo) < 5) wing.hipEnds.push(sLo)
+            else wing.widen[sLo] = lo - plo + r.eavesMm
+            if (Math.abs(hi - phi) < 5) wing.hipEnds.push(sHi)
+            else wing.widen[sHi] = phi - hi + r.eavesMm
+            const BIG = 1e6
+            const ridge = across ? (wing.u0 + wing.u1) / 2 : (wing.v0 + wing.v1) / 2
+            const [f0, f1] = s.endsWith("0") ? [ridge, BIG] : [-BIG, ridge]
+            const strip: Rect = across ? { u0: f0, u1: f1, v0: -BIG, v1: BIG } : { u0: -BIG, u1: BIG, v0: f0, v1: f1 }
+            wing.covers = [
+              { plane: 0, rect: strip },
+              { plane: 1, rect: strip },
+            ]
+            wing.behind = { onU: across, at: ridge, sign: s.endsWith("0") ? 1 : -1 }
           } else {
             // falling back to a valley at the wall, under that gable
             wing.against = index
@@ -509,10 +540,19 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           ? // its high side at the eaves height, falling away from it
             [w.risesToHigh ? across(lt, H - a1 * lt) : across(-lt, H + a0 * lt)]
           : [w.risesToHigh ? across(t, H - a0 * t) : across(-t, H + a1 * t)]
-        : [across(t, H - a0 * t), across(-t, H + a1 * t), ...(w.type === "hip" ? [along(t, H - b0 * t), along(-t, H + b1 * t)] : [])]
+        : [
+            across(t, H - a0 * t),
+            across(-t, H + a1 * t),
+            ...(w.type === "hip" ? [along(t, H - b0 * t), along(-t, H + b1 * t)] : []),
+            // (a gable's hipped ends)
+            ...(w.hipEnds ?? []).map((s) => (s.endsWith("0") ? along(t, H - b0 * t) : along(-t, H + b1 * t))),
+          ]
     const eaves = r.eavesMm
     const ends = w.type === "hip" ? r.eavesMm : r.vergeMm
-    const over = (s: Side) => (w.buried.has(s) ? 0 : (s[0] === "u") === w.alongU ? ends : eaves)
+    // (a roof raised to cross another, brought out to its eaves lines: its
+    // back runs on down to them too, under that roof bar where they jut out)
+    const raised = Object.keys(w.widen ?? {}).length > 0
+    const over = (s: Side) => (w.buried.has(s) ? (raised ? eaves : 0) : w.widen?.[s] ?? (w.hipEnds?.includes(s) ? eaves : (s[0] === "u") === w.alongU ? ends : eaves))
     const corners: P2[] = [
       { x: w.u0 - over("u0"), y: w.v0 - over("v0") },
       { x: w.u1 + over("u1"), y: w.v0 - over("v0") },
@@ -521,6 +561,15 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
     ].map(toWorld)
     return { w, planes, region: corners }
   })
+
+  /** a rectangle on the house's square, as a convex polygon on plan */
+  const rectPoly = (q: Rect): P2[] =>
+    [
+      { x: q.u0, y: q.v0 },
+      { x: q.u1, y: q.v0 },
+      { x: q.u1, y: q.v1 },
+      { x: q.u0, y: q.v1 },
+    ].map(toWorld)
 
   // ── each plane, cut to where it's the roof ──────────────────────────
   const faces: RoofFace[] = []
@@ -545,13 +594,17 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         const againstB = A.w.against === bi
         // and B's never trimmed by a roof that's against it
         if (B.w.against === ai) return
-        // raised to cross B: its front slope's never trimmed by B (B is, there)
-        if (A.w.over === bi && A.w.front === pi) return
+        // B raised to cross A: A's slopes that B's end is flush with are gone
+        // in front of B's ridge (out past B's verge, so none shows beside it)
+        if (B.w.over === ai)
+          for (const c of B.w.covers ?? []) if (c.plane === pi) pieces = pieces.flatMap((pc) => subtract(pc, halvesOf(rectPoly(c.rect))))
         B.planes.forEach((Q, qi) => {
-          // B's front slope, crossing A: A's trimmed where it'd poke up
-          // through it, as well as where it runs in under it
-          const pokes = againstB || (B.w.over === ai && B.w.front === qi)
+          // raised to cross B: B's slopes it covers only trim it behind its
+          // ridge (valleys); in front, they're gone
+          const bh = A.w.over === bi && (A.w.covers ?? []).some((c) => c.plane === qi) ? A.w.behind : undefined
+          const pokes = againstB
           const hidden: Half[] = [
+            ...(bh ? [bh.onU ? { a: bh.sign * cos, b: bh.sign * sin, c: -bh.sign * bh.at } : { a: -bh.sign * sin, b: bh.sign * cos, c: -bh.sign * bh.at }] : []),
             ...halvesOf(B.region),
             // where Q is B's surface
             ...B.planes.filter((_, k) => k !== qi).map((R) => ({ a: Q.a - R.a, b: Q.b - R.b, c: Q.c - R.c })),
@@ -581,12 +634,18 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
       for (const s of ends) {
         // run into another roof: nothing to fill
         if (w.buried.has(s)) continue
+        // hipped: no gable
+        if (w.hipEnds?.includes(s)) continue
         const k = s[0] === "u" ? "x" : "y"
         const o = k === "x" ? "y" : "x"
+        // the end's line: its wall's, or brought out to the wall line of the
+        // roof it crosses (its verge out at that roof's eaves)
+        const out = w.widen?.[s]
+        const at = out === undefined ? w[s] : w[s] + (s.endsWith("0") ? -1 : 1) * (out - r.eavesMm)
         // the walls along this end: each one's top, along it (a gable wall
         // reaches up into the gable, an eaves wall stops at the eaves)
         const along = shapes
-          .filter((x) => Math.abs(x.a[k] - w[s]) < 30 && Math.abs(x.b[k] - w[s]) < 30 && Math.abs(x.b[o] - x.a[o]) > 1)
+          .filter((x) => Math.abs(x.a[k] - at) < 30 && Math.abs(x.b[k] - at) < 30 && Math.abs(x.b[o] - x.a[o]) > 1)
           .map((x) => {
             const wall = walls.get(x.s.wallId!)!
             const len = x.b[o] - x.a[o]
@@ -607,7 +666,6 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         }
         const gaps: [number, number][] = [[lo, hi]]
         const inward = s.endsWith("0") ? 1 : -1
-        const at = w[s]
         const pt = (along: number, z: number): [number, number, number] => {
           const p = toWorld(w.alongU ? { x: at, y: along } : { x: along, y: at })
           return [p.x, p.y, z]
@@ -622,8 +680,14 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           let z = Math.max(H, wallTop(v))
           for (const B of others) {
             const wp = toWorld(p)
-            // under a roof raised to cross this one: buried, nothing shows
-            if (B.w.over === wings.indexOf(w) && halvesOf(B.region).every((h) => h.a * wp.x + h.b * wp.y + h.c <= 1)) return Infinity
+            // where a roof raised to cross this one takes its slope away:
+            // buried, nothing shows
+            if (B.w.over === wings.indexOf(w)) {
+              const own = built[wings.indexOf(w)].planes
+              const surface = own.reduce((m, Q, k) => (zAt(Q, wp) < zAt(own[m], wp) ? k : m), 0)
+              const gone = (B.w.covers ?? []).some((c) => c.plane === surface && p.x >= c.rect.u0 && p.x <= c.rect.u1 && p.y >= c.rect.v0 && p.y <= c.rect.v1)
+              if (gone) return Infinity
+            }
             if (p.x < B.w.u0 - 0.25 || p.x > B.w.u1 + 0.25 || p.y < B.w.v0 - 0.25 || p.y > B.w.v1 + 0.25) continue
             z = Math.max(z, Math.min(...B.planes.map((Q) => zAt(Q, wp))))
           }
@@ -633,7 +697,7 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         for (const [p, q] of gaps) {
           // breaks along it: the ridge, where another roof starts/stops, and
           // the walls' tops' bends and ends
-          const cuts = [p, q, mid, ...[...ends, ...along.flatMap((tops) => tops.map((x) => x.v))].flatMap((e) => [e - 0.5, e + 0.5])].filter((v) => v >= p && v <= q).sort((x, y) => x - y)
+          const cuts = [p, q, ...[mid, ...ends, ...along.flatMap((tops) => tops.map((x) => x.v))].flatMap((e) => [e - 0.5, e, e + 0.5])].filter((v) => v >= p && v <= q).sort((x, y) => x - y)
           // and where the top crosses the bottom, between them
           const vs: number[] = []
           cuts.forEach((v, k) => {
