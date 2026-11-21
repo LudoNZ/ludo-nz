@@ -152,7 +152,7 @@ function sideFrame(s: PlanSide, prev: PlanSide | null, next: PlanSide | null): S
 
 // ── solids on a side ───────────────────────────────────────────────────
 
-interface Piece {
+export interface Piece {
   solid: Solid
   member: HouseRenderMember | "wall"
   /** lines on the solid's first face (its outside), drawn over it */
@@ -428,6 +428,8 @@ export interface HouseRenderOptions {
   elevationDeg: number
   hidden: ReadonlySet<HouseRenderMember>
   camera?: CameraState
+  /** fit the view (and the lawn) to these, not to what's shown (the showcase: framed on the finished house while it goes up) */
+  fitTo?: V3[]
 }
 
 export interface HouseScene {
@@ -608,7 +610,7 @@ export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOpti
   const solids = pieces.map((p) => p.solid)
   const az = Math.atan2(front.y, front.x) + (options.azimuthDeg * Math.PI) / 180
   const el = (options.elevationDeg * Math.PI) / 180
-  const allPts = solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
+  const allPts = options.fitTo ?? solids.flatMap((sd) => sd.faces.flatMap((f) => f.pts))
   const cam = makeCamera(allPts, az, el, options.camera ?? FIT_CAMERA)
   const lightAz = az + (35 * Math.PI) / 180
   const lightEl = (50 * Math.PI) / 180

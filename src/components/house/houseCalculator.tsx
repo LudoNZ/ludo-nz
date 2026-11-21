@@ -35,6 +35,7 @@ import { claddingFloorOf, insideTarget, outsideAt, outsideTarget, planJoinery, u
 import { joineryTypesOf } from "./joinery"
 import JoinerySettings from "./joinerySettings"
 import { useSharedJoinery } from "./joineryDefaultsStore"
+import Showcase from "./showcase"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -1474,6 +1475,33 @@ const ThreeDStep: React.FC<{
   structures: ReturnType<typeof analyseHouse>
 }> = ({ house, setHouse, setPlanOf, graph, upperGraph, cladding, structures }) => {
   const input = useMemo(() => houseRenderInputFrom(house, graph, upperGraph, cladding, structures), [cladding, graph, upperGraph, house, structures])
+  // the build, shown off: every part falling into place, stage by stage
+  const [showing, setShowing] = useState(false)
+  const facts = useMemo(() => {
+    const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`
+    const st = house.settings
+    const gf = st.groundFloor ?? DEFAULT_SETTINGS.groundFloor
+    const area = graph.rooms.reduce((a, r) => a + r.areaM2, 0)
+    const outside = [...cladding.walls.values()]
+    const ground = outside.filter((w) => !w.id.startsWith("us"))
+    const doorsIn = house.floor.doors.length + (house.upper?.plan.doors.length ?? 0)
+    const units = house.joinery ?? []
+    const windows = units.filter((j) => j.sill - (j.wallId.startsWith("us") ? cladding.upperFloorZ : 0) >= 100).length
+    // (and any section given its own by hand)
+    const base = st.roof.type === "auto" || st.roof.type === "none" ? "gable" : st.roof.type
+    const kinds = [...new Set(structures.ground.spans.concat(structures.upper?.spans ?? []).map((sp) => sp.type ?? base))]
+    const roof = kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} and ${kinds[kinds.length - 1]}` : (kinds[0] ?? base)
+    return {
+      ground: gf.kind === "timber" ? `${area.toFixed(0)} m² set out on the ground, the foundations down.` : `A concrete slab, ${area.toFixed(0)} m², poured and set.`,
+      subfloor: `Piles, bearers and joists, ${gf.heightMm} mm up off the ground — and the flooring on top.`,
+      walls: `${n(ground.length, "outside wall")} and ${n(graph.walls.length, "inside wall")} stand up, ${st.studHeightMm} mm to the top plate.`,
+      joinery: `${n(windows, "window")}, ${n(units.length - windows, "outside door")} and ${n(doorsIn, "inside door")} go in.`,
+      midfloor: `The first floor's joists span the walls below, and its flooring goes down.`,
+      upper: `Upstairs: ${n(outside.length - ground.length, "outside wall")}, ${n(upperGraph?.walls.length ?? 0, "inside wall")}, ${house.upper?.studHeightMm ?? st.studHeightMm} mm stud.`,
+      roof: `A ${roof} roof at ${st.roof.pitchDeg ?? 25}°, on ${st.roofFrame === "trusses" ? "trusses" : "rafters"}.`,
+      finish: `Facings, scribers and flashings — ${house.name}, built.`,
+    }
+  }, [house, graph, upperGraph, cladding, structures])
   // windows and doors placed on the outside walls straight off the 3D view
   const floorOf = (wallId: string) => (wallId.startsWith("us") ? cladding.upperFloorZ : 0)
   const joinery = useJoineryEditor(house, setHouse, setPlanOf, floorOf)
@@ -1506,6 +1534,9 @@ const ThreeDStep: React.FC<{
         round; the magnifier flies in.
       </p>
       <div className={styles.toolbar}>
+        <button type="button" className={`${styles.pill} ${styles.pillOn}`} onClick={() => setShowing(true)}>
+          ▶ Showcase
+        </button>
         <button type="button" className={`${styles.pill} ${joinery.placing ? styles.pillOn : ""}`} aria-pressed={joinery.placing} onClick={() => joinery.setPlacing((v) => !v)} aria-keyshortcuts="W">
           Place windows &amp; doors <kbd className={styles.kbd}>W</kbd>
         </button>
@@ -1518,6 +1549,7 @@ const ThreeDStep: React.FC<{
       <HouseRenderView input={input} fileName={house.name.replace(/\W+/g, "-").toLowerCase() || "house"} picking={joinery.placing} onPick={onPick} />
       <JoinerySettings house={house} setHouse={setHouse} />
       {joinery.modal}
+      {showing && <Showcase input={input} name={house.name} facts={facts} onClose={() => setShowing(false)} />}
     </section>
   )
 }
