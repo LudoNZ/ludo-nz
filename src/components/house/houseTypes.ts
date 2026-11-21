@@ -5,6 +5,7 @@
  * screen, like the footprint editor's. */
 
 import type { RoofPlan } from "../weatherboards/types"
+import type { ProjectGrid } from "./grid"
 
 export interface Pt {
   x: number
@@ -138,6 +139,8 @@ export interface HouseProject {
   floor: FloorPlan
   /** a first floor over it, or none */
   upper: UpperFloor | null
+  /** the setting-out grid every storey snaps to (see grid.ts) */
+  grid: ProjectGrid
   settings: HouseSettings
   /** the step the walk-through's on */
   step: number
@@ -162,6 +165,7 @@ export const DEFAULT_HOUSE: HouseProject = {
   name: "My house",
   floor: { mode: null, outline: [], lockedEdgeLengths: {}, lockedVertexAngles: {}, walls: [], tags: [], boxes: [], overrides: {} },
   upper: null,
+  grid: { stepMm: 500, moved: {} },
   settings: DEFAULT_SETTINGS,
   step: 0,
   link: null,
@@ -209,6 +213,10 @@ export function houseFromData(d: unknown): HouseProject {
   return {
     name: typeof o.name === "string" && o.name ? o.name : DEFAULT_HOUSE.name,
     floor: planFromData(o.floor),
+    grid:
+      o.grid && typeof o.grid === "object" && typeof o.grid.stepMm === "number"
+        ? { stepMm: o.grid.stepMm, moved: o.grid.moved && typeof o.grid.moved === "object" ? o.grid.moved : {} }
+        : { stepMm: 500, moved: {} },
     upper: u ? { plan: planFromData(u.plan), studHeightMm: typeof u.studHeightMm === "number" ? u.studHeightMm : DEFAULT_SETTINGS.studHeightMm } : null,
     settings: {
       ...DEFAULT_SETTINGS,

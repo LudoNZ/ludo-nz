@@ -1,15 +1,23 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { FloorGraph } from "./floorPlan"
+import { FloorGraph, simplify } from "./floorPlan"
+import { GridLine, gridLines, nearestLine, ProjectGrid } from "./grid"
 import { Pt, ROOM_KIND_COLOURS, RoomBox } from "./houseTypes"
 import type { Structure } from "./structure"
 import styles from "./house.module.scss"
 
-export type Selection = { kind: "wall"; id: string } | { kind: "room"; index: number } | { kind: "box"; id: string } | null
+export type Selection =
+  | { kind: "wall"; id: string }
+  | { kind: "room"; index: number }
+  | { kind: "box"; id: string }
+  /** a side of the outline (outline tool) */
+  | { kind: "edge"; index: number }
+  | { kind: "gridline"; key: string; axis: "x" | "y" }
+  | null
 
-/** what the plan can do here */
-export type CanvasTool = "select" | "draw"
+/** what the plan can do here: pick things, draw inside walls, or shape the outline */
+export type CanvasTool = "select" | "draw" | "outline"
 
 const GRID = 100
 const m2 = (a: number) => `${a.toFixed(1)} m²`
@@ -34,7 +42,13 @@ const PlanCanvas: React.FC<{
   onMoveBox?: (id: string, x: number, y: number) => void
   /** rooms mode: a box resized by a corner */
   onResizeBox?: (id: string, rect: { x: number; y: number; w: number; h: number }) => void
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox }) => {
+  /** the setting-out grid, drawn and snapped to */
+  grid?: ProjectGrid
+  /** outline tool: the outline reshaped (kept square, on the grid) */
+  onOutlineChange?: (pts: Pt[]) => void
+  /** a gridline dragged to a new place */
+  onMoveGridline?: (line: GridLine, to: number) => void
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -56,6 +70,20 @@ const PlanCanvas: React.FC<{
     dragRef.current = d
     setDragState(d)
   }
+  // a corner or side of the outline being dragged: where it started, and as it is
+  const [odrag, setOdragState] = useState<{ kind: "corner" | "edge"; index: number; base: Pt[]; pts: Pt[]; moved: boolean } | null>(null)
+  const odragRef = useRef(odrag)
+  const setOdrag = (d: typeof odrag) => {
+    odragRef.current = d
+    setOdragState(d)
+  }
+  // a gridline being dragged
+  const [gdrag, setGdragState] = useState<{ line: GridLine; at: number } | null>(null)
+  const gdragRef = useRef(gdrag)
+  const setGdrag = (d: typeof gdrag) => {
+    gdragRef.current = d
+    setGdragState(d)
+  }
 
   const pts = [...graph.outline, ...(ghost ?? []), ...(boxes ?? []).flatMap((b) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }])]
   if (!pts.length) pts.push({ x: 0, y: 0 }, { x: 10000, y: 8000 })
@@ -65,6 +93,9 @@ const PlanCanvas: React.FC<{
   const y1 = Math.max(...pts.map((p) => p.y)) + 1500
   const span = Math.max(x1 - x0, y1 - y0)
   const sw = span / 400
+  const gl = grid ? gridLines(grid, x0 - 5000, x1 + 5000, y0 - 5000, y1 + 5000) : null
+  const gxs = gl?.xs.map((l) => l.at) ?? []
+  const gys = gl?.ys.map((l) => l.at) ?? []
 
   /** a pointer on the plan, in mm */
   const toPlan = (e: React.PointerEvent): Pt => {
@@ -90,7 +121,8 @@ const PlanCanvas: React.FC<{
     const near = to.reduce<number | null>((b, x) => (Math.abs(x - v) < tol && (b === null || Math.abs(x - v) < Math.abs(b - v)) ? x : b), null)
     return near ?? Math.round(v / GRID) * GRID
   }
-  const snapPt = (p: Pt): Pt => ({ x: snap(p.x, lines.xs), y: snap(p.y, lines.ys) })
+  // (the walls nearby, and the gridlines)
+  const snapPt = (p: Pt): Pt => ({ x: snap(p.x, [...lines.xs, ...gxs]), y: snap(p.y, [...lines.ys, ...gys]) })
   /** square to the plan: whichever way it's gone furthest */
   const square = (a: Pt, b: Pt): Pt => (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y) ? { x: b.x, y: a.y } : { x: a.x, y: b.y })
 
@@ -101,6 +133,55 @@ const PlanCanvas: React.FC<{
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
   }
   const move = (e: React.PointerEvent) => {
+    const od = odragRef.current
+    if (od) {
+      // the corner (or side) goes to the gridlines nearest; the walls either
+      // side of it go with it, so every corner stays square
+      const p = toPlan(e)
+      const sx = nearestLine(p.x, gxs.length ? gxs : [Math.round(p.x / GRID) * GRID])
+      const sy = nearestLine(p.y, gys.length ? gys : [Math.round(p.y / GRID) * GRID])
+      const base = od.base
+      const n = base.length
+      const k = od.index
+      const plumb = (a: Pt, b: Pt) => Math.abs(a.x - b.x) < Math.abs(a.y - b.y)
+      const prev = (k - 1 + n) % n
+      const next = (k + 1) % n
+      let out: Pt[] = base.map((q) => ({ ...q }))
+      if (od.kind === "corner") {
+        out[k] = { x: sx, y: sy }
+        if (plumb(base[prev], base[k])) out[prev].x = sx
+        else out[prev].y = sy
+        if (plumb(base[k], base[next])) out[next].x = sx
+        else out[next].y = sy
+      } else {
+        // the side slides square to itself; where the wall either side runs
+        // on the same way (a side split for a step), its end stays put and a
+        // short return wall joins them — the step
+        const along = plumb(base[k], base[next])
+        const shift = (q: Pt): Pt => (along ? { x: sx, y: q.y } : { x: q.x, y: sy })
+        const sameBefore = plumb(base[prev], base[k]) === along
+        const sameAfter = plumb(base[next], base[(next + 1) % n]) === along
+        out = []
+        for (let i = 0; i < n; i++) {
+          if (i === k) {
+            if (sameBefore) out.push({ ...base[k] })
+            out.push(shift(base[k]))
+          } else if (i === next) {
+            out.push(shift(base[next]))
+            if (sameAfter) out.push({ ...base[next] })
+          } else out.push({ ...base[i] })
+        }
+      }
+      const moved = out.length !== base.length || out.some((q, i) => q.x !== base[i].x || q.y !== base[i].y)
+      setOdrag({ ...od, pts: out, moved: od.moved || moved })
+      return
+    }
+    const gd = gdragRef.current
+    if (gd) {
+      const p = toPlan(e)
+      setGdrag({ ...gd, at: Math.round(p[gd.line.axis] / 10) * 10 })
+      return
+    }
     const draft = draftRef.current
     const drag = dragRef.current
     const resize = resizeRef.current
@@ -115,8 +196,8 @@ const PlanCanvas: React.FC<{
         return near ?? Math.round(v / GRID) * GRID
       }
       const MIN = 600
-      let cx = fit(p.x, [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x)])
-      let cy = fit(p.y, [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y)])
+      let cx = fit(p.x, [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x), ...gxs])
+      let cy = fit(p.y, [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y), ...gys])
       // never smaller than a cupboard, nor turned inside out
       if (Math.abs(cx - resize.fx) < MIN) cx = resize.fx + (cx >= resize.fx ? MIN : -MIN)
       if (Math.abs(cy - resize.fy) < MIN) cy = resize.fy + (cy >= resize.fy ? MIN : -MIN)
@@ -131,8 +212,8 @@ const PlanCanvas: React.FC<{
       const box = boxes.find((b) => b.id === drag.id)!
       // snap an edge to another room's edge, else the grid
       const others = boxes.filter((b) => b.id !== drag.id)
-      const ex = [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x)]
-      const ey = [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y)]
+      const ex = [...others.flatMap((b) => [b.x, b.x + b.w]), ...(ghost ?? []).map((q) => q.x), ...gxs]
+      const ey = [...others.flatMap((b) => [b.y, b.y + b.h]), ...(ghost ?? []).map((q) => q.y), ...gys]
       const tol = pxMm(12)
       const fit = (v: number, size: number, edges: number[]) => {
         let best: number | null = null
@@ -144,6 +225,21 @@ const PlanCanvas: React.FC<{
     }
   }
   const up = () => {
+    const od = odragRef.current
+    if (od) {
+      if (od.moved) {
+        onOutlineChange?.(simplify(od.pts))
+        // (the corners may have changed under a picked side)
+        onSelect(null)
+      } else if (od.kind === "edge") onSelect({ kind: "edge", index: od.index })
+      setOdrag(null)
+    }
+    const gd = gdragRef.current
+    if (gd) {
+      if (Math.abs(gd.at - gd.line.at) >= 1) onMoveGridline?.(gd.line, gd.at)
+      else onSelect({ kind: "gridline", key: gd.line.key, axis: gd.line.axis })
+      setGdrag(null)
+    }
     const draft = draftRef.current
     const drag = dragRef.current
     const resize = resizeRef.current
@@ -162,7 +258,7 @@ const PlanCanvas: React.FC<{
   }
 
   const lb = (id: string) => structure?.inside.get(id)?.loadBearing ?? false
-  const n = graph.outline.length
+  const outline = odrag?.pts ?? graph.outline
   const drawing = tool === "draw" && !!onDrawWall
 
   return (
@@ -177,13 +273,26 @@ const PlanCanvas: React.FC<{
       role="img"
       aria-label="Ground floor plan"
     >
-      {/* a metre grid */}
-      {Array.from({ length: Math.ceil((x1 - x0) / 1000) + 1 }, (_, i) => Math.ceil(x0 / 1000) * 1000 + i * 1000).map((x) => (
-        <line key={`gx${x}`} x1={x} y1={y0} x2={x} y2={y1} className={styles.grid} strokeWidth={sw * 0.3} />
-      ))}
-      {Array.from({ length: Math.ceil((y1 - y0) / 1000) + 1 }, (_, i) => Math.ceil(y0 / 1000) * 1000 + i * 1000).map((y) => (
-        <line key={`gy${y}`} x1={x0} y1={y} x2={x1} y2={y} className={styles.grid} strokeWidth={sw * 0.3} />
-      ))}
+      {/* the grid: the project's gridlines (a moved one picked out), or a metre grid */}
+      {gl
+        ? [...gl.xs, ...gl.ys].map((l) => {
+            const at = gdrag?.line.key === l.key ? gdrag.at : l.at
+            const sel = selection?.kind === "gridline" && selection.key === l.key
+            const cls = sel || gdrag?.line.key === l.key ? styles.gridPicked : l.moved ? styles.gridMoved : styles.grid
+            return l.axis === "x" ? (
+              <line key={l.key} x1={at} y1={y0} x2={at} y2={y1} className={cls} strokeWidth={sw * (l.moved || sel ? 0.7 : 0.3)} />
+            ) : (
+              <line key={l.key} x1={x0} y1={at} x2={x1} y2={at} className={cls} strokeWidth={sw * (l.moved || sel ? 0.7 : 0.3)} />
+            )
+          })
+        : [
+            ...Array.from({ length: Math.ceil((x1 - x0) / 1000) + 1 }, (_, i) => Math.ceil(x0 / 1000) * 1000 + i * 1000).map((x) => (
+              <line key={`gx${x}`} x1={x} y1={y0} x2={x} y2={y1} className={styles.grid} strokeWidth={sw * 0.3} />
+            )),
+            ...Array.from({ length: Math.ceil((y1 - y0) / 1000) + 1 }, (_, i) => Math.ceil(y0 / 1000) * 1000 + i * 1000).map((y) => (
+              <line key={`gy${y}`} x1={x0} y1={y} x2={x1} y2={y} className={styles.grid} strokeWidth={sw * 0.3} />
+            )),
+          ]}
 
       {/* rooms */}
       {boxes
@@ -229,8 +338,8 @@ const PlanCanvas: React.FC<{
       )}
 
       {/* the outside walls */}
-      {graph.outline.map((a, i) => {
-        const b = graph.outline[(i + 1) % n]
+      {outline.map((a, i) => {
+        const b = outline[(i + 1) % outline.length]
         const v = structure?.outside[i]
         return <line key={`o${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={v?.loadBearing ? styles.wallLB : styles.wallOut} strokeWidth={sw * 3.2} strokeLinecap="square" />
       })}
@@ -335,6 +444,102 @@ const PlanCanvas: React.FC<{
             )
           })
         })()}
+
+      {/* shaping the outline: each side's length, a handle on each side and corner */}
+      {tool === "outline" &&
+        onOutlineChange &&
+        outline.map((a, i) => {
+          const b = outline[(i + 1) % outline.length]
+          const len = Math.hypot(b.x - a.x, b.y - a.y)
+          const sel = selection?.kind === "edge" && selection.index === i && !odrag
+          const plumb = Math.abs(a.x - b.x) < Math.abs(a.y - b.y)
+          // the length, just outside the wall (outside: away from the middle)
+          const cx = outline.reduce((s, p) => s + p.x, 0) / outline.length
+          const cy = outline.reduce((s, p) => s + p.y, 0) / outline.length
+          const mx = (a.x + b.x) / 2
+          const my = (a.y + b.y) / 2
+          const off = sw * 10
+          const lx = plumb ? mx + (mx >= cx ? off : -off) : mx
+          const ly = plumb ? my : my + (my >= cy ? off : -off)
+          const start = (kind: "corner" | "edge") => (e: React.PointerEvent) => {
+            e.stopPropagation()
+            const base = graph.outline.map((q) => ({ ...q }))
+            setOdrag({ kind, index: i, base, pts: base, moved: false })
+            ;(e.target as Element).setPointerCapture?.(e.pointerId)
+          }
+          return (
+            <g key={`oh${i}`}>
+              {sel && <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={styles.wallSelected} strokeWidth={sw * 4.2} strokeLinecap="square" pointerEvents="none" />}
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke="transparent"
+                strokeWidth={sw * 10}
+                style={{ cursor: plumb ? "ew-resize" : "ns-resize" }}
+                role="button"
+                aria-label={`Outside wall ${i + 1}, ${(len / 1000).toFixed(2)} m — drag to move it, tap to pick it`}
+                onPointerDown={start("edge")}
+              />
+              <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize={sw * 7} className={styles.roomLabel} pointerEvents="none">
+                {(len / 1000).toFixed(2)}
+              </text>
+              <circle cx={a.x} cy={a.y} r={sw * 4} className={styles.handle} strokeWidth={sw * 1.2} pointerEvents="none" />
+              <circle
+                cx={a.x}
+                cy={a.y}
+                r={sw * 11}
+                fill="transparent"
+                style={{ cursor: "move" }}
+                role="button"
+                aria-label={`Corner ${i + 1} — drag to move it`}
+                onPointerDown={start("corner")}
+              />
+            </g>
+          )
+        })}
+
+      {/* the gridlines' tabs, to drag one along (or tap to type where it goes) */}
+      {gl &&
+        onMoveGridline &&
+        [...gl.xs.filter((l) => l.at > x0 && l.at < x1), ...gl.ys.filter((l) => l.at > y0 && l.at < y1)].map((l) => {
+          const at = gdrag?.line.key === l.key ? gdrag.at : l.at
+          const sel = (selection?.kind === "gridline" && selection.key === l.key) || gdrag?.line.key === l.key
+          const [cx, cy] = l.axis === "x" ? [at, y0 + sw * 6] : [x0 + sw * 6, at]
+          return (
+            <g key={`gt${l.key}`}>
+              <circle cx={cx} cy={cy} r={sw * (sel ? 4 : 2.6)} className={sel ? styles.gridTabPicked : l.moved ? styles.gridTabMoved : styles.gridTab} />
+              {(l.moved || sel) && (
+                <text
+                  x={l.axis === "x" ? cx : cx + sw * 6}
+                  y={l.axis === "x" ? cy + sw * 9 : cy}
+                  textAnchor={l.axis === "x" ? "middle" : "start"}
+                  dominantBaseline="middle"
+                  fontSize={sw * 6}
+                  className={styles.gridLabel}
+                  pointerEvents="none"
+                >
+                  {(at / 1000).toFixed(2)}
+                </text>
+              )}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={sw * 8}
+                fill="transparent"
+                style={{ cursor: l.axis === "x" ? "ew-resize" : "ns-resize" }}
+                role="button"
+                aria-label={`Gridline at ${(l.at / 1000).toFixed(2)} m — drag to move it, tap to type where`}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  setGdrag({ line: l, at: l.at })
+                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                }}
+              />
+            </g>
+          )
+        })}
 
       {/* the wall being drawn */}
       {draft && (

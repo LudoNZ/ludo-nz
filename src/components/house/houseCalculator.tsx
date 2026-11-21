@@ -3,7 +3,6 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
-import PolygonShapeEditor from "@/components/decking/polygonShapeEditor"
 import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
@@ -29,6 +28,7 @@ import {
   STARTING_OUTLINE,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
+import { GridLine, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import styles from "./house.module.scss"
 
@@ -261,6 +261,20 @@ const FloorsStep: React.FC<{
     setLevel(1)
   }
   const upper = house.upper
+  /** a gridline to a new place, taking whatever's on it along — on every storey */
+  const moveGridline = (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset = false) =>
+    setHouse((h) => {
+      const moved = { ...h.grid.moved }
+      if (reset) delete moved[line.key]
+      else moved[line.key] = to
+      return {
+        ...h,
+        grid: { ...h.grid, moved },
+        floor: movePlanLine(h.floor, line.axis, line.at, to),
+        upper: h.upper ? { ...h.upper, plan: movePlanLine(h.upper.plan, line.axis, line.at, to) } : null,
+      }
+    })
+  const gridProps = { grid: house.grid, onMoveGridline: moveGridline }
   return (
     <>
       <div className={styles.toggle} role="tablist" aria-label="Storey">
@@ -295,7 +309,7 @@ const FloorsStep: React.FC<{
         </section>
       ) : level === 1 && upper && upperGraph ? (
         <>
-          <FloorStep plan={upper.plan} title="First floor" setFloor={setPlanOf(1)} graph={upperGraph} ghost={graph.outline} selection={selection} setSelection={setSelection} />
+          <FloorStep plan={upper.plan} title="First floor" setFloor={setPlanOf(1)} graph={upperGraph} ghost={graph.outline} selection={selection} setSelection={setSelection} {...gridProps} />
           <section className={styles.card}>
             <div className={styles.fields}>
               <label>
@@ -327,7 +341,7 @@ const FloorsStep: React.FC<{
           </section>
         </>
       ) : (
-        <FloorStep plan={house.floor} title="Ground floor" setFloor={setPlanOf(0)} graph={graph} selection={selection} setSelection={setSelection} />
+        <FloorStep plan={house.floor} title="Ground floor" setFloor={setPlanOf(0)} graph={graph} selection={selection} setSelection={setSelection} {...gridProps} />
       )}
     </>
   )
@@ -342,7 +356,9 @@ const FloorStep: React.FC<{
   ghost?: Pt[]
   selection: Selection
   setSelection: (s: Selection) => void
-}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection }) => {
+  grid: ProjectGrid
+  onMoveGridline: (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset?: boolean) => void
+}> = ({ plan, title, setFloor, graph, ghost, selection, setSelection, grid, onMoveGridline }) => {
   const floor = plan
   const [part, setPart] = useState<"outside" | "inside">("inside")
   const [tool, setTool] = useState<CanvasTool>("draw")
@@ -366,7 +382,16 @@ const FloorStep: React.FC<{
         <p className={styles.hint}>
           Drag a room to move it, or tap it and drag a corner to resize it — both snap to the grid and to the rooms beside it. Tap one to name it or type its size.
         </p>
-        <PlanCanvas graph={graph} ghost={ghost} boxes={floor.boxes} selection={selection} onSelect={setSelection} onMoveBox={(id, x, y) => setBox(id, { x, y })} onResizeBox={(id, r) => setBox(id, r)} />
+        <PlanCanvas
+          graph={graph}
+          ghost={ghost}
+          grid={grid}
+          boxes={floor.boxes}
+          selection={selection}
+          onSelect={setSelection}
+          onMoveBox={(id, x, y) => setBox(id, { x, y })}
+          onResizeBox={(id, r) => setBox(id, r)}
+        />
         <div className={styles.toolbar}>
           <select value={newKind} onChange={(e) => setNewKind(e.target.value as RoomKind)} aria-label="Kind of room to add">
             {(Object.keys(ROOM_KIND_LABELS) as RoomKind[]).map((k) => (
@@ -464,20 +489,16 @@ const FloorStep: React.FC<{
       </div>
 
       {part === "outside" ? (
-        <>
-          <p className={styles.hint}>
-            The outside face of the outside walls. Drag a corner, or tap a side or corner to type its length or angle; + Add corner for an L
-            or a step. Keep the corners square for rooms and load-bearing walls to work out.
-          </p>
-          <PolygonShapeEditor
-            points={floor.outline}
-            lockedEdgeLengths={floor.lockedEdgeLengths}
-            lockedVertexAngles={floor.lockedVertexAngles}
-            ariaName="House outline"
-            onShapeChange={(outline, lockedEdgeLengths, lockedVertexAngles) => setFloor((f) => ({ ...f, outline, lockedEdgeLengths, lockedVertexAngles }))}
-          />
-          {!isSquare(floor.outline) && <Warnings list={["A corner isn't square — rooms and load-bearing walls need square corners for now."]} />}
-        </>
+        <OutlineEditor
+          outline={floor.outline}
+          setOutline={(outline) => setFloor((f) => ({ ...f, outline, lockedEdgeLengths: {}, lockedVertexAngles: {} }))}
+          graph={graph}
+          ghost={ghost}
+          grid={grid}
+          onMoveGridline={onMoveGridline}
+          selection={selection}
+          setSelection={setSelection}
+        />
       ) : (
         <>
           <p className={styles.hint}>
@@ -498,6 +519,7 @@ const FloorStep: React.FC<{
           <PlanCanvas
             graph={graph}
             ghost={ghost}
+            grid={grid}
             tool={tool}
             selection={selection}
             onSelect={setSelection}
@@ -596,6 +618,112 @@ const FloorStep: React.FC<{
         </>
       )}
     </section>
+  )
+}
+
+/** The outside walls on the plan: corners and sides dragged on to the
+ * gridlines, kept square as they go; a side picked can take a step, the
+ * whole lot can be squared back up; a gridline dragged (or typed) to where a
+ * wall should go takes what's on it with it. */
+const OutlineEditor: React.FC<{
+  outline: Pt[]
+  setOutline: (pts: Pt[]) => void
+  graph: ReturnType<typeof floorGraph>
+  ghost?: Pt[]
+  grid: ProjectGrid
+  onMoveGridline: (line: { key: string; axis: "x" | "y"; at: number }, to: number, reset?: boolean) => void
+  selection: Selection
+  setSelection: (s: Selection) => void
+}> = ({ outline, setOutline, graph, ghost, grid, onMoveGridline, selection, setSelection }) => {
+  const lines = linesAround(grid, [...outline, ...(ghost ?? [])])
+  const edge = selection?.kind === "edge" && selection.index < outline.length ? selection.index : null
+  const gridline = selection?.kind === "gridline" ? selection : null
+  // where a picked gridline is now, and where it'd be unmoved
+  const lineAt = gridline ? (grid.moved[gridline.key] ?? Number(gridline.key.split(":")[1]) * grid.stepMm) : 0
+  const lineHome = gridline ? Number(gridline.key.split(":")[1]) * grid.stepMm : 0
+
+  /** a picked side split in three, on the gridlines nearest its thirds — drag the middle out for a step */
+  const addStep = (i: number) => {
+    const a = outline[i]
+    const b = outline[(i + 1) % outline.length]
+    const plumb = Math.abs(a.x - b.x) < Math.abs(a.y - b.y)
+    const axis = plumb ? "y" : "x"
+    const ls = plumb ? lines.ys : lines.xs
+    const lo = Math.min(a[axis], b[axis])
+    const hi = Math.max(a[axis], b[axis])
+    const inner = ls.filter((v) => v > lo + 1 && v < hi - 1)
+    if (inner.length < 2) return
+    let p1 = nearestLine(a[axis] + (b[axis] - a[axis]) / 3, inner)
+    let p2 = nearestLine(a[axis] + ((b[axis] - a[axis]) * 2) / 3, inner)
+    if (p1 === p2) {
+      const k = inner.indexOf(p1)
+      p2 = inner[k + 1] ?? inner[k - 1]
+      if ((p2 - p1) * (b[axis] - a[axis]) < 0) [p1, p2] = [p2, p1]
+    }
+    const at = (v: number): Pt => (plumb ? { x: a.x, y: v } : { x: v, y: a.y })
+    const next = [...outline.slice(0, i + 1), at(p1), at(p2), ...outline.slice(i + 1)]
+    setOutline(next)
+    setSelection({ kind: "edge", index: i + 1 })
+  }
+  const square = isSquare(outline) && outline.every((p) => lines.xs.some((x) => Math.abs(x - p.x) < 1) && lines.ys.some((y) => Math.abs(y - p.y) < 1))
+
+  return (
+    <>
+      <p className={styles.hint}>
+        The outside face of the outside walls, on the grid. Drag a corner or a wall — it snaps to the gridlines and every corner stays square.
+        Tap a wall to put a step in it. The gridlines are every {grid.stepMm / 1000} m: drag one by its dot along the top or side to where a wall
+        should go (whatever&apos;s on it comes too), or tap the dot to type where.
+      </p>
+      <PlanCanvas
+        graph={graph}
+        ghost={ghost}
+        grid={grid}
+        tool="outline"
+        selection={selection}
+        onSelect={setSelection}
+        onOutlineChange={setOutline}
+        onMoveGridline={(line: GridLine, to: number) => onMoveGridline(line, to)}
+      />
+      <div className={styles.toolbar}>
+        <button type="button" className={styles.pill} disabled={square} onClick={() => {
+            setOutline(squareUp(outline, lines))
+            setSelection(null)
+          }}>
+          Square it up
+        </button>
+        {!square && <span className={styles.muted}>Puts every wall back level or plumb, on its nearest gridline.</span>}
+      </div>
+      {edge !== null && (
+        <div className={styles.panel}>
+          <p>
+            <strong>Wall {edge + 1}</strong>{" "}
+            {(Math.hypot(outline[(edge + 1) % outline.length].x - outline[edge].x, outline[(edge + 1) % outline.length].y - outline[edge].y) / 1000).toFixed(2)} m. Drag
+            it to move it, or put a step in it: it splits in three and the middle can be dragged out (drag it back flush and the step goes).
+          </p>
+          <button type="button" className={styles.pill} onClick={() => addStep(edge)}>
+            Put a step in it
+          </button>
+        </div>
+      )}
+      {gridline && (
+        <div className={styles.panel}>
+          <div className={styles.fields}>
+            <label>
+              {gridline.axis === "x" ? "Gridline across from the left" : "Gridline down from the top"}
+              <span className={styles.unit}>
+                <NumField value={lineAt} step={10} onChange={(v) => onMoveGridline({ key: gridline.key, axis: gridline.axis, at: lineAt }, v)} /> mm
+              </span>
+            </label>
+          </div>
+          {lineAt !== lineHome && (
+            <button type="button" className={styles.pill} onClick={() => onMoveGridline({ key: gridline.key, axis: gridline.axis, at: lineAt }, lineHome, true)}>
+              Put it back to {(lineHome / 1000).toFixed(1)} m
+            </button>
+          )}
+        </div>
+      )}
+      {!isSquare(outline) && <Warnings list={["A corner isn't square — Square it up, or rooms and load-bearing walls can't be worked out."]} />}
+    </>
   )
 }
 
@@ -808,7 +936,7 @@ const StructureStep: React.FC<{
         Load-bearing walls are in red; the dashed arrows are the way the {st.roofFrame === "trusses" ? "trusses" : "ceiling joists and rafters"}
         {house.upper && level === 0 ? " and the first floor's joists" : ""} span. Tap an inside wall to see why, or to set it by hand.
       </p>
-      <PlanCanvas graph={graph} ghost={ghost} structure={structure} selection={selection} onSelect={(s) => setSelection(s?.kind === "wall" ? s : null)} />
+      <PlanCanvas graph={graph} ghost={ghost} grid={house.grid} structure={structure} selection={selection} onSelect={(s) => setSelection(s?.kind === "wall" ? s : null)} />
       {wall && verdict && (
         <div className={styles.panel}>
           <p>

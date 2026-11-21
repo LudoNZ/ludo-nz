@@ -486,3 +486,34 @@
   fill: rgba(0, 0, 0, 0.035);
   stroke: #8a857b;
 }
+
+.gridMoved {
+  stroke: #2b6cb0;
+  stroke-opacity: 0.55;
+  stroke-dasharray: 60 40;
+}
+
+.gridPicked {
+  stroke: #2b6cb0;
+  stroke-opacity: 0.9;
+}
+
+.gridTab {
+  fill: #c9c5bc;
+  cursor: ew-resize;
+}
+
+.gridTabMoved {
+  fill: #2b6cb0;
+}
+
+.gridTabPicked {
+  fill: #2b6cb0;
+  stroke: #fff;
+  stroke-width: 20;
+}
+
+.gridLabel {
+  fill: #2b6cb0;
+  font-weight: 700;
+}
