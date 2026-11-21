@@ -149,6 +149,8 @@ export const DEFAULT_FRAMING: FramingSettings = {
 }
 
 export interface HouseSettings {
+  /** the ground floor: timber, framed on bearers and piles this far up (ground to its finished floor), or a slab */
+  groundFloor: { kind: "timber" | "slab"; heightMm: number }
   /** the head height off the floor windows line up with (unless their type says) */
   joineryHeadMm?: number
   /** ground floor to its top plate: the eaves height (and ceiling) of a
@@ -230,6 +232,7 @@ export interface HouseJoinery extends Opening {
 export const HOUSE_JOINERY = "hj-"
 
 export const DEFAULT_SETTINGS: HouseSettings = {
+  groundFloor: { kind: "timber", heightMm: 600 },
   studHeightMm: 2400,
   floorDepthMm: 300,
   floorJoistSpanMm: 4200,

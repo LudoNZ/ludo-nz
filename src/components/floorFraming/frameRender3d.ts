@@ -63,12 +63,15 @@ export function frameRenderMembers({ frame, boards }: FrameRenderInput): FrameRe
   return out
 }
 
-export function frameSolids({ frame, boards }: FrameRenderInput, hidden: ReadonlySet<FrameRenderMember>): Solid[] {
+/** `base`: where its zero is in the world (a house's floor framing, set under
+ * its floor) — without it, the ground (and walls between which it spans
+ * stand on the lawn) */
+export function frameSolids({ frame, boards }: FrameRenderInput, hidden: ReadonlySet<FrameRenderMember>, base?: number): Solid[] {
   const solids: Solid[] = []
   const put = (k: FrameRenderMember, s: Solid | null) => s && !hidden.has(k) && solids.push(s)
   const { toPlan } = frame
   // between walls, the walls stand on the lawn
-  const lift = frame.input.support === "walls" ? 600 : 0
+  const lift = base ?? (frame.input.support === "walls" ? 600 : 0)
   /** a plan rectangle (frame u/v ranges) as a world box */
   const uvBox = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, color: string) => {
     const a = toPlan(u0, v0)
@@ -96,7 +99,7 @@ export function frameSolids({ frame, boards }: FrameRenderInput, hidden: Readonl
   for (const p of frame.piles) {
     const c = toPlan(p.u, p.v)
     // from a little way into the ground up to the bearer's underside
-    put("piles", worldBox(c.x - half, c.x + half, -c.y - half, -c.y + half, -150, p.aboveGround, COLORS.pile))
+    put("piles", worldBox(c.x - half, c.x + half, -c.y - half, -c.y + half, -150 + (base ?? 0), p.aboveGround + (base ?? 0), COLORS.pile))
   }
   const top = frame.floorTop
   const under = frame.joistTop

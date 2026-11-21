@@ -9,7 +9,10 @@ import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import type { HouseRenderInput } from "../weatherboards/houseRender3d"
 import { FloorGraph, floorGraph, inside as isInside } from "./floorPlan"
 import { Cladding, houseCladding } from "./houseCladding"
-import { Door, HouseProject, Pt } from "./houseTypes"
+import { DEFAULT_SETTINGS, Door, HouseProject, Pt } from "./houseTypes"
+import { buildFrame, DEFAULT_FRAME_INPUT } from "../floorFraming/frame"
+import { frameSolids } from "../floorFraming/frameRender3d"
+import type { Solid } from "../stairs/stairRender3d"
 import { analyseHouse, Structure } from "./structure"
 
 /** the first floor's floor as slabs, one per cell (world mm), held clear
@@ -95,6 +98,35 @@ const insideWalls = (g: FloorGraph, st: Structure, z0: number, height: number, u
       return out
     })
 
+/** joists span a floor the short way: along whichever plan axis it's narrower */
+const joistsAlong = (pts: Pt[]): "x" | "y" => {
+  const w = Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x))
+  const h = Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y))
+  return w >= h ? "y" : "x"
+}
+
+/** The floors' framing, as solids: a timber ground floor's subfloor (piles,
+ * bearers, joists and sheet flooring, its top at the floor), and the first
+ * floor's midfloor (joists between the ground floor's walls, under the
+ * sheet flooring the storey above stands on). */
+function floorFraming(house: HouseProject, graph: FloorGraph, upperGraph: FloorGraph | null) {
+  const solids: { solid: Solid; member: "subfloor" | "midfloor" }[] = []
+  const gf = house.settings.groundFloor ?? DEFAULT_SETTINGS.groundFloor
+  const timber = gf.kind === "timber" && graph.outline.length >= 3
+  if (timber) {
+    const f = buildFrame(graph.outline, joistsAlong(graph.outline), { ...DEFAULT_FRAME_INPUT, support: "bearers", covering: "sheet", heightMm: gf.heightMm, joistSize: "140 x 45mm" })
+    // (its ground at the ground, its floor at the house's)
+    for (const solid of frameSolids({ frame: f }, new Set(), -f.floorTop)) solids.push({ solid, member: "subfloor" })
+  }
+  const midfloor = !!upperGraph && upperGraph.outline.length >= 3
+  if (midfloor) {
+    const f = buildFrame(upperGraph!.outline, joistsAlong(upperGraph!.outline), { ...DEFAULT_FRAME_INPUT, support: "walls", covering: "sheet" })
+    // (its joists on the ground floor's top plates; the walls it spans between are the house's own)
+    for (const solid of frameSolids({ frame: f }, new Set(["walls"]), house.settings.studHeightMm)) solids.push({ solid, member: "midfloor" })
+  }
+  return { solids, timber, midfloor, groundZ: timber ? -gf.heightMm : undefined }
+}
+
 /** The 3D input, from what the House calculator has already worked out. */
 export function houseRenderInputFrom(
   house: HouseProject,
@@ -110,8 +142,23 @@ export function houseRenderInputFrom(
     ...insideWalls(graph, structures.ground, 0, house.settings.studHeightMm, false, house.floor.doors),
     ...(upperGraph && structures.upper && house.upper ? insideWalls(upperGraph, structures.upper, z1, house.upper.studHeightMm, true, house.upper.plan.doors) : []),
   ]
-  const upper = cladding.upper && upperGraph ? { layout: cladding.upper, floorZ: z1, floorCells: upperFloorCells(upperGraph) } : undefined
-  return { layout: cladding.ground, walls, results, settings: WB_DEFAULTS, roof: cladding.roof, moreRoofs: cladding.lowerRoofs, roofColour: house.settings.roof.colour, extras, upper }
+  const floors = floorFraming(house, graph, upperGraph)
+  // (framed, the first floor's own slab's left out: the midfloor's sheets are its floor)
+  const upper = cladding.upper && upperGraph ? { layout: cladding.upper, floorZ: z1, floorCells: floors.midfloor ? [] : upperFloorCells(upperGraph) } : undefined
+  return {
+    layout: cladding.ground,
+    walls,
+    results,
+    settings: WB_DEFAULTS,
+    roof: cladding.roof,
+    moreRoofs: cladding.lowerRoofs,
+    roofColour: house.settings.roof.colour,
+    extras,
+    upper,
+    solids: floors.solids,
+    ...(floors.groundZ !== undefined ? { groundZ: floors.groundZ } : {}),
+    noFloor: floors.timber,
+  }
 }
 
 /** The 3D input straight from a saved house; null while it has no outline. */

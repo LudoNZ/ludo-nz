@@ -18,7 +18,7 @@ import { Roof, ROOF_DEPTH, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor"
+export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
@@ -29,9 +29,11 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   joinery: "Windows & doors",
   foundation: "Foundation",
   floor: "Floor",
+  subfloor: "Subfloor",
+  midfloor: "Midfloor",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -77,6 +79,12 @@ export interface HouseRenderInput {
   /** a storey above: its own walls round (in `walls`), its floor (cells on
    * plan, world mm) at `floorZ` */
   upper?: { layout: HouseLayout; floorZ: number; floorCells: { x0: number; x1: number; y0: number; y1: number }[] }
+  /** more solids, ready made, each under a part (the House's subfloor and midfloor framing) */
+  solids?: { solid: Solid; member: HouseRenderMember }[]
+  /** the ground's level, where it's lower than under the walls (a timber floor up on piles) */
+  groundZ?: number
+  /** leave the plain ground floor out (it's framed and floored in `solids`) */
+  noFloor?: boolean
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -462,7 +470,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   const placed = sides.filter((s) => s.wallId && walls.has(s.wallId))
   if (!placed.length) return { pieces: [], faces: [], front: null, groundZ: 0, floor: null }
   const faces: HouseModel["faces"] = []
-  const groundZ = Math.min(...placed.map((s) => Math.min(...edgeOf(s.wallId!).bottom.map((p) => p.y)))) - GROUND_DROP
+  const groundZ = Math.min(input.groundZ ?? Infinity, Math.min(...placed.map((s) => Math.min(...edgeOf(s.wallId!).bottom.map((p) => p.y)))) - GROUND_DROP)
 
   const pieces: Piece[] = []
   /** a storey's walls round, from its layout */
@@ -585,7 +593,9 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   const kept = pieces.filter((p) => (p.member === "wall" || !hidden.has(p.member)) && !(p.upper && hidden.has("upper")))
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
-  const floor = layout.closed && !hidden.has("floor") ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null
+  // (the floor framing, ready made)
+  for (const x of input.solids ?? []) if (!hidden.has(x.member)) kept.push({ solid: x.solid, member: x.member })
+  const floor = layout.closed && !hidden.has("floor") && !input.noFloor ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null
   // (a hidden storey's walls can't be tapped)
   return { pieces: kept, faces: faces.filter((f) => !(f.upper && hidden.has("upper"))), front: outwardOf(s0), groundZ, floor }
 }

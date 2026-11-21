@@ -93,7 +93,13 @@ const HouseRenderView: React.FC<{
 
   const memberToggles = (
     <div className={styles.members} role="group" aria-label="Parts shown">
-      {HOUSE_MEMBERS.filter((m) => (m !== "inside" || !!input.extras?.length) && (m !== "upper" || !!input.upper)).map((m) => (
+      {HOUSE_MEMBERS.filter(
+        (m) =>
+          (m !== "inside" || !!input.extras?.length) &&
+          (m !== "upper" || !!input.upper) &&
+          ((m !== "subfloor" && m !== "midfloor") || !!input.solids?.some((x) => x.member === m)) &&
+          (m !== "floor" || !input.noFloor),
+      ).map((m) => (
         <label key={m} className={styles.memberToggle}>
           <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />
           {HOUSE_MEMBER_LABELS[m]}

@@ -25,6 +25,7 @@ import {
   RoomKind,
   STARTING_BOXES,
   STARTING_OUTLINE,
+  DEFAULT_SETTINGS,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
 import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, MeasureChain, parseMeasures, RulerShow, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
@@ -1241,6 +1242,32 @@ const StructureStep: React.FC<{
             <option value="leanTo">A lean-to against the wall</option>
           </select>
         </label>
+        <label>
+          Ground floor
+          <select
+            value={(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor).kind}
+            onChange={(e) => setSettings({ groundFloor: { ...(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor), kind: e.target.value as "timber" | "slab" } })}
+          >
+            <option value="timber">Timber, on bearers and piles</option>
+            <option value="slab">Concrete slab</option>
+          </select>
+        </label>
+        {(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor).kind === "timber" && (
+          <label>
+            Floor above the ground
+            <span className={styles.unit}>
+              <NumField
+                value={(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor).heightMm}
+                min={300}
+                max={3000}
+                step={1}
+                onChange={(v) => setSettings({ groundFloor: { ...(st.groundFloor ?? DEFAULT_SETTINGS.groundFloor), heightMm: v } })}
+              />{" "}
+              mm
+            </span>
+            <span className={styles.muted}>ground to the finished floor</span>
+          </label>
+        )}
         <label>
           {house.upper ? "Ground floor stud height" : "Stud height"}
           <span className={styles.unit}>
