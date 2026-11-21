@@ -165,7 +165,7 @@ const HouseCalculator: React.FC<{
           graph={graph}
           upperGraph={upperGraph}
           structures={structures}
-          upperFloorZ={cladding?.upperFloorZ ?? house.settings.studHeightMm + house.settings.floorDepthMm}
+          cladding={cladding}
           selection={selection}
           setSelection={setSelection}
         />

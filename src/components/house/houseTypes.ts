@@ -125,6 +125,9 @@ export interface FramingSettings {
   /** the frame's opening over a door's leaf: jambs and packing */
   doorWidthAllowanceMm: number
   doorHeightAllowanceMm: number
+  /** the frame's opening over a window or outside door's joinery unit */
+  windowWidthAllowanceMm: number
+  windowHeightAllowanceMm: number
 }
 
 export const DEFAULT_FRAMING: FramingSettings = {
@@ -137,6 +140,8 @@ export const DEFAULT_FRAMING: FramingSettings = {
   lintelDepthMm: 190,
   doorWidthAllowanceMm: 60,
   doorHeightAllowanceMm: 40,
+  windowWidthAllowanceMm: 20,
+  windowHeightAllowanceMm: 20,
 }
 
 export interface HouseSettings {

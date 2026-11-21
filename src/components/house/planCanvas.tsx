@@ -50,7 +50,9 @@ const PlanCanvas: React.FC<{
   onMoveGridline?: (line: GridLine, to: number) => void
   /** doors in the inside walls: each one's opening on plan, `picked` drawn out */
   doors?: { id: string; a: Pt; b: Pt; picked?: boolean }[]
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors }) => {
+  /** the outside walls can be picked too (as an edge of the outline) */
+  pickOutside?: boolean
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -343,7 +345,28 @@ const PlanCanvas: React.FC<{
       {outline.map((a, i) => {
         const b = outline[(i + 1) % outline.length]
         const v = structure?.outside[i]
-        return <line key={`o${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={v?.loadBearing ? styles.wallLB : styles.wallOut} strokeWidth={sw * 3.2} strokeLinecap="square" />
+        const sel = pickOutside && selection?.kind === "edge" && selection.index === i
+        return (
+          <g key={`o${i}`}>
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`${v?.loadBearing ? styles.wallLB : styles.wallOut} ${sel ? styles.wallSelected : ""}`} strokeWidth={sw * (sel ? 4.2 : 3.2)} strokeLinecap="square" />
+            {pickOutside && tool === "select" && (
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke="transparent"
+                strokeWidth={sw * 10}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect({ kind: "edge", index: i })
+                }}
+                style={{ cursor: "pointer" }}
+              />
+            )}
+          </g>
+        )
       })}
 
       {/* the inside walls */}
