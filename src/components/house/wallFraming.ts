@@ -50,7 +50,7 @@ const CLOSE = 100
 /** the longest plate bought in one length; longer ones are joined */
 const MAX_PLATE = 6000
 /** an opening whose bottom is this close to the floor is a door */
-const DOOR_SILL = 100
+export const DOOR_SILL = 100
 
 export type MemberKind =
   | "bottomPlate"
@@ -145,6 +145,11 @@ export interface FramedWall {
   warnings: string[]
   /** outside walls: the outline side it stands on (plan), to pick it by */
   side?: { a: Pt; b: Pt }
+  /** where the frame's x is from: the wall line's (inside walls: a door's
+   * atMm) or the cladding wall's (outside walls: an opening's x) is the
+   * frame's x + along; and the frame's floor, up from the ground floor */
+  along: number
+  z0: number
 }
 
 export interface HouseFraming {
@@ -440,7 +445,7 @@ function insideWalls(g: FloorGraph, doors: Door[], structure: Structure | null, 
       .map((door) => {
         const W = door.widthMm + st.doorWidthAllowanceMm
         const x0 = door.atMm - e0.off - W / 2
-        return { id: door.id, label: `${door.widthMm} × ${door.heightMm} door`, x0, x1: x0 + W, sill: null, head: door.heightMm + st.doorHeightAllowanceMm }
+        return { id: door.id, label: `${door.name ? `${door.name} ` : ""}${door.widthMm} × ${door.heightMm} door`, x0, x1: x0 + W, sill: null, head: door.heightMm + st.doorHeightAllowanceMm }
       })
     const junctions: number[] = []
     walls.forEach((o, oi) => {
@@ -457,6 +462,8 @@ function insideWalls(g: FloorGraph, doors: Door[], structure: Structure | null, 
       outside: false,
       name: wallName(g, w.a, w.b, wi),
       loadBearing: lb,
+      along: e0.off,
+      z0: 0,
       start: { x: w.a.x + d.x * e0.off, y: w.a.y + d.y * e0.off },
       end: { x: w.b.x - d.x * e1.off, y: w.b.y - d.y * e1.off },
       lengthMm: Math.round(L),
@@ -532,7 +539,7 @@ function outsideWalls(
       const x0 = o.x - shift - st.windowWidthAllowanceMm / 2
       return {
         id: o.id,
-        label: `${Math.round(o.width)} × ${Math.round(Math.max(o.height, o.heightRight ?? 0))} ${door ? "door" : "window"}`,
+        label: `${o.code ? `${o.code} ` : ""}${Math.round(o.width)} × ${Math.round(Math.max(o.height, o.heightRight ?? 0))} ${door ? "door" : "window"}`,
         x0,
         x1: x0 + o.width + st.windowWidthAllowanceMm,
         sill: door ? null : bottom - st.windowHeightAllowanceMm / 2,
@@ -571,6 +578,8 @@ function outsideWalls(
       lengthMm: Math.round(L),
       heightMm,
       side: { a: sd.a, b: sd.b },
+      along: shift,
+      z0,
       ...framed,
     }
   })
@@ -603,7 +612,7 @@ export function houseFraming(
   }
   const notes: string[] = []
   if (!cladding) notes.push("The outside walls need a closed outline to be framed.")
-  else if (!openings) notes.push("No windows or outside doors yet — they come from the linked weatherboard project (Cladding step).")
+  else if (!openings) notes.push("No windows or outside doors yet — draw them on a wall here, or add them in the linked weatherboard project (Cladding step).")
   return { walls, storeyZ: [0, upperZ], settings: st, notes }
 }
 

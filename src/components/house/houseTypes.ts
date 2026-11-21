@@ -4,7 +4,7 @@
  * linked weatherboard project). Plan coordinates are mm, y down as on
  * screen, like the footprint editor's. */
 
-import type { RoofPlan, WingSetting } from "../weatherboards/types"
+import type { Opening, RoofPlan, WingSetting } from "../weatherboards/types"
 import { gridFromData, type ProjectGrid } from "./grid"
 
 export interface Pt {
@@ -55,6 +55,7 @@ export interface InsideWall {
  * along the wall, from the wall's first end (`a`) */
 export interface Door {
   id: string
+  name?: string
   /** the inside wall's id (outline mode) or key (rooms mode, see floorPlan.ts) */
   wallId: string
   atMm: number
@@ -201,7 +202,18 @@ export interface HouseProject {
   /** the step the walk-through's on */
   step: number
   link: CladdingLink | null
+  /** windows and doors drawn on the outside walls (in Framing), each on its
+   * cladding wall (by id) as the weatherboards place them: x from the wall's
+   * start, sill up from the ground floor */
+  joinery: HouseJoinery[]
 }
+
+export interface HouseJoinery extends Opening {
+  wallId: string
+}
+
+/** the house's own joinery's ids start so, to tell them from the weatherboard project's */
+export const HOUSE_JOINERY = "hj-"
 
 export const DEFAULT_SETTINGS: HouseSettings = {
   studHeightMm: 2400,
@@ -226,6 +238,7 @@ export const DEFAULT_HOUSE: HouseProject = {
   settings: DEFAULT_SETTINGS,
   step: 0,
   link: null,
+  joinery: [],
 }
 
 /** a plain box to start drawing from: 12 × 8 m */
@@ -282,5 +295,8 @@ export function houseFromData(d: unknown): HouseProject {
     },
     step: typeof o.step === "number" ? o.step : 0,
     link: o.link && typeof o.link === "object" && typeof o.link.id === "string" ? o.link : null,
+    joinery: arr<HouseJoinery>(o.joinery).filter(
+      (j) => j && typeof j.id === "string" && typeof j.wallId === "string" && [j.x, j.sill, j.width, j.height].every((v) => typeof v === "number"),
+    ),
   }
 }

@@ -16,9 +16,9 @@
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
 import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
-import { Elevation, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
+import { Elevation, Opening, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
-import { HouseProject } from "./houseTypes"
+import { HOUSE_JOINERY, HouseProject } from "./houseTypes"
 
 const COMPASS = ["North", "East", "South", "West"] as const
 type Face = (typeof COMPASS)[number]
@@ -252,6 +252,14 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
   const g = storeyWalls(groundOutline, graph, "hs", 0, H0, "")
   const u = twoStorey ? storeyWalls(upperOutline, upperGraph!, "us", floorZ, top, " (upstairs)") : null
   const walls = new Map([...g.walls, ...(u?.walls ?? [])].map((w) => [w.id, w]))
+  // the windows and doors drawn on them (as still fit)
+  for (const j of house.joinery ?? []) {
+    const w = walls.get(j.wallId)
+    if (!w || j.x < 0 || j.x + j.width > w.lengthMm + 1) continue
+    const o: Opening & { wallId?: string } = { ...j }
+    delete o.wallId
+    w.openings.push(o)
+  }
 
   // the main roof over the top storey: built once to trace the walls' tops
   // off, then again so it knows the gable walls are peaked now
@@ -361,7 +369,8 @@ export function mergeCladding(existing: WeatherboardProject | null, generated: W
       // the house owns the shape; keep what was added to it, as still fits
       return {
         ...w,
-        openings: (old.openings ?? []).filter((o) => o.x + o.width <= w.lengthMm),
+        // (the house's own drawn joinery is the house's: as it is now)
+        openings: [...(old.openings ?? []).filter((o) => !o.id.startsWith(HOUSE_JOINERY) && o.x + o.width <= w.lengthMm), ...w.openings],
         ...(old.skips ? { skips: old.skips.filter((p) => p.x <= w.lengthMm) } : {}),
         ...(old.corners ? { corners: old.corners.filter((c) => c.x < w.lengthMm) } : {}),
         coverMm: old.coverMm,

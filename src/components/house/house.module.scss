@@ -276,6 +276,48 @@
   }
 }
 
+.pill.pillOn {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 0.3em;
+  margin-left: 0.3em;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 0.75em;
+  line-height: 1.3;
+  opacity: 0.8;
+}
+
+.modalBack {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal {
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1rem 1.2rem;
+  background: var(--background, #f6f5f1);
+  border-radius: var(--borderRadius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+
+  h3 {
+    margin: 0 0 0.75rem;
+  }
+}
+
 .pill {
   display: inline-block;
   padding: 0.35rem 0.9rem;

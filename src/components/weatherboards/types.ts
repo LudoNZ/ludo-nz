@@ -34,6 +34,9 @@ export interface Opening {
   auto?: boolean
   /** Trim parts of this unit left out of the order (skip mode). */
   skipParts?: Partial<Record<JoineryPart, boolean>>
+  /** the joinery schedule's ID ("W01") and a name ("Kitchen window") */
+  code?: string
+  name?: string
 }
 
 /** The trim parts a window or door brings: facings (two jambs and a
