@@ -14,6 +14,8 @@ import { buildFrame, DEFAULT_FRAME_INPUT } from "../floorFraming/frame"
 import { frameSolids } from "../floorFraming/frameRender3d"
 import type { Solid } from "../stairs/stairRender3d"
 import { analyseHouse, Structure } from "./structure"
+import { houseSlab, slabSolids } from "./slab3d"
+import { ribRaftFromData } from "../ribRaft/ribRaft"
 
 /** the first floor's floor as slabs, one per cell (world mm), held clear
  * of the walls — in from the outside walls by their depth, and either side
@@ -162,6 +164,10 @@ export function houseRenderInputFrom(
     ...(upperGraph && structures.upper && house.upper ? insideWalls(upperGraph, structures.upper, z1, house.upper.studHeightMm, true, house.upper.plan.doors) : []),
   ]
   const floors = floorFraming(house, graph, upperGraph)
+  // a slab: its rib raft — pods, steel, concrete (the concrete's the floor, and its edge the foundation)
+  const slab = houseSlab(house, graph, structures.ground)
+  const rr = ribRaftFromData(house.settings.ribRaft)
+  const slabParts = slab ? slabSolids(slab, rr.podHeightMm + rr.toppingMm, rr.toppingMm) : []
   // (framed, the first floor's own slab's left out: the midfloor's sheets are its floor)
   const upper = cladding.upper && upperGraph ? { layout: cladding.upper, floorZ: z1, floorCells: floors.midfloor ? [] : upperFloorCells(upperGraph) } : undefined
   return {
@@ -175,9 +181,10 @@ export function houseRenderInputFrom(
     roofColour: house.settings.roof.colour,
     extras,
     upper,
-    solids: floors.solids,
+    solids: [...floors.solids, ...slabParts],
     ...(floors.groundZ !== undefined ? { groundZ: floors.groundZ } : {}),
-    noFloor: floors.timber,
+    noFloor: floors.timber || !!slab,
+    ...(slab ? { noFoundation: true } : {}),
   }
 }
 

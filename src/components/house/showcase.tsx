@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { buildHouseScene, groupPieces, HouseRenderInput, housePieces, Piece, PlacedHouse } from "@/components/weatherboards/houseRender3d"
 import type { V3 } from "@/components/render3d/perspective"
+import { concreteTruck } from "./concreteTruck"
 import styles from "./showcase.module.scss"
 
 /** A stage of the build: which parts go up in it, its name, an icon and a line of story. */
@@ -13,6 +14,10 @@ interface Phase {
   story: string
   icon: React.ReactNode
   pieces: Piece[]
+  /** how long it runs (s) */
+  len: number
+  /** the pour: the concrete rises in place (house by house), the truck at the chute */
+  pour?: boolean
 }
 
 /** each stage's length, and how long each part takes to fall into place (s) */
@@ -30,6 +35,9 @@ const ICON = (d: string) => (
 )
 const ICONS = {
   ground: ICON("M3 18h18M5 18v-3h4v3M10 18v-3h4v3M15 18v-3h4v3"),
+  pods: ICON("M3 18h18M4 15h4v-4H4zM10 15h4v-4h-4zM16 15h4v-4h-4z"),
+  steel: ICON("M3 9h18M3 15h18M7 5v14M12 5v14M17 5v14"),
+  pour: ICON("M2 17h10v-5H6l-2 3H2zM12 17h3M13 9l7-3M14 12l6-2M5 19a1.5 1.5 0 1 0 .01 0M10 19a1.5 1.5 0 1 0 .01 0"),
   subfloor: ICON("M3 10h18M3 14h18M6 6v12M10 6v12M14 6v12M18 6v12"),
   walls: ICON("M4 20V8h16v12M4 8l8-4 8 4M8 20v-8M12 20v-8M16 20v-8"),
   joinery: ICON("M5 4h14v16H5zM12 4v16M5 12h14"),
@@ -83,6 +91,8 @@ const Showcase: React.FC<{
           y1 = Math.max(y1, y)
           z1 = Math.max(z1, z)
         }
+    // (room on the south side for the concrete truck's lane)
+    if (model.pieces.some((p) => p.member === "slab")) y0 -= 4800
     return [x0, x1].flatMap((x) => [y0, y1].flatMap((y) => [z0, z1].map((z): V3 => [x, y, z])))
   }, [model])
 
@@ -95,8 +105,12 @@ const Showcase: React.FC<{
         .map((p) => ({ p, z: Math.min(...p.solid.faces.flatMap((fc) => fc.pts.map((q) => q[2]))), x: Math.min(...p.solid.faces.flatMap((fc) => fc.pts.map((q) => q[0] + q[1] * 0.3))) }))
         .sort((a, b) => Math.round(a.z / 200) - Math.round(b.z / 200) || a.x - b.x)
         .map((x) => x.p)
-    const all: Omit<Phase, "icon">[] = [
+    const groups = new Set(ps.filter((p) => p.member === "slab").map((p) => p.group ?? 0)).size
+    const all: Omit<Phase, "icon" | "len">[] = [
       { id: "ground", title: "The ground", story: facts.ground ?? "The site's set out and the foundations go down.", pieces: take((p) => p.member === "foundation") },
+      { id: "pods", title: "Pods", story: facts.pods ?? "The polystyrene pods go down on the hardfill.", pieces: take((p) => p.member === "pods") },
+      { id: "steel", title: "Steel & mesh", story: facts.steel ?? "Bars in the beams and ribs, and the mesh over the top.", pieces: take((p) => p.member === "steel") },
+      { id: "pour", title: "The pour", story: facts.pour ?? "The concrete truck's here: the slab's poured.", pieces: take((p) => p.member === "slab") },
       { id: "subfloor", title: "The subfloor", story: facts.subfloor ?? "Piles, bearers and joists, and the flooring on top.", pieces: take((p) => p.member === "subfloor") },
       {
         id: "walls",
@@ -115,13 +129,32 @@ const Showcase: React.FC<{
       { id: "roof", title: "The roof", story: facts.roof ?? "The roof goes on.", pieces: take((p) => p.member === "roof") },
       { id: "finish", title: "Finished", story: facts.finish ?? "Facings, scribers and flashings — and it's done.", pieces: take((p) => p.member === "trims") },
     ]
-    return all.filter((x) => x.pieces.length).map((x) => ({ ...x, icon: ICONS[x.id as keyof typeof ICONS] }))
+    return all
+      .filter((x) => x.pieces.length)
+      .map((x) => ({
+        ...x,
+        icon: ICONS[x.id as keyof typeof ICONS],
+        // (the pour runs longer: the truck goes slab to slab)
+        len: x.id === "pour" ? PHASE_S * Math.max(1.6, 0.9 * groups + 0.6) : PHASE_S,
+        ...(x.id === "pour" ? { pour: true } : {}),
+      }))
   }, [model, facts])
 
-  const total = phases.length * PHASE_S
+  // when each stage starts and ends
+  const ends = useMemo(() => phases.reduce<number[]>((acc, p) => [...acc, (acc[acc.length - 1] ?? 0) + p.len], []), [phases])
+  const starts = useMemo(() => ends.map((e, k) => e - phases[k].len), [ends, phases])
+  const total = ends[ends.length - 1] ?? 0
+  /** the stage a moment's in */
+  const phaseOf = useCallback(
+    (at: number) => {
+      const k = ends.findIndex((e) => at < e - 1e-6)
+      return k < 0 ? Math.max(0, phases.length - 1) : k
+    },
+    [ends, phases.length],
+  )
   // where the build's got to (s), and where it's going
   const [t, setT] = useState(0)
-  const [goal, setGoal] = useState(PHASE_S)
+  const [goal, setGoal] = useState(-1)
   const [fast, setFast] = useState(false)
   const [auto, setAuto] = useState(false)
   const tRef = useRef(t)
@@ -138,7 +171,7 @@ const Showcase: React.FC<{
       last = now
       setAz((a) => a + dt * 4)
       setT((cur) => {
-        const g = auto ? total : goal
+        const g = auto ? total : goal < 0 ? (ends[0] ?? 0) : goal
         if (Math.abs(g - cur) < 1e-3) return g
         const step = dt * (fast ? FAST : 1)
         return g > cur ? Math.min(g, cur + step) : Math.max(g, cur - step)
@@ -147,10 +180,11 @@ const Showcase: React.FC<{
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [goal, fast, auto, total])
+  }, [goal, fast, auto, total, ends])
 
-  const phaseAt = Math.min(phases.length - 1, Math.floor(Math.max(0, t - 1e-3) / PHASE_S))
-  const arrived = Math.abs(goal - t) < 1e-3
+  const goalAt = goal < 0 ? (ends[0] ?? 0) : goal
+  const phaseAt = phaseOf(Math.max(0, t - 1e-3))
+  const arrived = Math.abs(goalAt - t) < 1e-3
   useEffect(() => {
     if (arrived) setFast(false)
   }, [arrived])
@@ -166,13 +200,15 @@ const Showcase: React.FC<{
     (k: number) => {
       setAuto(false)
       const cur = tRef.current
-      const end = (Math.max(0, Math.min(phases.length - 1, k)) + 1) * PHASE_S
-      setFast(Math.abs(end - cur) > PHASE_S + 0.01)
+      const kk = Math.max(0, Math.min(phases.length - 1, k))
+      const end = ends[kk] ?? 0
+      // (to the very next stage at playing speed; further, quickly)
+      setFast(Math.abs(kk - phaseOf(Math.max(0, cur - 1e-3))) > 1)
       setGoal(end)
     },
-    [phases.length],
+    [phases.length, ends, phaseOf],
   )
-  const current = Math.max(0, Math.round(goal / PHASE_S) - 1)
+  const current = phaseOf(Math.max(0, goalAt - 1e-3))
   /** play the rest, or pause where it's got to (and play again from the start once it's built) */
   const togglePlay = useCallback(() => {
     setFast(false)
@@ -203,21 +239,101 @@ const Showcase: React.FC<{
   }, [current, goTo, onClose, togglePlay])
 
   // each part where it is at time t: not yet started (out of sight), falling, or landed
+  // the pour: each house's slab in turn, west to east, the truck driving along to it
+  const pour = useMemo(() => {
+    const k = phases.findIndex((p) => p.pour)
+    if (k < 0) return null
+    const ph = phases[k]
+    const zs = (p: Piece) => p.solid.faces.flatMap((f) => f.pts.map((q) => q[2]))
+    const byGroup = new Map<number, Piece[]>()
+    for (const p of ph.pieces) byGroup.set(p.group ?? 0, [...(byGroup.get(p.group ?? 0) ?? []), p])
+    const all = ph.pieces.flatMap((p) => p.solid.faces.flatMap((f) => f.pts))
+    const south = Math.min(...all.map((q) => q[1]))
+    const z0 = Math.min(...ph.pieces.flatMap(zs))
+    const slabs = [...byGroup.entries()]
+      .map(([g, ps]) => {
+        const pts = ps.flatMap((p) => p.solid.faces.flatMap((f) => f.pts))
+        const xs = pts.map((q) => q[0])
+        const top = Math.max(...ps.flatMap(zs))
+        const bottom = Math.min(...ps.flatMap(zs))
+        return { g, x: (Math.min(...xs) + Math.max(...xs)) / 2, x0: Math.min(...xs), x1: Math.max(...xs), south: Math.min(...pts.map((q) => q[1])), top, bottom }
+      })
+      .sort((a, b) => a.x - b.x)
+    // (in to the first, then each slab: a drive, a pour; then away)
+    const IN = 1.1
+    const OUT = 0.9
+    const each = (ph.len - IN - OUT) / slabs.length
+    return { k, slabs, south, z0, IN, OUT, each }
+  }, [phases])
+
   const shown = useMemo(() => {
     const out: Piece[] = []
+    // the concrete's level in each house's slab now (null: not started)
+    const level = new Map<number, number>()
+    let truck: Piece[] = []
+    if (pour) {
+      const start = starts[pour.k]
+      const local = t - start
+      const drive = 0.3
+      pour.slabs.forEach((sl, i) => {
+        const u = Math.max(0, Math.min(1, (local - pour.IN - i * pour.each - drive * pour.each) / ((1 - drive) * pour.each)))
+        if (local > pour.IN + i * pour.each + drive * pour.each) level.set(sl.g, sl.bottom + (sl.top - sl.bottom) * u)
+      })
+      if (local > 0 && local < phases[pour.k].len) {
+        // where the truck's back is: driving in, at a slab, between them, away
+        const at = (i: number) => pour.slabs[Math.max(0, Math.min(pour.slabs.length - 1, i))].x
+        const ease = (v: number) => v * v * (3 - 2 * v)
+        let rx: number
+        let pouring: (typeof pour.slabs)[number] | null = null
+        if (local < pour.IN) rx = at(0) - 16000 * (1 - ease(local / pour.IN))
+        else if (local > phases[pour.k].len - pour.OUT) rx = at(pour.slabs.length - 1) + 16000 * ease((local - (phases[pour.k].len - pour.OUT)) / pour.OUT)
+        else {
+          const i = Math.min(pour.slabs.length - 1, Math.floor((local - pour.IN) / pour.each))
+          const w = (local - pour.IN - i * pour.each) / pour.each
+          if (w < drive) rx = i === 0 ? at(0) : at(i - 1) + (at(i) - at(i - 1)) * ease(w / drive)
+          else {
+            rx = at(i)
+            pouring = pour.slabs[i]
+          }
+        }
+        const y = pour.south - 3200
+        const lvl = pouring ? (level.get(pouring.g) ?? pouring.bottom) : null
+        const lip: [number, number, number] | null = pouring ? [rx - 150, pouring.south + 1600, pouring.top + 900] : null
+        truck = concreteTruck(rx, y, pour.z0 + 185, t * 2.4, lip, pouring && lvl !== null && lvl < pouring.top - 1 ? lvl : null)
+      }
+    }
+    // (a part of a house's slab sunk in its concrete is out of sight: left out)
+    const topOf = (p: Piece) => Math.max(...p.solid.faces.flatMap((f) => f.pts.map((q) => q[2])))
+    const buried = (p: Piece) => (p.member === "pods" || p.member === "steel") && (level.get(p.group ?? 0) ?? -Infinity) >= topOf(p) - 1
     phases.forEach((ph, k) => {
       const n = ph.pieces.length
-      const start = k * PHASE_S
-      const spread = PHASE_S - FALL_S - 0.15
+      const start = starts[k]
+      if (ph.pour) {
+        // the concrete rises in place
+        for (const p of ph.pieces) {
+          const lv = level.get(p.group ?? 0)
+          if (lv === undefined) continue
+          const zs = p.solid.faces.flatMap((f) => f.pts.map((q) => q[2]))
+          const lo = Math.min(...zs)
+          const hi = Math.max(...zs)
+          const z = Math.min(hi, lv)
+          if (z <= lo + 1) continue
+          const sc = (z - lo) / (hi - lo || 1)
+          out.push({ ...p, solid: { ...p.solid, faces: p.solid.faces.map((f) => ({ ...f, pts: f.pts.map(([x, y, q]): [number, number, number] => [x, y, lo + (q - lo) * sc]) })) } })
+        }
+        return
+      }
+      const spread = ph.len - FALL_S - 0.15
       ph.pieces.forEach((p, i) => {
+        if (buried(p)) return
         const t0 = start + (n > 1 ? (i / (n - 1)) * spread : 0)
         const u = (t - t0) / FALL_S
         if (u <= 0) return
         out.push(lifted(p, u >= 1 ? 0 : DROP_MM * (1 - easeOutBack(u))))
       })
     })
-    return out
-  }, [phases, t])
+    return [...out, ...truck]
+  }, [phases, t, pour, starts])
 
   const scene = useMemo(() => buildHouseScene({ ...model, pieces: shown.length ? shown : [], floor: null }, { azimuthDeg: az, elevationDeg: 24, fitTo }), [model, shown, az, fitTo])
 
@@ -289,7 +405,7 @@ const Showcase: React.FC<{
         )}
         <ol className={styles.story} aria-label="The build, stage by stage">
           {phases.map((p, k) => {
-            const done = t >= (k + 1) * PHASE_S - 1e-3
+            const done = t >= ends[k] - 1e-3
             const on = k === phaseAt
             return (
               <li key={p.id} className={`${styles.dot} ${done ? styles.done : ""} ${on ? styles.on : ""}`}>
@@ -302,7 +418,7 @@ const Showcase: React.FC<{
           })}
         </ol>
         <div className={styles.controls}>
-          <button type="button" onClick={() => goTo(current - 1)} disabled={current === 0 && t <= PHASE_S}>
+          <button type="button" onClick={() => goTo(current - 1)} disabled={current === 0 && t <= (ends[0] ?? 0)}>
             ◀ Back
           </button>
           <button type="button" onClick={togglePlay}>

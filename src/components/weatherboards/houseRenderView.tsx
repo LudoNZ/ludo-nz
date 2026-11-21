@@ -23,7 +23,8 @@ const HouseRenderView: React.FC<{
 }> = ({ input, units, fileName = "house", picking, onPick }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-35)
   const [elevationDeg, setElevationDeg] = useState(25)
-  const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set())
+  // (the slab's pods and steel are inside its concrete: shown by ticking them, with the slab off)
+  const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set(["pods", "steel"]))
   const toggle = (m: HouseRenderMember) =>
     setHidden((h) => {
       const next = new Set(h)
@@ -101,7 +102,7 @@ const HouseRenderView: React.FC<{
         (m) =>
           (m !== "inside" || inputs.some((i) => !!i.extras?.length)) &&
           (m !== "upper" || inputs.some((i) => !!i.upper)) &&
-          ((m !== "subfloor" && m !== "midfloor") || inputs.some((i) => !!i.solids?.some((x) => x.member === m))) &&
+          ((m !== "subfloor" && m !== "midfloor" && m !== "slab" && m !== "pods" && m !== "steel") || inputs.some((i) => !!i.solids?.some((x) => x.member === m))) &&
           (m !== "floor" || (!units?.length && !input.noFloor)),
       ).map((m) => (
         <label key={m} className={styles.memberToggle}>

@@ -18,7 +18,7 @@ import { Roof, ROOF_DEPTH, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor"
+export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor" | "slab" | "pods" | "steel"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
@@ -31,9 +31,12 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   floor: "Floor",
   subfloor: "Subfloor",
   midfloor: "Midfloor",
+  slab: "Slab",
+  pods: "Pods",
+  steel: "Steel & mesh",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor", "slab", "pods", "steel"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -89,6 +92,8 @@ export interface HouseRenderInput {
   groundZ?: number
   /** leave the plain ground floor out (it's framed and floored in `solids`) */
   noFloor?: boolean
+  /** no foundation band under the walls (a slab's in `solids`: its edge is the foundation) */
+  noFoundation?: boolean
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -164,6 +169,8 @@ export interface Piece {
   lineColor?: string
   /** part of the storey above (hidden with it) */
   upper?: boolean
+  /** which house of a group (a terrace) it's part of */
+  group?: number
 }
 
 /** A convex profile in wall coords (x along, y up) made a slab from
@@ -500,7 +507,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
       }
       return null
     }
-    const found = upper ? null : groundZ
+    const found = upper || input.noFoundation ? null : groundZ
     const add = (ps: Piece[]) => pieces.push(...(upper ? ps.map((p) => ({ ...p, upper: true })) : ps))
     sides.forEach((s, i) => {
       const prev = layout.closed || i > 0 ? sides[(i - 1 + n) % n] : null
@@ -632,7 +639,7 @@ const movedPiece = (p: Piece, [dx, dy, dz]: V3): Piece => ({
  * up to the first house's front; the lawn runs under them all. */
 export function groupPieces(units: PlacedHouse[], hidden: ReadonlySet<HouseRenderMember>): HouseModel {
   const models = units.map((u) => ({ u, m: housePieces(u.input, hidden) }))
-  const pieces = models.flatMap(({ u, m }) => m.pieces.map((p) => movedPiece(p, u.at)))
+  const pieces = models.flatMap(({ u, m }, group) => m.pieces.map((p) => ({ ...movedPiece(p, u.at), group })))
   const first = models.find(({ m }) => m.front)
   return {
     pieces,
@@ -707,7 +714,7 @@ export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOpti
       if (!cam.sees(f.normal, f.pts[0])) return
       // walls (and their foundations) are cut into strips: no outline on their faces, so the cuts don't show
       // and a roof plane can be cut into pieces where other roofs cross it
-      emit(f.pts, f.color, f.normal, ((p.member === "wall" || p.member === "foundation") && fi < 2) || (p.member === "roof" && fi === 0 && !!p.lines))
+      emit(f.pts, f.color, f.normal, ((p.member === "wall" || p.member === "foundation") && fi < 2) || (p.member === "roof" && fi === 0 && !!p.lines) || (p.member === "slab" && fi < 2))
       if (fi === 0 && p.lines?.length) {
         const d = p.lines
           .filter(([a, b]) => cam.ahead(a) > 0 && cam.ahead(b) > 0)

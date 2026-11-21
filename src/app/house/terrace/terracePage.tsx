@@ -12,6 +12,11 @@ import { houseFromData } from "@/components/house/houseTypes"
 import { summariseHouse } from "@/components/house/houseProjectStore"
 import { EMPTY_TERRACE, newUnitId, Terrace, terraceFromData, terraceToJson, TerraceUnit, widthOf } from "@/components/house/terrace"
 import Showcase from "@/components/house/showcase"
+import { houseSlab, slabFacts } from "@/components/house/slab3d"
+import { ribRaftFromData } from "@/components/ribRaft/ribRaft"
+import { floorGraph } from "@/components/house/floorPlan"
+import { houseCladding } from "@/components/house/houseCladding"
+import { analyseHouse } from "@/components/house/structure"
 import { HOUSE_SCRATCH_KEY } from "../houseProjectsPage"
 import styles from "@/components/house/house.module.scss"
 
@@ -55,12 +60,21 @@ export default function TerracePage() {
     const party = terrace.units.reduce((s, u) => s + (u.house.floor.party?.length ?? 0), 0)
     const slab = terrace.units.every((u) => u.house.settings.groundFloor?.kind === "slab")
     const roofs = [...new Set(terrace.units.map((u) => u.house.settings.roof.type))]
+    const slabs = terrace.units.flatMap((u) => {
+      const g = floorGraph(u.house.floor)
+      const up = u.house.upper ? floorGraph(u.house.upper.plan) : null
+      const c = houseCladding(u.house, g, up)
+      const st = analyseHouse(g, up, u.house.settings, c?.roof ?? null, c?.lowerRoofs ?? [])
+      const sl = houseSlab(u.house, g, st.ground)
+      return sl ? [sl.result] : []
+    })
     return {
       ground: `${n} home${n === 1 ? "" : "s"} set out on the site${slab ? ", each on its own rib raft slab" : ""}.`,
       walls: party ? "The walls go up — and between the homes, the fire-rated Integra intertenancy walls." : undefined,
       upper: `Upstairs: ${area.toFixed(0)} m² of rooms across the terrace, all told.`,
       roof: (([a, ...b]) => a.charAt(0).toUpperCase() + a.slice(1) + (b.length ? ` and ${b.join(" and ")}` : ""))(roofs.length ? roofs : ["the"]) + " roofs, joined along the party walls.",
       finish: `${terrace.name} — finished.`,
+      ...(slabs.length ? slabFacts(slabs, ribRaftFromData(terrace.units[0].house.settings.ribRaft).concreteMpa) : {}),
     }
   }, [terrace, summaries])
 

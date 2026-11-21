@@ -39,6 +39,8 @@ import { useSharedJoinery } from "./joineryDefaultsStore"
 import Showcase from "./showcase"
 import { IntegraCard, RibRaftCard } from "./foundationCards"
 import HouseFile from "./houseFile"
+import { houseSlab, slabFacts } from "./slab3d"
+import { ribRaftFromData } from "../ribRaft/ribRaft"
 import FramingStep from "./framingStep"
 import styles from "./house.module.scss"
 
@@ -1507,6 +1509,7 @@ const ThreeDStep: React.FC<{
   // the build, shown off: every part falling into place, stage by stage
   const [showing, setShowing] = useState(false)
   const facts = useMemo(() => {
+    const slab = houseSlab(house, graph, structures.ground)
     const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`
     const st = house.settings
     const gf = st.groundFloor ?? DEFAULT_SETTINGS.groundFloor
@@ -1529,6 +1532,7 @@ const ThreeDStep: React.FC<{
       upper: `Upstairs: ${n(outside.length - ground.length, "outside wall")}, ${n(upperGraph?.walls.length ?? 0, "inside wall")}, ${house.upper?.studHeightMm ?? st.studHeightMm} mm stud.`,
       roof: `A ${roof} roof at ${st.roof.pitchDeg ?? 25}°, on ${st.roofFrame === "trusses" ? "trusses" : "rafters"}.`,
       finish: `Facings, scribers and flashings — ${house.name}, built.`,
+      ...(slab ? slabFacts([slab.result], ribRaftFromData(st.ribRaft).concreteMpa) : {}),
     }
   }, [house, graph, upperGraph, cladding, structures])
   // windows and doors placed on the outside walls straight off the 3D view
