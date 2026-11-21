@@ -531,6 +531,20 @@
   opacity: 0.75;
 }
 
+.spanPicked {
+  stroke: var(--color-primary);
+}
+
+.spanBadge {
+  fill: #fbfaf6;
+}
+
+.sectionPicked {
+  fill: rgba(43, 108, 176, 0.08);
+  stroke: var(--color-primary);
+  stroke-dasharray: 80 50;
+}
+
 .roomLabel {
   fill: #2d2a26;
   font-weight: 700;

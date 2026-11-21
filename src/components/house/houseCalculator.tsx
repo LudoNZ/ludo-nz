@@ -7,7 +7,7 @@ import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
 import { loadProject, newProjectId, ProjectLocation, saveProject } from "@/components/weatherboards/projectStore"
-import type { RoofType } from "@/components/weatherboards/types"
+import type { RoofType, WingSetting } from "@/components/weatherboards/types"
 import { floorGraph, isSquare, roomsToOutline } from "./floorPlan"
 import { houseCladding, mergeCladding } from "./houseCladding"
 import {
@@ -957,6 +957,21 @@ const StructureStep: React.FC<{
   const setRoof = (patch: Partial<HouseSettings["roof"]>) => setSettings({ roof: { ...roof, ...patch } })
   const wall = selection?.kind === "wall" ? graph.walls.find((w) => w.id === selection.id) : undefined
   const verdict = wall ? structure.inside.get(wall.id) : undefined
+  // a roof section picked by its span arrow: its own settings over the house's
+  const section = selection?.kind === "section" ? structure.spans.find((s) => s.key === selection.key) : undefined
+  const sectionSet = section?.key ? st.roofSections?.[section.key] : undefined
+  const setSection = (key: string, patch: Partial<WingSetting>) =>
+    setHouse((h) => {
+      const all = { ...(h.settings.roofSections ?? {}) }
+      const next = { ...(all[key] ?? {}), ...patch }
+      if (!next.turned) delete next.turned
+      if (!next.type) delete next.type
+      if (Object.keys(next).length) all[key] = next
+      else delete all[key]
+      return { ...h, settings: { ...h.settings, roofSections: all } }
+    })
+  const lowerKey = section?.key?.startsWith("l:")
+  const defaultType = lowerKey ? st.lowerRoof.type : roof.type === "auto" || roof.type === "none" ? "gable" : roof.type
   const setLB = (id: string, v: LoadBearing) =>
     setFloor((f) =>
       f.mode === "rooms"
@@ -971,7 +986,7 @@ const StructureStep: React.FC<{
       <h2>Roof &amp; structure</h2>
       <div className={styles.fields}>
         <label>
-          Roof
+          Roof (the house&apos;s default)
           <select value={roof.type === "auto" ? "gable" : roof.type} onChange={(e) => setRoof({ type: e.target.value as RoofType })}>
             {ROOF_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -1108,9 +1123,58 @@ const StructureStep: React.FC<{
       )}
       <p className={styles.hint}>
         Load-bearing walls are in red; the dashed arrows are the way the {st.roofFrame === "trusses" ? "trusses" : "ceiling joists and rafters"}
-        {house.upper && level === 0 ? " and the first floor's joists" : ""} span. Tap an inside wall to see why, or to set it by hand.
+        {house.upper && level === 0 ? " and the first floor's joists" : ""} span. Tap an inside wall to see why, or to set it by hand. Tap a
+        roof section&apos;s arrow (or its ↻) to turn its framing 90° or give it its own kind of roof.
       </p>
-      <PlanCanvas graph={graph} ghost={ghost} grid={house.grid} structure={structure} selection={selection} onSelect={(s) => setSelection(s?.kind === "wall" ? s : null)} />
+      <PlanCanvas
+        graph={graph}
+        ghost={ghost}
+        grid={house.grid}
+        structure={structure}
+        selection={selection}
+        onSelect={(s) => setSelection(s?.kind === "wall" || s?.kind === "section" ? s : null)}
+        pickSections
+      />
+      {section?.key && (
+        <div className={styles.panel}>
+          <p>
+            <strong>Roof section</strong> — {lowerKey ? "the ground floor's lower roof" : "the main roof"}: {section.type ?? defaultType}
+            {sectionSet?.turned ? ", turned by hand" : ""}. The {st.roofFrame === "trusses" ? "trusses span" : "rafters and ceiling joists span"} the way
+            the arrow points.
+          </p>
+          <div className={styles.fields}>
+            <label>
+              Its roof
+              <select value={sectionSet?.type ?? ""} onChange={(e) => setSection(section.key!, { type: (e.target.value || undefined) as WingSetting["type"] })}>
+                <option value="">The house&apos;s ({defaultType})</option>
+                <option value="gable">Gable</option>
+                <option value="hip">Hip</option>
+                <option value="skillion">Skillion</option>
+              </select>
+            </label>
+          </div>
+          <div className={styles.toolbar}>
+            <button type="button" className={styles.pill} onClick={() => setSection(section.key!, { turned: !sectionSet?.turned })}>
+              ↻ Turn the span 90°
+            </button>
+            {sectionSet && (
+              <button type="button" className={styles.pill} onClick={() => setSection(section.key!, { turned: false, type: undefined })}>
+                Back to the house&apos;s
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {!!Object.keys(st.roofSections ?? {}).length && !section && (
+        <div className={styles.toolbar}>
+          <span className={styles.muted}>
+            {Object.keys(st.roofSections ?? {}).length} roof section{Object.keys(st.roofSections ?? {}).length === 1 ? "" : "s"} set by hand.
+          </span>
+          <button type="button" className={styles.pill} onClick={() => setSettings({ roofSections: {} })}>
+            Put them all back
+          </button>
+        </div>
+      )}
       {wall && verdict && (
         <div className={styles.panel}>
           <p>

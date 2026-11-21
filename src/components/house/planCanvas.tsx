@@ -16,6 +16,8 @@ export type Selection =
   | { kind: "gridline"; key: string; axis: "x" | "y" }
   /** a measurement drawn on the grid */
   | { kind: "dim"; id: string }
+  /** a section of the roof, by its key (see HouseSettings.roofSections) */
+  | { kind: "section"; key: string }
   | null
 
 /** what the plan can do here: pick things, draw inside walls, shape the
@@ -63,7 +65,9 @@ const PlanCanvas: React.FC<{
   onMoveWall?: (id: string, a: Pt, b: Pt) => void
   /** snap drawn and dragged walls to the gridlines and walls nearby (Shift held: never) */
   snapOn?: boolean
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true }) => {
+  /** the roof's sections can be picked, by their span arrows */
+  pickSections?: boolean
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true, pickSections }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -510,10 +514,45 @@ const PlanCanvas: React.FC<{
         const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
         const d = { x: (s.b.x - s.a.x) / len, y: (s.b.y - s.a.y) / len }
         const head = (p: Pt, k: 1 | -1) => `M${p.x - d.x * k * sw * 8 + d.y * sw * 5},${p.y - d.y * k * sw * 8 - d.x * sw * 5}L${p.x},${p.y}L${p.x - d.x * k * sw * 8 - d.y * sw * 5},${p.y - d.y * k * sw * 8 + d.x * sw * 5}`
+        const pickable = pickSections && !!s.key
+        const sel = pickable && selection?.kind === "section" && selection.key === s.key
+        const pick = () => s.key && onSelect({ kind: "section", key: s.key })
+        const mid = { x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 }
         return (
-          <g key={`s${i}`} className={styles.span}>
-            <line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} strokeWidth={sw * 0.9} strokeDasharray={`${sw * 4} ${sw * 3}`} />
-            <path d={`${head(s.b, 1)}${head(s.a, -1)}`} strokeWidth={sw * 0.9} fill="none" />
+          <g key={`s${i}`} className={sel ? styles.spanPicked : styles.span}>
+            {sel && s.wing && <polygon points={s.wing.map((p) => `${p.x},${p.y}`).join(" ")} className={styles.sectionPicked} strokeWidth={sw * 1.4} pointerEvents="none" />}
+            <line x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} strokeWidth={sw * (sel ? 1.6 : 0.9)} strokeDasharray={`${sw * 4} ${sw * 3}`} />
+            <path d={`${head(s.b, 1)}${head(s.a, -1)}`} strokeWidth={sw * (sel ? 1.6 : 0.9)} fill="none" />
+            {pickable && (
+              <>
+                <line
+                  x1={s.a.x}
+                  y1={s.a.y}
+                  x2={s.b.x}
+                  y2={s.b.y}
+                  stroke="transparent"
+                  strokeWidth={sw * 10}
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => (e.stopPropagation(), pick())}
+                />
+                <g
+                  role="button"
+                  aria-label={`Roof section ${i + 1}${s.type ? `, ${s.type}` : ""} — tap to turn it or change its roof`}
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => (e.stopPropagation(), pick())}
+                >
+                  <circle cx={mid.x} cy={mid.y} r={sw * 7} className={styles.spanBadge} strokeWidth={sw * 0.9} />
+                  <path
+                    d={`M${mid.x + sw * 3.5},${mid.y - sw * 1}A${sw * 3.6},${sw * 3.6} 0 1 0 ${mid.x + sw * 1.2},${mid.y + sw * 3.4}`}
+                    fill="none"
+                    strokeWidth={sw * 0.9}
+                  />
+                  <path d={`M${mid.x + sw * 1.8},${mid.y - sw * 1.4}L${mid.x + sw * 3.7},${mid.y - sw * 0.8}L${mid.x + sw * 4.3},${mid.y - sw * 2.9}`} fill="none" strokeWidth={sw * 0.9} />
+                </g>
+              </>
+            )}
           </g>
         )
       })}

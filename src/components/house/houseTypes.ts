@@ -4,7 +4,7 @@
  * linked weatherboard project). Plan coordinates are mm, y down as on
  * screen, like the footprint editor's. */
 
-import type { RoofPlan } from "../weatherboards/types"
+import type { RoofPlan, WingSetting } from "../weatherboards/types"
 import { gridFromData, type ProjectGrid } from "./grid"
 
 export interface Pt {
@@ -156,6 +156,10 @@ export interface HouseSettings {
   /** the roof over the parts of the ground floor the first floor doesn't
    * cover: a lean-to up against the storey above, or a hip */
   lowerRoof: { type: "skillion" | "hip"; pitchDeg: number }
+  /** each roof section set by hand — its framing turned 90°, its own kind
+   * of roof — by key: "m:<wing>" on the main roof, "l:<roof>:<wing>" on the
+   * ground floor's lower roofs (the house's roof settings are the default) */
+  roofSections?: Record<string, WingSetting>
   roofFrame: RoofFrame
   /** the roof itself — the same as the weatherboards' 3D roof, minus "auto" */
   roof: RoofPlan

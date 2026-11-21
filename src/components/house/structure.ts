@@ -32,15 +32,16 @@ export interface Structure {
   outside: Verdict[]
   /** per inside wall, by id */
   inside: Map<string, Verdict>
-  /** a line across each wing, the way the framing spans, for the plan */
-  spans: { a: Pt; b: Pt }[]
+  /** a line across each wing, the way the framing spans, for the plan —
+   * and the roof wing's key, to turn it by (see HouseSettings.turnedSpans) */
+  spans: { a: Pt; b: Pt; key?: string; type?: "gable" | "hip" | "skillion"; wing?: Pt[] }[]
   warnings: string[]
   notes: string[]
 }
 
 const m = (mm: number) => `${(mm / 1000).toFixed(1)} m`
 
-export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roof: Roof | null): Structure {
+export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roof: Roof | null, keyOf: (wing: number) => string = (w) => `m:${w}`): Structure {
   const outline = graph.outline
   const n = outline.length
   const outside: Verdict[] = outline.map(() => ({ loadBearing: false, reason: "" }))
@@ -107,7 +108,7 @@ export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roo
     {
       const mid = (r0 + r1) / 2
       const [lo, hi] = reach(mid)
-      spans.push({ a: at(mid, lo), b: at(mid, hi) })
+      spans.push({ a: at(mid, lo), b: at(mid, hi), key: keyOf(wi), type: roof.wings[wi].type, wing: corners })
     }
 
     const lines: number[] = []
@@ -116,7 +117,7 @@ export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roo
     let longest = 0
 
     // rafters too long on the slope want underpurlins, propped off walls near the middle
-    const rafterRun = roof.type === "skillion" ? width : width / 2
+    const rafterRun = roof.wings[wi].type === "skillion" ? width : width / 2
     const rafterSlope = rafterRun / Math.cos(pitch)
     const needsProps = !trusses && rafterSlope > settings.rafterSpanMm
     let propped = false
@@ -214,8 +215,15 @@ export function analyseStructure(graph: FloorGraph, settings: HouseSettings, roo
   // what's left of the outside walls
   outline.forEach((a, i) => {
     if (outside[i].loadBearing) return
-    if (roof.type === "hip") outside[i] = { loadBearing: true, reason: "The hip end's framing sits on it." }
-    else outside[i] = { loadBearing: false, reason: roof.type === "gable" ? "A gable end: it carries the gable, not the roof's weight." : "The roof spans past it." }
+    // (the kind of roof over it: the section it's under, just inside it)
+    const b = outline[(i + 1) % n]
+    const L = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+    const nudge = [1, -1].map((k) => ({ x: mid.x - ((b.y - a.y) / L) * 50 * k, y: mid.y + ((b.x - a.x) / L) * 50 * k }))
+    const wing = onScreen.findIndex((w) => nudge.some((p) => inRect(w.corners, p) && inside(outline, p)))
+    const type = wing >= 0 ? roof.wings[wing].type : roof.type
+    if (type === "hip") outside[i] = { loadBearing: true, reason: "The hip end's framing sits on it." }
+    else outside[i] = { loadBearing: false, reason: type === "gable" ? "A gable end: it carries the gable, not the roof's weight." : "The roof spans past it." }
   })
   if (girders) notes.push("Where the roof's wings meet, the framing lands on a girder truss or valley beam — check its supports with the truss maker or the span tables.")
   notes.push("A guide for laying out the plan: confirm sizes and spans with NZS 3604's tables (or your truss maker, or an engineer).")
@@ -264,7 +272,8 @@ export function analyseHouse(
   const upper = analyseStructure(upperGraph, settings, roof)
   // the ground floor under its own roofs (if any of it's uncovered)
   const lower: Roof | null = lowerRoofs.length ? { ...lowerRoofs[0], faces: lowerRoofs.flatMap((r) => r.faces), wings: lowerRoofs.flatMap((r) => r.wings) } : null
-  const ground = analyseStructure(graph, settings, lower)
+  const lowerKeys = lowerRoofs.flatMap((r, ri) => r.wings.map((_, wi) => `l:${ri}:${wi}`))
+  const ground = analyseStructure(graph, settings, lower, (wi) => lowerKeys[wi])
   // (the lean-to's high side bears on the storey above, not a girder)
   ground.notes = ground.notes.filter((n) => !n.includes("girder") && !n.includes("no roof"))
   const out = graph.outline

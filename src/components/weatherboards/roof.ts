@@ -69,7 +69,7 @@ export interface Roof {
   /** each wing's own rectangle (before it's run into the roof it joins:
    * together they tile the footprint), at the wall lines, and which way
    * its ridge runs — trusses, rafters and ceiling joists span square to it */
-  wings: { corners: P2[]; ridge: P2 }[]
+  wings: { corners: P2[]; ridge: P2; type: "gable" | "hip" | "skillion" }[]
   /** each wing's own roof: its rectangle at the wall lines (as laid out,
    * not run on into another) and its planes, uncut — what the walls round
    * that wing stop under (see own) */
@@ -382,7 +382,10 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
 
   // ── the wings ────────────────────────────────────────────────────────
   const wings: Wing[] = []
+  const turned = new Set(Object.entries(r.wingSet ?? {}).filter(([, v]) => v.turned).map(([k]) => Number(k)))
+  const ownType = (i: number) => r.wingSet?.[i]?.type
   rects.forEach((rect, i) => {
+    let joined: number | undefined
     const wing: Wing = { ...rect, type, alongU: rect.u1 - rect.u0 >= rect.v1 - rect.v0, risesToHigh: true, buried: new Set() }
     if (i > 0) {
       // the roof it joins (one before it), and the side it joins it by
@@ -395,6 +398,7 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         })
       if (best) {
         const { s, parent, index } = best as { s: Side; len: number; parent: Wing; index: number }
+        joined = index
         const across = s[0] === "u" // joined on a u side: it sticks out along u
         const depth = across ? rect.u1 - rect.u0 : rect.v1 - rect.v0
         const width = across ? rect.v1 - rect.v0 : rect.u1 - rect.u0
@@ -501,12 +505,27 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         }
       }
     }
-    if (i === 0 && type === "gable") {
+    const own = ownType(i)
+    if (own && own !== wing.type) {
+      // its own kind of roof, set by hand
+      wing.type = own
+      if (own !== "skillion") delete wing.underRake
+    }
+    if (turned.has(i) || (own && joined !== undefined)) {
+      // turned (or its kind set) by hand: a wing off another roof is then its
+      // own roof as laid out, falling back to a valley where they meet
+      if (joined !== undefined) {
+        Object.assign(wing, { u0: rect.u0, u1: rect.u1, v0: rect.v0, v1: rect.v1, against: joined })
+        for (const k of ["over", "front", "covers", "behind", "hipEnds", "widen", "underRake"] as const) delete wing[k]
+      }
+    }
+    if (turned.has(i)) wing.alongU = !wing.alongU
+    if (i === 0 && type === "gable" && !turned.has(i)) {
       // a peaked wall on a side: the ridge runs square to it
       if (wallOn(rect, "u0", "peak") || wallOn(rect, "u1", "peak")) wing.alongU = true
       else if (wallOn(rect, "v0", "peak") || wallOn(rect, "v1", "peak")) wing.alongU = false
     }
-    if (i === 0 && type === "skillion" && !(opts.abut ?? []).length) {
+    if (i === 0 && type === "skillion" && !(opts.abut ?? []).length && !turned.has(i)) {
       // a wall sloping end to end on a side: the roof falls along it
       for (const s of SIDES) {
         const w = wallOn(rect, s, "slope")
@@ -766,6 +785,7 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
       { x: rect.u0, y: rect.v1 },
     ].map(toWorld),
     ridge: toWorld(wings[i].alongU ? { x: 1, y: 0 } : { x: 0, y: 1 }),
+    type: wings[i].type,
   }))
   if (wings.length > 1) notes.push(`${wings.length} roofs meeting in valleys, one over each wing of the footprint.`)
   const own = rects.map((rect, i) => ({

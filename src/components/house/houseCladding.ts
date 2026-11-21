@@ -16,7 +16,7 @@
 import { DEFAULT_SETTINGS as WB_DEFAULTS } from "../weatherboards/data"
 import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weatherboards/housePlan"
 import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
-import { Elevation, RoofPlan, Wall, WallEdge, WeatherboardProject } from "../weatherboards/types"
+import { Elevation, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
 import { HouseProject } from "./houseTypes"
 
@@ -257,13 +257,17 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
   // off, then again so it knows the gable walls are peaked now
   const topStorey = u ?? g
   const topWalls = new Map(topStorey.walls.map((w) => [w.id, w]))
-  let roof = buildRoof(topStorey.layout, topWalls, st.roof)
+  // (each wing turned by hand, by its key: see HouseSettings.turnedSpans)
+  const sectionsOf = (prefix: string): Record<number, WingSetting> =>
+    Object.fromEntries(Object.entries(st.roofSections ?? {}).flatMap(([k, v]) => (k.startsWith(prefix) && /^\d+$/.test(k.slice(prefix.length)) ? [[Number(k.slice(prefix.length)), v]] : [])))
+  const mainPlan: RoofPlan = { ...st.roof, wingSet: sectionsOf("m:") }
+  let roof = buildRoof(topStorey.layout, topWalls, mainPlan)
   if (roof) {
     for (const s of topStorey.layout.sides) {
       const w = s.wallId ? topWalls.get(s.wallId) : undefined
       if (w) w.top = topFromRoofs([roof], s.a, s.b, top)
     }
-    roof = buildRoof(topStorey.layout, topWalls, st.roof)
+    roof = buildRoof(topStorey.layout, topWalls, mainPlan)
   }
 
   // the lower roofs, over what the first floor doesn't cover, up against it
@@ -283,7 +287,7 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
         elevations: [{ id: "x", name: "x", walls: ws }],
         plan: { method: "footprint", chain: { order: [], steps: {} }, footprint: { points: region, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: ws.map((w) => w.id) } },
       })
-      const r = buildRoof(layout, new Map(ws.map((w) => [w.id, w])), lowerPlan, { abut })
+      const r = buildRoof(layout, new Map(ws.map((w) => [w.id, w])), { ...lowerPlan, wingSet: sectionsOf(`l:${lowerRoofs.length}:`) }, { abut })
       if (r) lowerRoofs.push(r)
     }
     // the ground floor's walls: their tops off the lower roof (eaves

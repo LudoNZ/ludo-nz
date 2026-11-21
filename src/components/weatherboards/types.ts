@@ -155,6 +155,15 @@ export interface RoofPlan {
    * gable with the ridge along the wall, falling back to a valley at the wall
    * (default), or a lean-to against the wall */
   bumpOuts?: "gable" | "leanTo"
+  /** set by hand per wing (by index, as buildRoof splits the footprint): its
+   * ridge — and so the way the framing spans — turned 90° from what's worked
+   * out, and its own kind of roof instead of the house's */
+  wingSet?: Record<number, WingSetting>
+}
+
+export interface WingSetting {
+  turned?: boolean
+  type?: "gable" | "hip" | "skillion"
 }
 
 /** The elevations in the order they meet going round the house, each
