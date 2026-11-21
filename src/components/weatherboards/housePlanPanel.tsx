@@ -295,6 +295,13 @@ const HousePlanPanel: React.FC<{
             </span>
           </label>
           <label>
+            Small wings off a gable end
+            <select value={roofPlan.bumpOuts ?? "gable"} onChange={(e) => setRoof({ bumpOuts: e.target.value as "gable" | "leanTo" })}>
+              <option value="gable">Gable, valley at the wall</option>
+              <option value="leanTo">Lean-to against the wall</option>
+            </select>
+          </label>
+          <label>
             Eaves overhang
             <span className={styles.unit}>
               <NumField value={roofPlan.eavesMm} min={0} step={50} onChange={(v) => setRoof({ eavesMm: v })} ariaLabel="Eaves overhang" />

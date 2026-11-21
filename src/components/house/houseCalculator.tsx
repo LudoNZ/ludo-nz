@@ -820,6 +820,13 @@ const StructureStep: React.FC<{
           </span>
         </label>
         <label>
+          Small wings off a gable end
+          <select value={roof.bumpOuts ?? "gable"} onChange={(e) => setRoof({ bumpOuts: e.target.value as "gable" | "leanTo" })}>
+            <option value="gable">A gable, falling back to a valley at the wall</option>
+            <option value="leanTo">A lean-to against the wall</option>
+          </select>
+        </label>
+        <label>
           {house.upper ? "Ground floor stud height" : "Stud height"}
           <span className={styles.unit}>
             <NumField value={st.studHeightMm} min={1800} step={50} onChange={(v) => setSettings({ studHeightMm: v })} /> mm

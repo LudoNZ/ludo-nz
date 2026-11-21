@@ -151,6 +151,10 @@ export interface RoofPlan {
   /** overhang past a gable end wall, mm */
   vergeMm: number
   colour: string
+  /** a small wing off a gable end (shallower than it's wide): its own little
+   * gable with the ridge along the wall, falling back to a valley at the wall
+   * (default), or a lean-to against the wall */
+  bumpOuts?: "gable" | "leanTo"
 }
 
 /** The elevations in the order they meet going round the house, each

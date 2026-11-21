@@ -231,6 +231,9 @@ interface Wing extends Rect {
   /** a lean-to against a gable end: its high side at the eaves height (it
    * has to get under the gable's rake), falling away at its own pitch */
   underRake?: number
+  /** off a gable end: the roof it's against (its index), which always wins
+   * where the two overlap — this one's trimmed, not that */
+  against?: number
   /** sides run into the roof they join: no overhang, no gable end */
   buried: Set<Side>
 }
@@ -369,15 +372,15 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
     const wing: Wing = { ...rect, type, alongU: rect.u1 - rect.u0 >= rect.v1 - rect.v0, risesToHigh: true, buried: new Set() }
     if (i > 0) {
       // the roof it joins (one before it), and the side it joins it by
-      let best: { s: Side; len: number; parent: Wing } | null = null
+      let best: { s: Side; len: number; parent: Wing; index: number } | null = null
       // (touching its rectangle as laid out, not as run on into another)
       for (const s of SIDES)
         rects.slice(0, i).forEach((p, k) => {
           const len = shared(rect, s, p)
-          if (len > (best?.len ?? 0)) best = { s, len, parent: wings[k] }
+          if (len > (best?.len ?? 0)) best = { s, len, parent: wings[k], index: k }
         })
       if (best) {
-        const { s, parent } = best as { s: Side; len: number; parent: Wing }
+        const { s, parent, index } = best as { s: Side; len: number; parent: Wing; index: number }
         const across = s[0] === "u" // joined on a u side: it sticks out along u
         const depth = across ? rect.u1 - rect.u0 : rect.v1 - rect.v0
         const width = across ? rect.v1 - rect.v0 : rect.u1 - rect.u0
@@ -402,14 +405,21 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           if (s === "u1") wing.u1 += run
           if (s === "v0") wing.v0 -= run
           if (s === "v1") wing.v1 += run
-        } else if (depth < width) {
-          // a shallow one: a lean-to against the wall, its top edge at the
+        } else if (depth < width && r.bumpOuts === "leanTo") {
+          // a shallow one, as a lean-to against the wall: its top edge at the
           // eaves (under the gable's rake, which comes down to the eaves at
           // the corners), falling away at no more than 15°
           wing.type = "skillion"
           wing.alongU = !across
           wing.risesToHigh = s.endsWith("1")
           wing.underRake = Math.tan((Math.min(pitchDeg, 15) * Math.PI) / 180)
+          wing.against = index
+        } else if (depth < width) {
+          // a shallow one, as its own little roof: the ridge along the wall,
+          // falling back to a valley at the wall and out to the eaves
+          wing.type = type === "hip" ? "hip" : "gable"
+          wing.alongU = !across
+          wing.against = index
         } else if (type === "skillion") {
           // a lean-to off a lean-to: rising to the wall it's against
           wing.type = "skillion"
@@ -419,6 +429,7 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           // a lower roof of its own, running out from the wall
           wing.type = type
           wing.alongU = across
+          wing.against = index
         }
         // either way, nothing hangs over (and no gable's filled) where it joins
         wing.buried.add(s)
@@ -506,13 +517,19 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
         // wall. Taken face by face of B, so each piece cut out is convex;
         // a tie goes to the earlier wing.
         const d = bi < ai ? -1 : 1
+        // off a gable end, against B: B wins wherever they overlap — this is
+        // trimmed where it'd poke up past B, as well as where it runs into it
+        // (only carrying on under where it's well below)
+        const againstB = A.w.against === bi
+        // and B's never trimmed by a roof that's against it
+        if (B.w.against === ai) return
         B.planes.forEach((Q, qi) => {
           const hidden: Half[] = [
             ...halvesOf(B.region),
             // where Q is B's surface
             ...B.planes.filter((_, k) => k !== qi).map((R) => ({ a: Q.a - R.a, b: Q.b - R.b, c: Q.c - R.c })),
-            // under it…
-            { a: P.a - Q.a, b: P.b - Q.b, c: P.c - Q.c + d },
+            // under it (or, against B, above it too)…
+            ...(againstB ? [] : [{ a: P.a - Q.a, b: P.b - Q.b, c: P.c - Q.c + d }]),
             // …but not by more than a roof's depth
             { a: Q.a - P.a, b: Q.b - P.b, c: Q.c - P.c - ROOF_DEPTH },
           ]
