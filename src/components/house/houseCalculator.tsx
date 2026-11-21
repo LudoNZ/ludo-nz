@@ -1,15 +1,16 @@
 "use client"
 
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/context/auth"
 import NumField from "@/components/weatherboards/numField"
 import HouseRenderView from "@/components/weatherboards/houseRenderView"
 import { ROOF_COLOURS } from "@/components/weatherboards/roof"
 import { loadProject, newProjectId, ProjectLocation, saveProject } from "@/components/weatherboards/projectStore"
-import type { RoofType, WingSetting } from "@/components/weatherboards/types"
+import type { RoofType, WeatherboardProject, WingSetting } from "@/components/weatherboards/types"
 import { floorGraph, isSquare, roomsToOutline } from "./floorPlan"
-import { houseCladding, mergeCladding } from "./houseCladding"
+import { houseCladding, mergeCladding, splitCladdingEdit } from "./houseCladding"
+import WeatherboardEditor from "@/components/weatherboards/weatherboardEditor"
 import {
   FloorPlan,
   HouseProject,
@@ -1373,7 +1374,7 @@ const CladdingStep: React.FC<{
   }
 
   // linked: push the house's walls across whenever they change
-  const claddingJson = useMemo(() => (cladding ? JSON.stringify(cladding.project) : ""), [cladding])
+  const claddingJson = useMemo(() => (cladding ? JSON.stringify([cladding.project, house.claddingState?.settings ?? null]) : ""), [cladding, house.claddingState?.settings])
   const lastSent = useRef<string | null>(null)
   useEffect(() => {
     if (!link || !cladding || claddingJson === lastSent.current) return
@@ -1382,7 +1383,9 @@ const CladdingStep: React.FC<{
         setStatus("Updating the weatherboards…")
         const loc = location(link)
         const existing = await loadProject(loc, link.id)
+        // (the house's own calculator's settings win, once it has any)
         const merged = mergeCladding(existing ? { settings: existing.settings, elevations: existing.elevations, plan: existing.plan } : null, cladding.project)
+        if (house.claddingState) merged.settings = house.claddingState.settings
         await saveProject(loc, link.id, existing?.name ?? `${house.name} — cladding`, merged)
         lastSent.current = claddingJson
         setStatus("Weatherboards up to date with the plan.")
@@ -1396,24 +1399,77 @@ const CladdingStep: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [link, claddingJson])
 
+  // the weatherboard calculator, right here: the house's walls (their shape
+  // and their windows and doors), under its own settings, skips and corners
+  const project = useMemo(() => (cladding ? mergeCladding(house.claddingState ?? null, cladding.project) : null), [cladding, house.claddingState])
+  const houseWallIds = useMemo(() => new Set(cladding ? [...cladding.walls.keys()] : []), [cladding])
+  const projectRef = useRef(project)
+  projectRef.current = project
+  const setProject = useCallback(
+    (update: (prev: WeatherboardProject) => WeatherboardProject) => {
+      const before = projectRef.current
+      if (!before) return
+      const next = update(before)
+      // (several edits in one go each build on the last)
+      projectRef.current = next
+      setHouse((h) => {
+        const { state, joinery } = splitCladdingEdit(before, next, houseWallIds, h.joinery ?? [])
+        return { ...h, claddingState: state, joinery }
+      })
+    },
+    [houseWallIds, setHouse],
+  )
+  // a linked project from before: bring its settings, skips and windows in, once
+  const importLinked = async () => {
+    if (!link || !cladding) return
+    setBusy(true)
+    setStatus("Bringing in the linked project…")
+    try {
+      const p = await loadProject(location(link), link.id)
+      if (!p) {
+        setStatus("The linked project couldn't be found.")
+        return
+      }
+      const before = cladding.project
+      const next = mergeCladding({ settings: p.settings, elevations: p.elevations, plan: p.plan }, before)
+      setHouse((h) => {
+        const { state, joinery } = splitCladdingEdit(before, next, houseWallIds, h.joinery ?? [])
+        return { ...h, claddingState: state, joinery }
+      })
+      setStatus("Brought in — its settings, skipped boards and windows and doors are the house's now.")
+    } catch (err) {
+      console.error("Bringing in the linked project failed", err)
+      setStatus("Couldn't load the linked project — are you offline?")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <section className={styles.card}>
-      <h2>Cladding</h2>
+      <h2>Cladding — the weatherboards</h2>
       <p className={styles.hint}>
-        Every outside wall goes to the weatherboard calculator, in the elevation it faces, named after the room behind it, with its top off the
-        roof (gable ends raked). Add the windows and doors there; the house keeps each wall&apos;s shape in step with the plan, and leaves what you add.
+        Every outside wall, in the elevation it faces, named after the room behind it, its top off the roof (gable ends raked) and its windows and
+        doors as laid — worked out course by course, with joins on staggered studs and the most economical order. The plan owns each wall&apos;s
+        shape; set the boards, skip boards, add or move windows and doors here (they&apos;re the house&apos;s, so the framing and 3D follow).
       </p>
-      {cladding && (
-        <ul className={styles.rooms}>
-          {cladding.project.elevations.map((e) => (
-            <li key={e.id}>
-              <span>
-                {e.name} <span className={styles.muted}>· {e.walls.map((w) => w.name).join(", ")}</span>
-              </span>
-              <span>{m(e.walls.reduce((s, w) => s + w.lengthMm, 0))}</span>
-            </li>
-          ))}
-        </ul>
+      {!cladding || !project ? (
+        <p className={styles.muted}>The outside walls need a closed outline first — draw it in Floor plans.</p>
+      ) : (
+        <WeatherboardEditor project={project} setProject={setProject} header={null} embedded />
+      )}
+
+      <h3>A weatherboard project of its own</h3>
+      <p className={styles.hint}>
+        Optional: a separate weatherboard project, kept in step with the house, to share or open on its own.
+        {link && !house.claddingState && " One's linked from before — bring what was done there into the house:"}
+      </p>
+      {link && !house.claddingState && (
+        <div className={styles.toolbar}>
+          <button type="button" className={styles.pill} disabled={busy} onClick={importLinked}>
+            Bring in the linked project&apos;s settings, skips and windows
+          </button>
+        </div>
       )}
       {link ? (
         <div className={styles.toolbar}>

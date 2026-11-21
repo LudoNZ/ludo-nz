@@ -18,7 +18,7 @@ import { footprintSides, houseLayout, HouseLayout, outwardOf, P2 } from "../weat
 import { buildRoof, ownRoofAt, Roof, zAt } from "../weatherboards/roof"
 import { Elevation, Opening, RoofPlan, Wall, WallEdge, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import { FloorGraph, simplify, uncovered } from "./floorPlan"
-import { HOUSE_JOINERY, HouseProject } from "./houseTypes"
+import { HOUSE_JOINERY, HouseJoinery, HouseProject } from "./houseTypes"
 
 const COMPASS = ["North", "East", "South", "West"] as const
 type Face = (typeof COMPASS)[number]
@@ -381,5 +381,35 @@ export function mergeCladding(existing: WeatherboardProject | null, generated: W
     settings: existing.settings,
     elevations: [...elevations, ...existing.elevations.filter((e) => !generatedIds.has(e.id))],
     plan: { ...(existing.plan ?? generated.plan!), ...generated.plan! },
+  }
+}
+
+/** An edit made in the weatherboard calculator inside the House (the
+ * Cladding step), split: the windows and doors on the house's own walls are
+ * the house's joinery (kept, moved, added or removed as they were there);
+ * the rest — settings, skips, corners, walls added — is the calculator's
+ * own state, kept with the house. `before` is the project as it was shown. */
+export function splitCladdingEdit(
+  before: WeatherboardProject,
+  next: WeatherboardProject,
+  houseWallIds: Set<string>,
+  joinery: HouseJoinery[],
+): { state: WeatherboardProject; joinery: HouseJoinery[] } {
+  const asHouse = (id: string) => (id.startsWith(HOUSE_JOINERY) ? id : `${HOUSE_JOINERY}${id}`)
+  const onHouseWalls = (p: WeatherboardProject) => p.elevations.flatMap((e) => e.walls).filter((w) => houseWallIds.has(w.id))
+  const shown = new Set(onHouseWalls(before).flatMap((w) => w.openings.map((o) => asHouse(o.id))))
+  const now = onHouseWalls(next).flatMap((w) => w.openings.map((o) => ({ wallId: w.id, o: { ...o, id: asHouse(o.id) } })))
+  const nowIds = new Set(now.map((x) => x.o.id))
+  const old = new Map(joinery.map((j) => [j.id, j]))
+  return {
+    // (what wasn't shown — on a wall it no longer fits — is left as it was)
+    joinery: [
+      ...joinery.filter((j) => !shown.has(j.id) && !nowIds.has(j.id)),
+      ...now.map(({ wallId, o }) => {
+        const j = old.get(o.id)
+        return { ...(j?.typeId ? { typeId: j.typeId } : {}), ...o, wallId }
+      }),
+    ],
+    state: { ...next, elevations: next.elevations.map((e) => ({ ...e, walls: e.walls.map((w) => (houseWallIds.has(w.id) ? { ...w, openings: [] } : w)) })) },
   }
 }

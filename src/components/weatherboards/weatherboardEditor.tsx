@@ -56,7 +56,11 @@ const WeatherboardEditor: React.FC<{
   project: WeatherboardProject
   setProject: (update: (prev: WeatherboardProject) => WeatherboardProject) => void
   header: ReactNode
-}> = ({ project, setProject, header }) => {
+  /** inside another calculator that owns the walls' layout (the House's
+   * Cladding step): no adding or removing elevations, no Plan & 3D tab, and
+   * its own intro instead of this one's */
+  embedded?: boolean
+}> = ({ project, setProject, header, embedded = false }) => {
   const [activeElevationId, setActiveElevationId] = useState<string | null>(null)
   // which wall sub-tab each elevation has open: a wall id, or NEW_WALL_TAB
   const [wallTabs, setWallTabs] = useState<Record<string, string>>({})
@@ -354,12 +358,12 @@ const WeatherboardEditor: React.FC<{
   return (
     <div className={styles.weatherboardsPage}>
       {header}
-      <p className={styles.intro}>
+      {!embedded && <p className={styles.intro}>
         Mark up each elevation as a set of walls — raked tops and bottoms included, even where the rake only starts part
         way along — and get a course-by-course layout with joins on staggered studs, plus the most economical order
         across the board lengths your yard stocks. Heights are in mm above a common datum (FFL or top of slab works
         well).
-      </p>
+      </p>}
 
       <div className={styles.tabs} role="tablist">
         <button
@@ -384,18 +388,22 @@ const WeatherboardEditor: React.FC<{
             <span className={styles.tabCount}>{e.walls.length}</span>
           </button>
         ))}
-        <button type="button" className={styles.tabAdd} onClick={addElevation}>
-          + Elevation
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={planOpen}
-          className={`${styles.tab} ${planOpen ? styles.tabActive : ""}`}
-          onClick={() => setActiveElevationId(PLAN_TAB)}
-        >
-          Plan &amp; 3D
-        </button>
+        {!embedded && (
+          <>
+            <button type="button" className={styles.tabAdd} onClick={addElevation}>
+              + Elevation
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={planOpen}
+              className={`${styles.tab} ${planOpen ? styles.tabActive : ""}`}
+              onClick={() => setActiveElevationId(PLAN_TAB)}
+            >
+              Plan &amp; 3D
+            </button>
+          </>
+        )}
       </div>
 
       {planOpen ? (
@@ -482,9 +490,11 @@ const WeatherboardEditor: React.FC<{
               aria-label="Elevation name"
               onChange={(ev) => updateElevation(activeElevation.id, (e) => ({ ...e, name: ev.target.value }))}
             />
-            <button type="button" className={`${styles.linkButton} ${styles.danger}`} onClick={() => removeElevation(activeElevation.id)}>
-              Remove elevation
-            </button>
+            {!embedded && (
+              <button type="button" className={`${styles.linkButton} ${styles.danger}`} onClick={() => removeElevation(activeElevation.id)}>
+                Remove elevation
+              </button>
+            )}
           </div>
 
           <div className={styles.diagramCard}>
@@ -517,48 +527,6 @@ const WeatherboardEditor: React.FC<{
                 }}
               />
             </div>
-            {/* the selected window/door's shape and size, right by the drawing */}
-            {!skipMode &&
-              (() => {
-                const wall = activeElevation.walls.find((w) => (w.openings ?? []).some((o) => o.id === selectedOpeningId))
-                const i = wall?.openings.findIndex((o) => o.id === selectedOpeningId) ?? -1
-                const o = wall && i >= 0 ? wall.openings[i] : null
-                if (!wall || !o) return null
-                const kind = o.sill <= Math.min(wall.bottom.left, wall.bottom.right) + 100 ? "Door" : "Window"
-                return (
-                  <div className={styles.openingPanel}>
-                    <div className={styles.openingPanelHeader}>
-                      <strong>
-                        {codes.get(wall.id)} · {wall.name} — {kind} {i + 1}
-                      </strong>
-                      <button
-                        type="button"
-                        className={`${styles.linkButton} ${styles.danger}`}
-                        onClick={() => {
-                          updateElevation(activeElevation.id, (e) => ({
-                            ...e,
-                            walls: e.walls.map((w) =>
-                              w.id === wall.id ? { ...w, openings: w.openings.filter((x) => x.id !== o.id) } : w,
-                            ),
-                          }))
-                          setSelectedOpeningId(null)
-                        }}
-                      >
-                        Delete
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.openingPanelClose}
-                        aria-label="Deselect"
-                        onClick={() => setSelectedOpeningId(null)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <OpeningFields opening={o} onChange={(next) => updateOpening(activeElevation.id, wall.id, next)} />
-                  </div>
-                )
-              })()}
             {skipMode && (
               <p className={styles.skipBanner}>
                 <strong>Skip boards:</strong> tap a board to leave it out of the order — tap again to count it. Drag across
@@ -603,6 +571,48 @@ const WeatherboardEditor: React.FC<{
                   })
               }}
             />
+            {/* the selected window/door's shape and size, right under the drawing (not over it: the drawing stays put under the pointer) */}
+            {!skipMode &&
+              (() => {
+                const wall = activeElevation.walls.find((w) => (w.openings ?? []).some((o) => o.id === selectedOpeningId))
+                const i = wall?.openings.findIndex((o) => o.id === selectedOpeningId) ?? -1
+                const o = wall && i >= 0 ? wall.openings[i] : null
+                if (!wall || !o) return null
+                const kind = o.sill <= Math.min(wall.bottom.left, wall.bottom.right) + 100 ? "Door" : "Window"
+                return (
+                  <div className={styles.openingPanel}>
+                    <div className={styles.openingPanelHeader}>
+                      <strong>
+                        {codes.get(wall.id)} · {wall.name} — {kind} {i + 1}
+                      </strong>
+                      <button
+                        type="button"
+                        className={`${styles.linkButton} ${styles.danger}`}
+                        onClick={() => {
+                          updateElevation(activeElevation.id, (e) => ({
+                            ...e,
+                            walls: e.walls.map((w) =>
+                              w.id === wall.id ? { ...w, openings: w.openings.filter((x) => x.id !== o.id) } : w,
+                            ),
+                          }))
+                          setSelectedOpeningId(null)
+                        }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.openingPanelClose}
+                        aria-label="Deselect"
+                        onClick={() => setSelectedOpeningId(null)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <OpeningFields opening={o} onChange={(next) => updateOpening(activeElevation.id, wall.id, next)} />
+                  </div>
+                )
+              })()}
             <p className={styles.legend}>
               <span className={styles.legendJoin} /> board join (on a stud) <span className={styles.legendCourse} /> course
               line <span className={styles.legendFacing} /> facing <span className={styles.legendScriber} /> scriber{" "}

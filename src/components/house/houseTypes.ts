@@ -4,7 +4,7 @@
  * linked weatherboard project). Plan coordinates are mm, y down as on
  * screen, like the footprint editor's. */
 
-import type { Opening, RoofPlan, WingSetting } from "../weatherboards/types"
+import type { Opening, RoofPlan, WeatherboardProject, WingSetting } from "../weatherboards/types"
 import type { JoineryType, LastJoinery } from "./joinery"
 import { gridFromData, type ProjectGrid } from "./grid"
 
@@ -215,6 +215,10 @@ export interface HouseProject {
   joineryTypes?: JoineryType[]
   /** what was laid last, inside and out, for the next to start the same */
   lastJoinery?: Partial<Record<"inside" | "outside", LastJoinery>>
+  /** the weatherboard calculator's own state in the Cladding step — its
+   * settings, skipped boards, corners, walls added — over the house's walls
+   * (their shape and their windows and doors are the house's) */
+  claddingState?: WeatherboardProject
 }
 
 export interface HouseJoinery extends Opening {
@@ -307,6 +311,7 @@ export function houseFromData(d: unknown): HouseProject {
     link: o.link && typeof o.link === "object" && typeof o.link.id === "string" ? o.link : null,
     ...(Array.isArray(o.joineryTypes) && o.joineryTypes.length ? { joineryTypes: o.joineryTypes } : {}),
     ...(o.lastJoinery && typeof o.lastJoinery === "object" ? { lastJoinery: o.lastJoinery } : {}),
+    ...(o.claddingState && typeof o.claddingState === "object" && Array.isArray(o.claddingState.elevations) && o.claddingState.settings ? { claddingState: o.claddingState } : {}),
     joinery: arr<HouseJoinery>(o.joinery).filter(
       (j) => j && typeof j.id === "string" && typeof j.wallId === "string" && [j.x, j.sill, j.width, j.height].every((v) => typeof v === "number"),
     ),
