@@ -18,7 +18,7 @@ import { Roof, ROOF_DEPTH, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor" | "slab" | "pods" | "steel"
+export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor" | "slab" | "pods" | "steel" | "boxing" | "dpm" | "framing"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
@@ -34,9 +34,12 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   slab: "Slab",
   pods: "Pods",
   steel: "Steel & mesh",
+  boxing: "Boxing",
+  dpm: "DPM",
+  framing: "Framing",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor", "slab", "pods", "steel"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor", "slab", "pods", "steel", "boxing", "dpm", "framing"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -87,7 +90,7 @@ export interface HouseRenderInput {
    * plan, world mm) at `floorZ` */
   upper?: { layout: HouseLayout; floorZ: number; floorCells: { x0: number; x1: number; y0: number; y1: number }[] }
   /** more solids, ready made, each under a part (the House's subfloor and midfloor framing) */
-  solids?: { solid: Solid; member: HouseRenderMember }[]
+  solids?: { solid: Solid; member: HouseRenderMember; upper?: boolean; tag?: string }[]
   /** the ground's level, where it's lower than under the walls (a timber floor up on piles) */
   groundZ?: number
   /** leave the plain ground floor out (it's framed and floored in `solids`) */
@@ -171,6 +174,8 @@ export interface Piece {
   upper?: boolean
   /** which house of a group (a terrace) it's part of */
   group?: number
+  /** a finer kind, for the showcase's stages (framing: "frame0", "frame1", "frameIn") */
+  tag?: string
 }
 
 /** A convex profile in wall coords (x along, y up) made a slab from
@@ -569,6 +574,8 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     pieces.push({
       member: x.member ?? "inside",
       upper: x.upper,
+      // (an inside wall's, door leaves too)
+      tag: "in",
       solid: makeSolid([
         { pts: top, color: x.color },
         { pts: base, color: x.color },
@@ -615,7 +622,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
   // (the floor framing, ready made)
-  for (const x of input.solids ?? []) if (!hidden.has(x.member)) kept.push({ solid: x.solid, member: x.member })
+  for (const x of input.solids ?? []) if (!hidden.has(x.member) && !(x.upper && hidden.has("upper"))) kept.push({ solid: x.solid, member: x.member, ...(x.upper ? { upper: true } : {}), ...(x.tag ? { tag: x.tag } : {}) })
   const floor = layout.closed && !hidden.has("floor") && !input.noFloor ? sides.map((s): V3 => [s.a.x, s.a.y, 0]) : null
   // (a hidden storey's walls can't be tapped)
   return { pieces: kept, faces: faces.filter((f) => !(f.upper && hidden.has("upper"))), front: outwardOf(s0), groundZ, floor }

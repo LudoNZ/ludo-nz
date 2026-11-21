@@ -24,7 +24,7 @@ const HouseRenderView: React.FC<{
   const [azimuthDeg, setAzimuthDeg] = useState(-35)
   const [elevationDeg, setElevationDeg] = useState(25)
   // (the slab's pods and steel are inside its concrete: shown by ticking them, with the slab off)
-  const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set(["pods", "steel"]))
+  const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set(["pods", "steel", "boxing", "dpm", "framing"]))
   const toggle = (m: HouseRenderMember) =>
     setHidden((h) => {
       const next = new Set(h)
@@ -102,7 +102,7 @@ const HouseRenderView: React.FC<{
         (m) =>
           (m !== "inside" || inputs.some((i) => !!i.extras?.length)) &&
           (m !== "upper" || inputs.some((i) => !!i.upper)) &&
-          ((m !== "subfloor" && m !== "midfloor" && m !== "slab" && m !== "pods" && m !== "steel") || inputs.some((i) => !!i.solids?.some((x) => x.member === m))) &&
+          (!["subfloor", "midfloor", "slab", "pods", "steel", "boxing", "dpm", "framing"].includes(m) || inputs.some((i) => !!i.solids?.some((x) => x.member === m))) &&
           (m !== "floor" || (!units?.length && !input.noFloor)),
       ).map((m) => (
         <label key={m} className={styles.memberToggle}>

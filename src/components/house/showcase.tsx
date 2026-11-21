@@ -18,6 +18,8 @@ interface Phase {
   len: number
   /** the pour: the concrete rises in place (house by house), the truck at the chute */
   pour?: boolean
+  /** covered up once this stage is done: from then on, not drawn at all (a lighter scene) */
+  goneAfter?: string
 }
 
 /** each stage's length, and how long each part takes to fall into place (s) */
@@ -35,6 +37,12 @@ const ICON = (d: string) => (
 )
 const ICONS = {
   ground: ICON("M3 18h18M5 18v-3h4v3M10 18v-3h4v3M15 18v-3h4v3"),
+  boxing: ICON("M3 7h18v10H3zM3 7l3-3M21 7l-3-3M7 17v3M17 17v3"),
+  dpm: ICON("M3 16c3-2 6 2 9 0s6-2 9 0M3 12c3-2 6 2 9 0s6-2 9 0"),
+  frame0: ICON("M4 20V8h16v12M4 8h16M7 8v12M10 8v12M14 8v12M17 8v12M4 20h16"),
+  frame1: ICON("M4 20V12h16v8M4 12V5h16v7M7 5v7M11 5v7M15 5v7M19 5v7"),
+  frameIn: ICON("M4 4h16v16H4zM12 4v16M4 12h8"),
+  cladding: ICON("M4 6h16M4 10h16M4 14h16M4 18h16"),
   pods: ICON("M3 18h18M4 15h4v-4H4zM10 15h4v-4h-4zM16 15h4v-4h-4z"),
   steel: ICON("M3 9h18M3 15h18M7 5v14M12 5v14M17 5v14"),
   pour: ICON("M2 17h10v-5H6l-2 3H2zM12 17h3M13 9l7-3M14 12l6-2M5 19a1.5 1.5 0 1 0 .01 0M10 19a1.5 1.5 0 1 0 .01 0"),
@@ -106,27 +114,32 @@ const Showcase: React.FC<{
         .sort((a, b) => Math.round(a.z / 200) - Math.round(b.z / 200) || a.x - b.x)
         .map((x) => x.p)
     const groups = new Set(ps.filter((p) => p.member === "slab").map((p) => p.group ?? 0)).size
+    const framed = ps.some((p) => p.member === "framing")
     const all: Omit<Phase, "icon" | "len">[] = [
+      { id: "boxing", title: "Set out & boxing", story: facts.boxing ?? "The site's set out, and the boxing goes up round each slab's edge.", pieces: take((p) => p.member === "boxing"), goneAfter: "pour" },
       { id: "ground", title: "The ground", story: facts.ground ?? "The site's set out and the foundations go down.", pieces: take((p) => p.member === "foundation") },
-      { id: "pods", title: "Pods", story: facts.pods ?? "The polystyrene pods go down on the hardfill.", pieces: take((p) => p.member === "pods") },
-      { id: "steel", title: "Steel & mesh", story: facts.steel ?? "Bars in the beams and ribs, and the mesh over the top.", pieces: take((p) => p.member === "steel") },
+      { id: "dpm", title: "DPM", story: facts.dpm ?? "The damp-proof membrane goes down over the hardfill and sand, lapped and taped.", pieces: take((p) => p.member === "dpm"), goneAfter: "pour" },
+      { id: "pods", title: "Pods", story: facts.pods ?? "The polystyrene pods go down on the membrane.", pieces: take((p) => p.member === "pods"), goneAfter: "pour" },
+      { id: "steel", title: "Steel & mesh", story: facts.steel ?? "Bars in the beams and ribs, and the mesh over the top.", pieces: take((p) => p.member === "steel"), goneAfter: "pour" },
       { id: "pour", title: "The pour", story: facts.pour ?? "The concrete truck's here: the slab's poured.", pieces: take((p) => p.member === "slab") },
       { id: "subfloor", title: "The subfloor", story: facts.subfloor ?? "Piles, bearers and joists, and the flooring on top.", pieces: take((p) => p.member === "subfloor") },
-      {
-        id: "walls",
-        title: "The walls",
-        story: facts.walls ?? "The walls stand up round the floor, inside and out.",
-        pieces: take((p) => !p.upper && (p.member === "wall" || p.member === "inside" || p.member === "floor")),
-      },
-      { id: "joinery", title: "Windows & doors", story: facts.joinery ?? "The joinery goes in.", pieces: take((p) => !p.upper && p.member === "joinery") },
-      { id: "midfloor", title: "The floor above", story: facts.midfloor ?? "Joists span the walls, and the first floor's flooring goes down.", pieces: take((p) => p.member === "midfloor") },
-      {
-        id: "upper",
-        title: "Upstairs",
-        story: facts.upper ?? "The first floor's walls and windows.",
-        pieces: take((p) => !!p.upper && (p.member === "wall" || p.member === "inside" || p.member === "floor" || p.member === "joinery")),
-      },
-      { id: "roof", title: "The roof", story: facts.roof ?? "The roof goes on.", pieces: take((p) => p.member === "roof") },
+      ...(framed
+        ? [
+            { id: "frame0", title: "Ground floor framing", story: facts.frame0 ?? "The outside walls' frames stand up on the slab: plates, studs, lintels.", pieces: take((p) => p.tag === "frame0"), goneAfter: "cladding" },
+            { id: "midfloor", title: "The midfloor", story: facts.midfloor ?? "Joists span the walls below, and the first floor's flooring goes down.", pieces: take((p) => p.member === "midfloor"), goneAfter: "cladding" },
+            { id: "frame1", title: "First floor framing", story: facts.frame1 ?? "Upstairs, the outside walls' frames go up.", pieces: take((p) => p.tag === "frame1"), goneAfter: "cladding" },
+            { id: "frameIn", title: "Inside walls", story: facts.frameIn ?? "The inside walls are framed, both floors.", pieces: take((p) => p.tag === "frameIn"), goneAfter: "cladding" },
+            { id: "roof", title: "The roof", story: facts.roof ?? "The roof goes on.", pieces: take((p) => p.member === "roof") },
+            { id: "joinery", title: "Windows & doors", story: facts.joinery ?? "The joinery goes in.", pieces: take((p) => p.member === "joinery" && p.tag !== "in") },
+            { id: "cladding", title: "Cladding", story: facts.cladding ?? "The weatherboards go on, course by course — the frames are closed in.", pieces: take((p) => p.member === "wall") },
+          ]
+        : [
+            { id: "walls", title: "The walls", story: facts.walls ?? "The walls stand up round the floor, inside and out.", pieces: take((p) => !p.upper && (p.member === "wall" || p.member === "inside" || p.member === "floor")) },
+            { id: "joinery", title: "Windows & doors", story: facts.joinery ?? "The joinery goes in.", pieces: take((p) => !p.upper && p.member === "joinery") },
+            { id: "midfloor", title: "The floor above", story: facts.midfloor ?? "Joists span the walls, and the first floor's flooring goes down.", pieces: take((p) => p.member === "midfloor") },
+            { id: "upper", title: "Upstairs", story: facts.upper ?? "The first floor's walls and windows.", pieces: take((p) => !!p.upper && (p.member === "wall" || p.member === "inside" || p.member === "floor" || p.member === "joinery")) },
+            { id: "roof", title: "The roof", story: facts.roof ?? "The roof goes on.", pieces: take((p) => p.member === "roof") },
+          ]),
       { id: "finish", title: "Finished", story: facts.finish ?? "Facings, scribers and flashings — and it's done.", pieces: take((p) => p.member === "trims") },
     ]
     return all
@@ -306,6 +319,11 @@ const Showcase: React.FC<{
     const topOf = (p: Piece) => Math.max(...p.solid.faces.flatMap((f) => f.pts.map((q) => q[2])))
     const buried = (p: Piece) => (p.member === "pods" || p.member === "steel") && (level.get(p.group ?? 0) ?? -Infinity) >= topOf(p) - 1
     phases.forEach((ph, k) => {
+      // (covered up and done with: not drawn any more)
+      const gone = ph.goneAfter ? phases.findIndex((q) => q.id === ph.goneAfter) : -1
+      if (gone >= 0 && t >= ends[gone] - 1e-3) return
+      // (the boxing's stripped as the truck leaves)
+      const strip = ph.id === "boxing" && pour && gone === pour.k ? Math.max(0, (t - (ends[gone] - pour.OUT)) / pour.OUT) : 0
       const n = ph.pieces.length
       const start = starts[k]
       if (ph.pour) {
@@ -329,11 +347,11 @@ const Showcase: React.FC<{
         const t0 = start + (n > 1 ? (i / (n - 1)) * spread : 0)
         const u = (t - t0) / FALL_S
         if (u <= 0) return
-        out.push(lifted(p, u >= 1 ? 0 : DROP_MM * (1 - easeOutBack(u))))
+        out.push(lifted(p, u >= 1 ? (strip > 0 ? DROP_MM * strip * strip : 0) : DROP_MM * (1 - easeOutBack(u))))
       })
     })
     return [...out, ...truck]
-  }, [phases, t, pour, starts])
+  }, [phases, t, pour, starts, ends])
 
   const scene = useMemo(() => buildHouseScene({ ...model, pieces: shown.length ? shown : [], floor: null }, { azimuthDeg: az, elevationDeg: 24, fitTo }), [model, shown, az, fitTo])
 

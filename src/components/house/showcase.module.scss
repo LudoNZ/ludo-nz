@@ -102,14 +102,15 @@
   margin: 0 auto 0.8rem;
   padding: 0;
   list-style: none;
-  max-width: 52rem;
+  // (room for a dozen stages and more: a slab, framing, cladding…)
+  max-width: min(80rem, 100%);
   overflow-x: auto;
 }
 
 .dot {
   position: relative;
   flex: 1 1 0;
-  min-width: 4.2rem;
+  min-width: 3.4rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -123,16 +124,16 @@
   &:not(:last-child)::after {
     content: "";
     position: absolute;
-    top: 1.25rem;
-    left: calc(50% + 1.4rem);
-    right: calc(-50% + 1.4rem);
+    top: 1.1rem;
+    left: calc(50% + 1.25rem);
+    right: calc(-50% + 1.25rem);
     height: 2px;
     background: rgba(0, 0, 0, 0.15);
   }
 
   button {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.2rem;
+    height: 2.2rem;
     display: grid;
     place-items: center;
     border: 2px solid rgba(0, 0, 0, 0.2);

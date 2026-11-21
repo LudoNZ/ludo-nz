@@ -767,3 +767,14 @@ export function framingSolids(f: HouseFraming, hidden: ReadonlySet<FramingLayer>
   }
   return out
 }
+
+/** Every member as a solid, with which storey it's on and whether it's an outside wall's (for the showcase's stages). */
+export function framingPieces(f: HouseFraming): { solid: Solid; storey: 0 | 1; outside: boolean }[] {
+  const out: { solid: Solid; storey: 0 | 1; outside: boolean }[] = []
+  for (const w of f.walls)
+    for (const m of w.members) {
+      const s = memberSolid(w, m, f.settings.studDepthMm, f.storeyZ[w.storey], MEMBER_COLOURS[m.kind])
+      if (s) out.push({ solid: s, storey: w.storey, outside: w.outside })
+    }
+  return out
+}

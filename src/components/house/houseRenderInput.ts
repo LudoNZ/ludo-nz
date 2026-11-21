@@ -16,6 +16,8 @@ import type { Solid } from "../stairs/stairRender3d"
 import { analyseHouse, Structure } from "./structure"
 import { houseSlab, slabSolids } from "./slab3d"
 import { ribRaftFromData } from "../ribRaft/ribRaft"
+import { framingPieces, houseFraming } from "./wallFraming"
+import type { Opening } from "../weatherboards/types"
 
 /** the first floor's floor as slabs, one per cell (world mm), held clear
  * of the walls — in from the outside walls by their depth, and either side
@@ -168,6 +170,14 @@ export function houseRenderInputFrom(
   const slab = houseSlab(house, graph, structures.ground)
   const rr = ribRaftFromData(house.settings.ribRaft)
   const slabParts = slab ? slabSolids(slab, rr.podHeightMm + rr.toppingMm, rr.toppingMm) : []
+  // the wall framing, every member (the showcase puts it up before the cladding)
+  const openings = new Map<string, Opening[]>([...cladding.walls.values()].map((w) => [w.id, w.openings]))
+  const frame = framingPieces(houseFraming(house, graph, upperGraph, structures, cladding, openings)).map((p) => ({
+    solid: { faces: p.solid.faces },
+    member: "framing" as const,
+    ...(p.storey ? { upper: true } : {}),
+    tag: p.outside ? `frame${p.storey}` : "frameIn",
+  }))
   // (framed, the first floor's own slab's left out: the midfloor's sheets are its floor)
   const upper = cladding.upper && upperGraph ? { layout: cladding.upper, floorZ: z1, floorCells: floors.midfloor ? [] : upperFloorCells(upperGraph) } : undefined
   return {
@@ -181,7 +191,7 @@ export function houseRenderInputFrom(
     roofColour: house.settings.roof.colour,
     extras,
     upper,
-    solids: [...floors.solids, ...slabParts],
+    solids: [...floors.solids, ...slabParts, ...frame],
     ...(floors.groundZ !== undefined ? { groundZ: floors.groundZ } : {}),
     noFloor: floors.timber || !!slab,
     ...(slab ? { noFoundation: true } : {}),

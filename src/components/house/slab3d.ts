@@ -11,7 +11,7 @@ import { FloorGraph, simplify } from "./floorPlan"
 import { HouseProject, onParty, Pt } from "./houseTypes"
 import type { Structure } from "./structure"
 
-export const SLAB_COLOURS = { concrete: "#bdb9b0", pod: "#f3f3ee", bar: "#8b4a2b", mesh: "#5f5b55" }
+export const SLAB_COLOURS = { concrete: "#bdb9b0", pod: "#f3f3ee", bar: "#8b4a2b", mesh: "#5f5b55", boxing: "#c9a36b", peg: "#8f6a3c", dpm: "#2c3238" }
 
 /** the rib raft under a house with a slab ground floor (null: it's timber, or has no plan yet) */
 export function houseSlab(house: HouseProject, graph: FloorGraph, structure: Structure): { outline: Pt[]; result: RibRaftResult; beams: { a: Pt; b: Pt }[] } | null {
@@ -87,7 +87,7 @@ const runsAcross = (outline: Pt[], axis: "x" | "y", at: number, inset: number): 
   return runs.map(([a, b]) => [a + inset, b - inset] as [number, number]).filter(([a, b]) => b - a > 50)
 }
 
-export type SlabMember = "pods" | "steel" | "slab"
+export type SlabMember = "pods" | "steel" | "slab" | "boxing" | "dpm"
 
 /** The rib raft's parts as solids: pods, steel and mesh, concrete. The concrete's top is the floor (z 0). */
 export function slabSolids(slab: NonNullable<ReturnType<typeof houseSlab>>, depthMm: number, toppingMm: number): { solid: Solid; member: SlabMember }[] {
@@ -137,16 +137,40 @@ export function slabSolids(slab: NonNullable<ReturnType<typeof houseSlab>>, dept
     for (const [a, b] of runsAcross(outline, "x", x, cover)) out.push({ solid: bar({ x, y: a }, { x, y: b }, zMesh, SLAB_COLOURS.mesh, 18), member: "steel" })
   for (let y = Math.min(...ys) + 300; y < Math.max(...ys) - 100; y += 600)
     for (const [a, b] of runsAcross(outline, "y", y, cover)) out.push({ solid: bar({ x: a, y }, { x: b, y }, zMesh, SLAB_COLOURS.mesh, 18), member: "steel" })
+  // the boxing round the edge: a board just outside each side, from below the ground to a little over the floor, pegged
+  const boardT = 40
+  outline.forEach((p, i) => {
+    const q = outline[(i + 1) % n]
+    const o = inward(p, q, -boardT / 2)
+    const a = { x: p.x + o.x, y: p.y + o.y }
+    const b = { x: q.x + o.x, y: q.y + o.y }
+    // (a level side's board runs the corners' width further, to close them)
+    const level = Math.abs(a.y - b.y) < 1
+    const ext = level ? boardT : 0
+    const [x0, x1] = [Math.min(a.x, b.x) - ext, Math.max(a.x, b.x) + ext]
+    const [y0, y1] = [Math.min(a.y, b.y), Math.max(a.y, b.y)]
+    out.push({ solid: level ? box(x0, x1, a.y - boardT / 2, a.y + boardT / 2, z0, 40, SLAB_COLOURS.boxing) : box(a.x - boardT / 2, a.x + boardT / 2, y0, y1, z0, 40, SLAB_COLOURS.boxing), member: "boxing" })
+    const L = Math.hypot(q.x - p.x, q.y - p.y)
+    const po = inward(p, q, -boardT - 30)
+    for (let d = 300; d < L - 100; d += 1200) {
+      const c = { x: p.x + ((q.x - p.x) * d) / L + po.x, y: p.y + ((q.y - p.y) * d) / L + po.y }
+      out.push({ solid: box(c.x - 25, c.x + 25, c.y - 25, c.y + 25, z0 - 150, 250, SLAB_COLOURS.peg), member: "boxing" })
+    }
+  })
+  // the DPM under it all, lapped out past the edge
+  for (const r of outlineRects(outline)) out.push({ solid: box(r.x0 - 150, r.x1 + 150, r.y0 - 150, r.y1 + 150, z0 - 12, z0 - 2, SLAB_COLOURS.dpm), member: "dpm" })
   // the concrete, as rectangles (their tops run on seamless)
   for (const r of outlineRects(outline)) out.push({ solid: box(r.x0, r.x1, r.y0, r.y1, z0, 0, SLAB_COLOURS.concrete), member: "slab" })
   return out
 }
 
 /** the showcase's lines for the slab's stages, from the rib raft(s) under the house (or each house of a terrace) */
-export function slabFacts(rs: RibRaftResult[], mpa: number): { pods: string; steel: string; pour: string } {
+export function slabFacts(rs: RibRaftResult[], mpa: number): { boxing: string; dpm: string; pods: string; steel: string; pour: string } {
   const sum = (f: (r: RibRaftResult) => number) => rs.reduce((t, r) => t + f(r), 0)
   const many = rs.length > 1
   return {
+    boxing: `The site's set out: ${sum((r) => r.boxingM)} m of boxing round ${many ? `${rs.length} slabs` : "the slab"}, pegged, hardfill compacted inside.`,
+    dpm: `${sum((r) => r.dpmM2)} m² of DPM over the sand blinding, lapped and taped, up the edges.`,
     pods: `${sum((r) => r.fullPods + r.cutPods)} polystyrene pods go down on the hardfill${many ? ` across ${rs.length} slabs` : ""}, a rib's width apart.`,
     steel: `${sum((r) => r.barMetres).toFixed(0)} m of HD12 in the beams and ribs, and ${sum((r) => r.meshSheets)} sheets of mesh on chairs over the top.`,
     pour: `The truck's here: ${sum((r) => r.concreteToOrderM3).toFixed(1)} m³ of ${mpa} MPa concrete${many ? ", slab by slab" : ""}, poured in one go.`,
