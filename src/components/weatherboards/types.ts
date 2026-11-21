@@ -139,6 +139,10 @@ export interface HousePlan {
   footprint: FootprintPlan | null
   /** absent: worked out from the walls (see roof.ts) */
   roof?: RoofPlan
+  /** the storeys above, each its own footprint over the same plan (lined
+   * up with the one below): its walls drawn on the minimap over the ground
+   * floor's, and stacked above them in the elevations (the House sets these) */
+  levels?: { name: string; footprint: FootprintPlan }[]
 }
 
 /** "auto" reads the roof off the walls: a peaked wall is a gable end, a

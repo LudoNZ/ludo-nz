@@ -489,6 +489,12 @@
   stroke: none;
 }
 
+.minimapUpper {
+  fill: rgba(43, 108, 176, 0.12);
+  stroke: rgba(43, 108, 176, 0.5);
+  stroke-dasharray: none;
+}
+
 .minimapWall {
   stroke: #9a958b;
 }

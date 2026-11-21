@@ -3,22 +3,24 @@
 import type { HouseLayout } from "./housePlan"
 import styles from "./weatherboardEditor.module.scss"
 
-/** The whole floor plan, small, beside a wall's elevation: the wall in
+/** The whole floor plan, small, beside a wall's elevation — each storey's,
+ * one over the other (the ones above tinted, lined up as built): the wall in
  * focus picked out (with an eye outside it, where the elevation's seen
- * from), the rest of its elevation's walls a shade lighter, every wall
+ * from), the rest of its elevation's walls a shade darker, every wall
  * labelled with its code — tap one to open it. World mm, y north. */
 const WallMinimap: React.FC<{
-  layout: HouseLayout
+  /** the ground floor's layout first, then each storey above */
+  layouts: { name: string; layout: HouseLayout }[]
   codes: Map<string, string>
   /** the wall in focus (null: the whole elevation, "View all") */
   activeWallId: string | null
   /** the open elevation's walls */
   elevationWallIds: Set<string>
   onSelectWall: (wallId: string) => void
-}> = ({ layout, codes, activeWallId, elevationWallIds, onSelectWall }) => {
-  const placed = layout.sides.filter((s) => s.wallId)
-  if (!placed.length) return null
-  const pts = layout.sides.flatMap((s) => [s.a, s.b])
+}> = ({ layouts, codes, activeWallId, elevationWallIds, onSelectWall }) => {
+  const allSides = layouts.flatMap((l) => l.layout.sides)
+  if (!allSides.some((s) => s.wallId)) return null
+  const pts = allSides.flatMap((s) => [s.a, s.b])
   const x0 = Math.min(...pts.map((p) => p.x))
   const x1 = Math.max(...pts.map((p) => p.x))
   const y0 = Math.min(...pts.map((p) => -p.y))
@@ -28,7 +30,7 @@ const WallMinimap: React.FC<{
   const sw = span / 120
   const focus = (id: string | null) => (activeWallId ? id === activeWallId : !!id && elevationWallIds.has(id))
   // the eye: outside the wall in focus (outside is to the right of a → b), looking at it
-  const eyes = layout.sides
+  const eyes = allSides
     .filter((s) => s.wallId && focus(s.wallId))
     .map((s) => {
       const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
@@ -44,9 +46,11 @@ const WallMinimap: React.FC<{
       role="img"
       aria-label={`The floor plan, with ${name} picked out`}
     >
-      {/* the floor, faint */}
-      {layout.closed && <polygon points={layout.sides.map((s) => `${s.a.x},${-s.a.y}`).join(" ")} className={styles.minimapFloor} />}
-      {layout.sides.map((s, i) => {
+      {layouts.map(({ name, layout }, li) => (
+        <g key={name}>
+          {/* each floor, faint (the ones above tinted, over the one below) */}
+          {layout.closed && <polygon points={layout.sides.map((s) => `${s.a.x},${-s.a.y}`).join(" ")} className={li ? styles.minimapUpper : styles.minimapFloor} strokeWidth={sw * 0.6} />}
+          {layout.sides.map((s, i) => {
         const on = focus(s.wallId)
         const mine = !!s.wallId && elevationWallIds.has(s.wallId)
         const cls = !s.wallId ? styles.minimapPlain : on ? styles.minimapFocus : mine ? styles.minimapElevation : styles.minimapWall
@@ -54,10 +58,12 @@ const WallMinimap: React.FC<{
         const my = -(s.a.y + s.b.y) / 2
         const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) || 1
         // the code just inside the wall
-        const ix = (-(s.b.y - s.a.y) / len) * sw * 8
-        const iy = (-(s.b.x - s.a.x) / len) * sw * 8
+        // (each storey's a step further in, so walls one over the other don't share a spot)
+        const inset = sw * (8 + li * 10)
+        const ix = (-(s.b.y - s.a.y) / len) * inset
+        const iy = (-(s.b.x - s.a.x) / len) * inset
         return (
-          <g key={i}>
+          <g key={`${li}-${i}`}>
             <line
               x1={s.a.x}
               y1={-s.a.y}
@@ -92,6 +98,18 @@ const WallMinimap: React.FC<{
           </g>
         )
       })}
+        </g>
+      ))}
+      {/* which tint is which storey */}
+      {layouts.length > 1 &&
+        layouts.slice(1).map((l, i) => (
+          <g key={`k${l.name}`} pointerEvents="none">
+            <rect x={x0 - pad * 0.85} y={y1 + pad * 0.25 - i * sw * 7} width={sw * 6} height={sw * 4} className={styles.minimapUpper} strokeWidth={sw * 0.5} />
+            <text x={x0 - pad * 0.85 + sw * 8} y={y1 + pad * 0.25 - i * sw * 7 + sw * 3.5} fontSize={sw * 5} className={styles.minimapLabel}>
+              {l.name}
+            </text>
+          </g>
+        ))}
       {eyes.map((e, i) => {
         const dx = e.to.x - e.at.x
         const dy = e.to.y - e.at.y

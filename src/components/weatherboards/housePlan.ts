@@ -240,6 +240,14 @@ export function houseLayout(project: WeatherboardProject): HouseLayout {
   return chainLayout(project.elevations, plan.chain)
 }
 
+/** Every storey's layout, the ground floor's first, then each one above
+ * (from its own footprint, over the same plan) — named. */
+export function houseLayouts(project: WeatherboardProject): { name: string; layout: HouseLayout }[] {
+  const walls = project.elevations.flatMap((e) => e.walls)
+  const levels = (planOf(project).levels ?? []).filter((l) => l.footprint.points.length >= 3)
+  return [{ name: "Ground floor", layout: houseLayout(project) }, ...levels.map((l) => ({ name: l.name, layout: footprintLayout(walls, l.footprint) }))]
+}
+
 /** The chain as a footprint to carry on drawing: its outline (closed up
  * if it didn't quite meet), each side keeping the wall it had. */
 export function chainToFootprint(project: WeatherboardProject): FootprintPlan | null {

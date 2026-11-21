@@ -11,7 +11,7 @@ import { calculateWall } from "./weatherboardCalc"
 import { setBoardSkipped, skipTotals } from "./skips"
 import JoinerySkipModal from "./joinerySkipModal"
 import HousePlanPanel from "./housePlanPanel"
-import { houseLayout } from "./housePlan"
+import { houseLayouts } from "./housePlan"
 import WallMinimap from "./wallMinimap"
 import MiniElevations from "./miniElevations"
 import OpeningFields from "./openingFields"
@@ -157,7 +157,7 @@ const WeatherboardEditor: React.FC<{
   // and which numbered stock board each one comes off
   const codes = useMemo(() => wallCodes(elevations), [elevations])
   // where the walls go on plan, for the minimap beside the elevation
-  const layout = useMemo(() => houseLayout(project), [project])
+  const layouts = useMemo(() => houseLayouts(project), [project])
   const boardSource = useMemo(() => stockBoardOf(plan), [plan])
   const [showLengths, setShowLengths] = useState(false)
   // "Skip boards" mode: tap boards on the elevation to leave them out
@@ -517,14 +517,14 @@ const WeatherboardEditor: React.FC<{
               {/* the elevation's walls together, small, as seen from afar: tap one to focus it */}
               <MiniElevations
                 walls={activeElevation.walls}
-                layout={layout}
+                layouts={layouts}
                 codes={codes}
                 activeWallId={activeWallId}
                 onSelectWall={(wallId) => selectWall(activeElevation.id, wallId)}
               />
               {/* the whole plan, small, with the wall in focus picked out */}
               <WallMinimap
-                layout={layout}
+                layouts={layouts}
                 codes={codes}
                 activeWallId={activeWallId}
                 elevationWallIds={new Set(activeElevation.walls.map((w) => w.id))}

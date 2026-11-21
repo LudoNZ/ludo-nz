@@ -348,6 +348,10 @@ export function houseCladding(house: HouseProject, graph: FloorGraph, upperGraph
       footprint: { points: groundOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: groundOutline.map((_, i) => `hs${i}`) },
       // (the weatherboards' 3D view is one storey: two storeys go without its roof)
       roof: twoStorey ? { ...st.roof, type: "none" } : st.roof,
+      // the first floor over it, for the minimap and stacking the elevations
+      ...(twoStorey
+        ? { levels: [{ name: "First floor", footprint: { points: upperOutline, lockedEdgeLengths: {}, lockedVertexAngles: {}, sides: upperOutline.map((_, i) => `us${i}`) } }] }
+        : {}),
     },
   }
   return { project, roof, lowerRoofs, ground: g.layout, upper: u?.layout ?? null, upperFloorZ: floorZ, walls }

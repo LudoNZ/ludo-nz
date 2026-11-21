@@ -14,15 +14,16 @@ type P = { x: number; y: number }
  * yet placed on plan go side by side, in order. */
 const MiniElevations: React.FC<{
   walls: Wall[]
-  layout: HouseLayout
+  /** each storey's layout (the walls above stand over the ones below) */
+  layouts: { name: string; layout: HouseLayout }[]
   codes: Map<string, string>
   /** the wall in focus (null: the whole elevation) */
   activeWallId: string | null
   onSelectWall: (wallId: string) => void
-}> = ({ walls, layout, codes, activeWallId, onSelectWall }) => {
+}> = ({ walls, layouts, codes, activeWallId, onSelectWall }) => {
   if (walls.length < 2) return null
   const ids = new Set(walls.map((w) => w.id))
-  const sides = layout.sides.filter((s) => s.wallId && ids.has(s.wallId))
+  const sides = layouts.flatMap((l) => l.layout.sides).filter((s) => s.wallId && ids.has(s.wallId))
   const placed = walls.every((w) => sides.some((s) => s.wallId === w.id))
 
   // which way the face looks (out from the house: the sides' right, a → b), and so the viewer's right
@@ -99,6 +100,9 @@ const MiniElevations: React.FC<{
       {polys.map((p, i) => {
         const on = activeWallId ? p.wall.id === activeWallId : true
         const mu = (Math.min(...p.pts.map((q) => q.u)) + Math.max(...p.pts.map((q) => q.u))) / 2
+        // (its code under it on the ground — or, standing above the ground, just inside its own foot)
+        const foot = Math.min(...p.pts.map((q) => q.z))
+        const labelY = foot - z0 > sw * 12 ? y(foot) - sw * 2 : y(z0) + sw * 6.5
         return (
           <g
             key={i}
@@ -112,7 +116,7 @@ const MiniElevations: React.FC<{
             {p.openings.map((o, k) => (
               <rect key={k} x={o.u0} y={y(o.z1)} width={o.u1 - o.u0} height={o.z1 - o.z0} className={styles.miniOpening} strokeWidth={sw * 0.5} pointerEvents="none" />
             ))}
-            <text x={mu} y={y(z0) + sw * 6.5} fontSize={sw * 6} textAnchor="middle" className={p.wall.id === activeWallId ? styles.minimapLabelOn : styles.minimapLabel} pointerEvents="none">
+            <text x={mu} y={labelY} fontSize={sw * 6} textAnchor="middle" className={p.wall.id === activeWallId ? styles.minimapLabelOn : styles.minimapLabel} pointerEvents="none">
               {codes.get(p.wall.id) ?? ""}
             </text>
           </g>
