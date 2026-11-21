@@ -18,7 +18,7 @@ import { Roof, ROOF_DEPTH, zAt } from "./roof"
 import { Opening, Wall, WeatherboardSettings } from "./types"
 import { edgePoints, WallResult } from "./weatherboardCalc"
 
-export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor" | "slab" | "pods" | "steel" | "boxing" | "dpm" | "framing"
+export type HouseRenderMember = "roof" | "upper" | "inside" | "boards" | "trims" | "joinery" | "foundation" | "floor" | "subfloor" | "midfloor" | "slab" | "pods" | "steel" | "boxing" | "dpm" | "framing" | "spouting" | "deck" | "landscape"
 
 export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   roof: "Roof",
@@ -37,9 +37,12 @@ export const HOUSE_MEMBER_LABELS: Record<HouseRenderMember, string> = {
   boxing: "Boxing",
   dpm: "DPM",
   framing: "Framing",
+  spouting: "Spouting",
+  deck: "Decks",
+  landscape: "Landscaping",
 }
 
-export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor", "slab", "pods", "steel", "boxing", "dpm", "framing"]
+export const HOUSE_MEMBERS: HouseRenderMember[] = ["roof", "upper", "inside", "boards", "trims", "joinery", "foundation", "floor", "subfloor", "midfloor", "slab", "pods", "steel", "boxing", "dpm", "framing", "spouting", "deck", "landscape"]
 
 const COLORS = {
   cladding: "#e9e4d8",
@@ -97,6 +100,8 @@ export interface HouseRenderInput {
   noFloor?: boolean
   /** no foundation band under the walls (a slab's in `solids`: its edge is the foundation) */
   noFoundation?: boolean
+  /** the eaves' width: how far a downpipe steps back in to the wall (unset: no spouting) */
+  eavesMm?: number
 }
 
 // ── wall heights ───────────────────────────────────────────────────────
@@ -475,6 +480,77 @@ export interface HouseModel {
   floor: V3[] | null
 }
 
+const SPOUTING = "#e9e6df"
+
+/** The spouting: a quad gutter along every eaves edge (a roof face's level,
+ * lowest edge, on the outside of the roof), and a downpipe at its end —
+ * stepped back to the wall, down to the ground, or to a lower roof under
+ * it (onto a spreader). */
+function spouting(roofs: Roof[], eaves: number, groundZ: number): Piece[] {
+  const out: Piece[] = []
+  const faces = roofs.flatMap((r) => r.faces)
+  const roofUnder = (p: P2, below: number) => {
+    let best: number | null = null
+    for (const f of faces) {
+      const z = zAt(f.plane, p) + ROOF_T
+      if (z < below - 50 && inPoly(f.poly, p) && (best === null || z > best)) best = z
+    }
+    return best
+  }
+  const box = (a: P2, b: P2, n: P2, o0: number, o1: number, z0: number, z1: number) => {
+    const at = (p: P2, o: number, z: number): V3 => [p.x + n.x * o, p.y + n.y * o, z]
+    const base = [at(a, o0, z0), at(b, o0, z0), at(b, o1, z0), at(a, o1, z0)]
+    const top = base.map(([x, y]): V3 => [x, y, z1])
+    return makeSolid([{ pts: top, color: SPOUTING }, { pts: base, color: SPOUTING }, ...base.map((_, k) => ({ pts: [base[k], base[(k + 1) % 4], top[(k + 1) % 4], top[k]], color: SPOUTING }))])
+  }
+  for (const f of faces) {
+    const zs = f.poly.map((p) => zAt(f.plane, p))
+    const low = Math.min(...zs)
+    const mid = { x: f.poly.reduce((t, p) => t + p.x, 0) / f.poly.length, y: f.poly.reduce((t, p) => t + p.y, 0) / f.poly.length }
+    f.poly.forEach((a, i) => {
+      const b = f.poly[(i + 1) % f.poly.length]
+      const L = Math.hypot(b.x - a.x, b.y - a.y)
+      if (L < 400 || Math.abs(zs[i] - low) > 5 || Math.abs(zs[(i + 1) % zs.length] - low) > 5) return
+      // (outward: away from the face's middle)
+      let n = { x: (b.y - a.y) / L, y: -(b.x - a.x) / L }
+      if ((mid.x - a.x) * n.x + (mid.y - a.y) * n.y > 0) n = { x: -n.x, y: -n.y }
+      // (not an edge another face of the roofs carries on past: a lower roof's against a wall)
+      const probe = { x: (a.x + b.x) / 2 + n.x * 60, y: (a.y + b.y) / 2 + n.y * 60 }
+      if (faces.some((g) => g !== f && inPoly(g.poly, probe) && Math.abs(zAt(g.plane, probe) - low) < 400)) return
+      const zTop = low + ROOF_T - 30
+      const g = box(a, b, n, 0, 125, zTop - 115, zTop)
+      if (g) out.push({ solid: g, member: "spouting" })
+      // a downpipe at an end of it (both, on a long run), stepped back under the eaves to the wall
+      const d = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }
+      for (const end of L > 9000 ? [a, b] : [b]) {
+        const s = end === a ? 1 : -1
+        const p0 = { x: end.x + d.x * s * 250, y: end.y + d.y * s * 250 }
+        const wall = { x: p0.x - n.x * (eaves - 40), y: p0.y - n.y * (eaves - 40) }
+        const neck = zTop - 300
+        out.push({ solid: box({ x: p0.x - d.x * 40, y: p0.y - d.y * 40 }, { x: p0.x + d.x * 40, y: p0.y + d.y * 40 }, n, 20, 100, neck, zTop - 110), member: "spouting" })
+        out.push({ solid: box({ x: p0.x - d.x * 40, y: p0.y - d.y * 40 }, { x: p0.x + d.x * 40, y: p0.y + d.y * 40 }, n, -(eaves - 40), 100, neck - 80, neck), member: "spouting" })
+        const foot = roofUnder(wall, neck) ?? groundZ
+        out.push({ solid: box({ x: wall.x - d.x * 40, y: wall.y - d.y * 40 }, { x: wall.x + d.x * 40, y: wall.y + d.y * 40 }, n, 0, 80, foot, neck - 80), member: "spouting" })
+      }
+    })
+  }
+  return out
+}
+
+/** a point in a convex polygon */
+const inPoly = (poly: P2[], p: P2) => {
+  let sign = 0
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]
+    const b = poly[(i + 1) % poly.length]
+    const c = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
+    if (Math.abs(c) < 1e-6) continue
+    if (sign && Math.sign(c) !== sign) return false
+    sign = Math.sign(c)
+  }
+  return true
+}
+
 export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRenderMember>): HouseModel {
   const { layout, walls, results, settings } = input
   const sides = layout.sides
@@ -618,6 +694,7 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
     }
   }
 
+  if (input.eavesMm !== undefined && !hidden.has("spouting")) pieces.push(...spouting([input.roof, ...(input.moreRoofs ?? [])].filter((r): r is Roof => !!r), input.eavesMm, groundZ))
   const kept = pieces.filter((p) => (p.member === "wall" || !hidden.has(p.member)) && !(p.upper && hidden.has("upper")))
   if (hidden.has("boards")) kept.forEach((p) => p.member === "wall" && (p.lines = undefined))
   const s0 = placed[0]
@@ -644,16 +721,22 @@ const movedPiece = (p: Piece, [dx, dy, dz]: V3): Piece => ({
  * house project, stood side by side (and up or down to its own floor
  * level): every piece moved to where its house stands. The camera squares
  * up to the first house's front; the lawn runs under them all. */
-export function groupPieces(units: PlacedHouse[], hidden: ReadonlySet<HouseRenderMember>): HouseModel {
+export function groupPieces(units: PlacedHouse[], hidden: ReadonlySet<HouseRenderMember>, site: Piece[] = []): HouseModel {
   const models = units.map((u) => ({ u, m: housePieces(u.input, hidden) }))
-  const pieces = models.flatMap(({ u, m }, group) => m.pieces.map((p) => ({ ...movedPiece(p, u.at), group })))
+  // (the lawn's at the houses' ground on average: one up a step, another down, both near enough)
+  const groundZ = models.length ? models.reduce((t, { u, m }) => t + m.groundZ + u.at[2], 0) / models.length : 0
+  const pieces = [
+    ...models.flatMap(({ u, m }, group) => m.pieces.map((p) => ({ ...movedPiece(p, u.at), group }))),
+    // the site round them (decks, paving, planting, fences…), from the lawn up
+    ...site.filter((p) => !hidden.has(p.member as HouseRenderMember)).map((p) => movedPiece(p, [0, 0, groundZ])),
+  ]
   const first = models.find(({ m }) => m.front)
   return {
     pieces,
     // (picking a wall's for one house at a time)
     faces: [],
     front: first?.m.front ?? null,
-    groundZ: Math.min(...models.map(({ u, m }) => m.groundZ + u.at[2])),
+    groundZ,
     // (each house's floor's its own polygon: left out — the lawn shows through only with the roof off)
     floor: null,
   }

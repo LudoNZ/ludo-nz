@@ -14,6 +14,7 @@ import { houseFromData } from "@/components/house/houseTypes"
 import { summariseHouse } from "@/components/house/houseProjectStore"
 import { EMPTY_TERRACE, newUnitId, Terrace, terraceFromData, terraceToJson, TerraceUnit, widthOf } from "@/components/house/terrace"
 import Showcase from "@/components/house/showcase"
+import { LANDSCAPE_DEFAULT_HEIGHT, LANDSCAPE_LABELS, LandscapeItem, LandscapeKind, landscapePieces } from "@/components/house/landscape"
 import { houseSlab, slabFacts } from "@/components/house/slab3d"
 import { ribRaftFromData } from "@/components/ribRaft/ribRaft"
 import { floorGraph } from "@/components/house/floorPlan"
@@ -94,6 +95,8 @@ export default function TerracePage() {
     [terrace.units, inputs],
   )
   const summaries = useMemo(() => terrace.units.map((u) => summariseHouse(u.house)), [terrace.units])
+  const site = useMemo(() => landscapePieces(terrace.landscape ?? []), [terrace.landscape])
+  const setItem = (id: string, patch: Partial<LandscapeItem>) => set((t) => ({ ...t, landscape: (t.landscape ?? []).map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
 
   /** the next one alongside the last (its corner at the last one's far side) */
   const nextX = (t: Terrace) => (t.units.length ? Math.max(...t.units.map((u) => u.x + widthOf(u.house) + Math.min(0, ...u.house.floor.outline.map((p) => p.x)))) : 0)
@@ -124,6 +127,30 @@ export default function TerracePage() {
       upper: `Upstairs: ${area.toFixed(0)} m² of rooms across the terrace, all told.`,
       roof: (([a, ...b]) => a.charAt(0).toUpperCase() + a.slice(1) + (b.length ? ` and ${b.join(" and ")}` : ""))(roofs.length ? roofs : ["the"]) + " roofs, joined along the party walls.",
       finish: `${terrace.name} — finished.`,
+      ...(() => {
+        const ls = terrace.landscape ?? []
+        const m2 = (k: LandscapeKind) => ls.filter((l) => l.kind === k).reduce((t, l) => t + Math.abs(l.w * l.h) / 1e6, 0)
+        const fence = ls.filter((l) => l.kind === "fence" || l.kind === "picket").reduce((t, l) => t + Math.hypot(l.w, l.h) / 1000, 0)
+        const trees = ls.filter((l) => l.kind === "tree").length
+        return {
+          ...(m2("deck") ? { deck: `${m2("deck").toFixed(1)} m² of hardwood decking: framing, then the boards.` } : {}),
+          ...(ls.length
+            ? {
+                landscape: [
+                  m2("pavers") ? `${m2("pavers").toFixed(0)} m² of pavers` : "",
+                  m2("concrete") ? `${m2("concrete").toFixed(0)} m² of driveway` : "",
+                  m2("planting") ? `${m2("planting").toFixed(0)} m² of planting` : "",
+                  trees ? `${trees} tree${trees === 1 ? "" : "s"}` : "",
+                  fence ? `${fence.toFixed(0)} m of fencing` : "",
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+                  .replace(/^./, (c) => c.toUpperCase())
+                  .concat("."),
+              }
+            : {}),
+        }
+      })(),
       ...(slabs.length ? slabFacts(slabs, ribRaftFromData(terrace.units[0].house.settings.ribRaft).concreteMpa) : {}),
     }
   }, [terrace, summaries])
@@ -136,14 +163,20 @@ export default function TerracePage() {
       ground: u.house.floor.outline.map((p) => ({ x: p.x + u.x, y: p.y + u.y })),
       upper: (u.house.upper?.plan.outline ?? []).map((p) => ({ x: p.x + u.x, y: p.y + u.y })),
     }))
-    const pts = outlines.flatMap((o) => o.ground)
+    const pts = [
+      ...outlines.flatMap((o) => o.ground),
+      ...(terrace.landscape ?? []).flatMap((l) => [
+        { x: l.x, y: l.y },
+        { x: l.x + l.w, y: l.y + l.h },
+      ]),
+    ]
     if (!pts.length) return null
     const x0 = Math.min(...pts.map((p) => p.x))
     const x1 = Math.max(...pts.map((p) => p.x))
     const y0 = Math.min(...pts.map((p) => p.y))
     const y1 = Math.max(...pts.map((p) => p.y))
     return { outlines, x0, y0, w: x1 - x0, h: y1 - y0 }
-  }, [terrace.units])
+  }, [terrace.units, terrace.landscape])
 
   const save = () => {
     const a = document.createElement("a")
@@ -320,6 +353,23 @@ export default function TerracePage() {
                 role="img"
                 aria-label="The terrace on plan: each house's ground floor, and its first floor hatched"
               >
+                {(terrace.landscape ?? []).map((l) =>
+                  l.kind === "tree" ? (
+                    <circle key={l.id} cx={l.x} cy={l.y} r={Math.max(400, l.w / 2)} fill="#4d7a39" fillOpacity={0.35} />
+                  ) : l.kind === "fence" || l.kind === "picket" ? (
+                    <line key={l.id} x1={l.x} y1={l.y} x2={l.x + l.w} y2={l.y + l.h} stroke="#8a7f6a" strokeWidth={70} strokeDasharray={l.kind === "picket" ? "160 120" : undefined} />
+                  ) : (
+                    <rect
+                      key={l.id}
+                      x={Math.min(l.x, l.x + l.w)}
+                      y={Math.min(l.y, l.y + l.h)}
+                      width={Math.abs(l.w)}
+                      height={Math.abs(l.h)}
+                      fill={{ deck: "#9a6a43", pavers: "#c3bcae", concrete: "#aeaaa2", chip: "#d3c8b2", planting: "#6b8f4e" }[l.kind as "deck"]}
+                      fillOpacity={0.55}
+                    />
+                  ),
+                )}
                 {plan.outlines.map(({ u, i, ground, upper }) => {
                   const c = COLOURS[i % COLOURS.length]
                   const xs = ground.map((p) => p.x)
@@ -427,6 +477,79 @@ export default function TerracePage() {
         )}
       </section>
 
+      {terrace.units.length > 0 && (
+        <section className={styles.card}>
+          <h2>Site &amp; landscaping</h2>
+          <p className={styles.hint}>
+            Decks, paving, the driveway, chip, planting, trees and fences, on the same plan as the houses (mm, across and down). An area runs from its corner,
+            width × depth; a tree from its middle, its spread; a fence from its start, across or down (one of them 0).
+          </p>
+          <div className={styles.toolbar}>
+            {(Object.keys(LANDSCAPE_LABELS) as LandscapeKind[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={styles.pill}
+                onClick={() =>
+                  set((t) => ({
+                    ...t,
+                    landscape: [
+                      ...(t.landscape ?? []),
+                      { id: newUnitId(), kind: k, x: 0, y: -3000, w: k === "tree" ? 3000 : 4000, h: k === "fence" || k === "picket" ? 0 : k === "tree" ? 0 : 2000, ...(LANDSCAPE_DEFAULT_HEIGHT[k] ? { height: LANDSCAPE_DEFAULT_HEIGHT[k] } : {}) },
+                    ],
+                  }))
+                }
+              >
+                + {LANDSCAPE_LABELS[k]}
+              </button>
+            ))}
+          </div>
+          {(terrace.landscape ?? []).length > 0 && (
+            <div className={styles.tableWrap}>
+              <table className={styles.cutList}>
+                <thead>
+                  <tr>
+                    <th>What</th>
+                    <th>Across</th>
+                    <th>Down</th>
+                    <th>Width</th>
+                    <th>Depth</th>
+                    <th>Height</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(terrace.landscape ?? []).map((l) => (
+                    <tr key={l.id}>
+                      <td>
+                        <select value={l.kind} onChange={(e) => setItem(l.id, { kind: e.target.value as LandscapeKind })} aria-label="What it is">
+                          {(Object.keys(LANDSCAPE_LABELS) as LandscapeKind[]).map((k) => (
+                            <option key={k} value={k}>
+                              {LANDSCAPE_LABELS[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      {(["x", "y", "w", "h"] as const).map((k) => (
+                        <td key={k}>
+                          <NumField value={l[k]} step={10} onChange={(v) => setItem(l.id, { [k]: v })} />
+                        </td>
+                      ))}
+                      <td>{LANDSCAPE_DEFAULT_HEIGHT[l.kind] !== undefined ? <NumField value={l.height ?? LANDSCAPE_DEFAULT_HEIGHT[l.kind]!} min={0} step={10} onChange={(v) => setItem(l.id, { height: v })} /> : <span className={styles.muted}>—</span>}</td>
+                      <td>
+                        <button type="button" className={styles.danger} onClick={() => set((t) => ({ ...t, landscape: (t.landscape ?? []).filter((x) => x.id !== l.id) }))}>
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {units.length > 0 && (
         <section className={styles.card}>
           <h2>The terrace in 3D</h2>
@@ -436,10 +559,10 @@ export default function TerracePage() {
             </button>
             <span className={styles.muted}>Every part of every house falls into place, stage by stage.</span>
           </div>
-          <HouseRenderView input={units[0].input} units={units} fileName={terrace.name} />
+          <HouseRenderView input={units[0].input} units={units} site={site} fileName={terrace.name} />
         </section>
       )}
-      {showing && units.length > 0 && <Showcase input={units[0].input} units={units} name={terrace.name} facts={facts} onClose={() => setShowing(false)} />}
+      {showing && units.length > 0 && <Showcase input={units[0].input} units={units} site={site} name={terrace.name} facts={facts} onClose={() => setShowing(false)} />}
     </div>
   )
 }

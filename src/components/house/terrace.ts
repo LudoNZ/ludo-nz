@@ -5,6 +5,7 @@
  * level against the others (z up). Pure. */
 
 import { houseFromData, HouseProject } from "./houseTypes"
+import { LANDSCAPE_LABELS, LandscapeItem } from "./landscape"
 
 export interface TerraceUnit {
   id: string
@@ -17,6 +18,8 @@ export interface TerraceUnit {
 export interface Terrace {
   name: string
   units: TerraceUnit[]
+  /** the site round them: decks, paving, planting, trees, fences (terrace plan, mm) */
+  landscape?: LandscapeItem[]
   /** saved to an account (see terraceStore.ts): changes here save there too */
   saved?: { uid: string; id: string }
 }
@@ -31,8 +34,21 @@ export function terraceFromData(d: unknown): Terrace {
   if (o.kind === "ludo-terrace" && o.terrace) return terraceFromData(o.terrace)
   const num = (v: unknown) => (typeof v === "number" && isFinite(v) ? v : 0)
   const sv = o.saved && typeof o.saved === "object" && typeof o.saved.uid === "string" && typeof o.saved.id === "string" ? { saved: { uid: o.saved.uid, id: o.saved.id } } : {}
+  const landscape = (Array.isArray(o.landscape) ? o.landscape : [])
+    .filter((l) => l && typeof l === "object" && l.kind in LANDSCAPE_LABELS)
+    .map((l) => ({
+      id: typeof l.id === "string" ? l.id : newUnitId(),
+      kind: l.kind,
+      x: num(l.x),
+      y: num(l.y),
+      w: num(l.w),
+      h: num(l.h),
+      ...(typeof l.height === "number" ? { height: l.height } : {}),
+      ...(l.along === "x" || l.along === "y" ? { along: l.along } : {}),
+    }))
   return {
     ...sv,
+    ...(landscape.length ? { landscape } : {}),
     name: typeof o.name === "string" && o.name ? o.name : EMPTY_TERRACE.name,
     units: (Array.isArray(o.units) ? o.units : [])
       .filter((u) => u && typeof u === "object" && u.house)

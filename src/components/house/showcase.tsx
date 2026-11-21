@@ -45,6 +45,9 @@ const ICONS = {
   cladding: ICON("M4 6h16M4 10h16M4 14h16M4 18h16"),
   pods: ICON("M3 18h18M4 15h4v-4H4zM10 15h4v-4h-4zM16 15h4v-4h-4z"),
   steel: ICON("M3 9h18M3 15h18M7 5v14M12 5v14M17 5v14"),
+  spouting: ICON("M3 7h18v3H3zM18 10v10M15 20h6"),
+  deck: ICON("M3 14h18v3H3zM5 17v3M19 17v3M3 14l3-4h12l3 4"),
+  landscape: ICON("M12 3l-5 8h3l-4 6h12l-4-6h3zM12 17v4M3 21h18"),
   pour: ICON("M2 17h10v-5H6l-2 3H2zM12 17h3M13 9l7-3M14 12l6-2M5 19a1.5 1.5 0 1 0 .01 0M10 19a1.5 1.5 0 1 0 .01 0"),
   subfloor: ICON("M3 10h18M3 14h18M6 6v12M10 6v12M14 6v12M18 6v12"),
   walls: ICON("M4 20V8h16v12M4 8l8-4 8 4M8 20v-8M12 20v-8M16 20v-8"),
@@ -80,12 +83,14 @@ const Showcase: React.FC<{
   input: HouseRenderInput
   /** more than one house (a terrace), each where it stands: built together, stage by stage across them all */
   units?: PlacedHouse[]
+  /** the site round them (with `units`): decks, paving, planting… */
+  site?: Piece[]
   name: string
   /** a line of story for each stage, from the house's numbers */
   facts: Partial<Record<string, string>>
   onClose: () => void
-}> = ({ input, units, name, facts, onClose }) => {
-  const model = useMemo(() => (units?.length ? groupPieces(units, new Set()) : housePieces(input, new Set())), [input, units])
+}> = ({ input, units, site, name, facts, onClose }) => {
+  const model = useMemo(() => (units?.length ? groupPieces(units, new Set(), site) : housePieces(input, new Set())), [input, units, site])
   // the finished house's box, for framing the view on it (its corners frame it as well as every point, and cheaply)
   const fitTo = useMemo((): V3[] => {
     let [x0, y0, z0, x1, y1, z1] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]
@@ -140,10 +145,17 @@ const Showcase: React.FC<{
             { id: "upper", title: "Upstairs", story: facts.upper ?? "The first floor's walls and windows.", pieces: take((p) => !!p.upper && (p.member === "wall" || p.member === "inside" || p.member === "floor" || p.member === "joinery")) },
             { id: "roof", title: "The roof", story: facts.roof ?? "The roof goes on.", pieces: take((p) => p.member === "roof") },
           ]),
-      { id: "finish", title: "Finished", story: facts.finish ?? "Facings, scribers and flashings — and it's done.", pieces: take((p) => p.member === "trims") },
+      { id: "finish", title: "Facings & flashings", story: facts.trims ?? "Facings, scribers and flashings.", pieces: take((p) => p.member === "trims") },
+      { id: "spouting", title: "Spouting", story: facts.spouting ?? "The spouting goes up round the eaves, and the downpipes down to the drains.", pieces: take((p) => p.member === "spouting") },
+      { id: "deck", title: "Decks", story: facts.deck ?? "The decks go down: framing, then the boards.", pieces: take((p) => p.member === "deck") },
+      { id: "landscape", title: "Landscaping", story: facts.landscape ?? "Paving, the driveway, planting, trees and fences.", pieces: take((p) => p.member === "landscape") },
     ]
-    return all
-      .filter((x) => x.pieces.length)
+    const kept = all.filter((x) => x.pieces.length)
+    // (the last stage says it's done)
+    const last = kept[kept.length - 1]
+    if (last && last.id !== "finish" && facts.finish) kept[kept.length - 1] = { ...last, story: `${last.story} ${facts.finish}` }
+    else if (last && last.id === "finish") kept[kept.length - 1] = { ...last, title: "Finished", story: `${last.story} ${facts.finish ?? "And it's done."}` }
+    return kept
       .map((x) => ({
         ...x,
         icon: ICONS[x.id as keyof typeof ICONS],

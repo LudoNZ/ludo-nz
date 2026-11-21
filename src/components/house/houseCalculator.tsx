@@ -1531,7 +1531,8 @@ const ThreeDStep: React.FC<{
       midfloor: `The first floor's joists span the walls below, and its flooring goes down.`,
       upper: `Upstairs: ${n(outside.length - ground.length, "outside wall")}, ${n(upperGraph?.walls.length ?? 0, "inside wall")}, ${house.upper?.studHeightMm ?? st.studHeightMm} mm stud.`,
       roof: `A ${roof} roof at ${st.roof.pitchDeg ?? 25}°, on ${st.roofFrame === "trusses" ? "trusses" : "rafters"}.`,
-      finish: `Facings, scribers and flashings — ${house.name}, built.`,
+      trims: "Facings, scribers and flashings.",
+      finish: `${house.name}, built.`,
       ...(slab ? slabFacts([slab.result], ribRaftFromData(st.ribRaft).concreteMpa) : {}),
     }
   }, [house, graph, upperGraph, cladding, structures])

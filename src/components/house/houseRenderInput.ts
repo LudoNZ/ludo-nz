@@ -195,6 +195,7 @@ export function houseRenderInputFrom(
     ...(floors.groundZ !== undefined ? { groundZ: floors.groundZ } : {}),
     noFloor: floors.timber || !!slab,
     ...(slab ? { noFoundation: true } : {}),
+    eavesMm: house.settings.roof.eavesMm,
   }
 }
 
