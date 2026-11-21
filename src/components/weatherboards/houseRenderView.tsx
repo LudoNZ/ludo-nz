@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import DiagramExplorer from "@/components/diagramExplorer/diagramExplorer"
 import { useFlyCamera } from "@/components/render3d/useFlyCamera"
 import type { CameraFrame } from "@/components/render3d/perspective"
-import { buildHouseScene, HOUSE_MEMBER_LABELS, HOUSE_MEMBERS, HouseRenderInput, HouseRenderMember, housePieces } from "./houseRender3d"
+import { buildHouseScene, groupPieces, HOUSE_MEMBER_LABELS, HOUSE_MEMBERS, HouseRenderInput, HouseRenderMember, housePieces, PlacedHouse } from "./houseRender3d"
 // the same look, print and controls as the stairs' 3D view
 import styles from "../stairs/stairRenderView.module.scss"
 
@@ -14,11 +14,13 @@ const PRINT_ATTR = "data-print-stair-render"
  * hide a layer, fly in full screen, print it or save a PNG. */
 const HouseRenderView: React.FC<{
   input: HouseRenderInput
+  /** more than one house (a terrace): each where it stands — drawn together; `input` is the first's */
+  units?: PlacedHouse[]
   fileName?: string
   /** picking: a tap on a wall says which, and where on it (x from its left end, z up) */
   picking?: boolean
   onPick?: (hit: { wallId: string; x: number; z: number }) => void
-}> = ({ input, fileName = "house", picking, onPick }) => {
+}> = ({ input, units, fileName = "house", picking, onPick }) => {
   const [azimuthDeg, setAzimuthDeg] = useState(-35)
   const [elevationDeg, setElevationDeg] = useState(25)
   const [hidden, setHidden] = useState<ReadonlySet<HouseRenderMember>>(() => new Set())
@@ -41,7 +43,9 @@ const HouseRenderView: React.FC<{
     [beforeTurn],
   )
   // the model's built once per change; turning only redoes the camera
-  const model = useMemo(() => housePieces(input, hidden), [input, hidden])
+  const model = useMemo(() => (units?.length ? groupPieces(units, hidden) : housePieces(input, hidden)), [input, units, hidden])
+  // (a layer's toggle shows if any house has it)
+  const inputs = units?.length ? units.map((u) => u.input) : [input]
   const scene = useMemo(() => buildHouseScene(model, { azimuthDeg, elevationDeg, camera }), [model, azimuthDeg, elevationDeg, camera])
   frameRef.current = scene?.frame ?? null
 
@@ -95,10 +99,10 @@ const HouseRenderView: React.FC<{
     <div className={styles.members} role="group" aria-label="Parts shown">
       {HOUSE_MEMBERS.filter(
         (m) =>
-          (m !== "inside" || !!input.extras?.length) &&
-          (m !== "upper" || !!input.upper) &&
-          ((m !== "subfloor" && m !== "midfloor") || !!input.solids?.some((x) => x.member === m)) &&
-          (m !== "floor" || !input.noFloor),
+          (m !== "inside" || inputs.some((i) => !!i.extras?.length)) &&
+          (m !== "upper" || inputs.some((i) => !!i.upper)) &&
+          ((m !== "subfloor" && m !== "midfloor") || inputs.some((i) => !!i.solids?.some((x) => x.member === m))) &&
+          (m !== "floor" || (!units?.length && !input.noFloor)),
       ).map((m) => (
         <label key={m} className={styles.memberToggle}>
           <input type="checkbox" checked={!hidden.has(m)} onChange={() => toggle(m)} />

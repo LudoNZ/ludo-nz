@@ -118,10 +118,16 @@ const HouseProjectsPage = () => {
       )}
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Scratch house</h2>
+        <h2 className={styles.sectionTitle}>Scratch house &amp; terrace</h2>
         <div className={styles.grid}>
           <div>
             <HouseProjectCard href="/house/scratch" name={houseFromData(scratch).name} badge="This browser" summary={scratchSummary} />
+          </div>
+          <div>
+            <Link href="/house/terrace" className={styles.terraceCard}>
+              <strong>Terrace</strong>
+              <span>Several houses on one site — townhouses side by side — in 3D together, with the showcase over the lot.</span>
+            </Link>
           </div>
         </div>
       </section>

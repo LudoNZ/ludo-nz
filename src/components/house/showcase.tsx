@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { buildHouseScene, HouseRenderInput, housePieces, Piece } from "@/components/weatherboards/houseRender3d"
+import { buildHouseScene, groupPieces, HouseRenderInput, housePieces, Piece, PlacedHouse } from "@/components/weatherboards/houseRender3d"
 import type { V3 } from "@/components/render3d/perspective"
 import styles from "./showcase.module.scss"
 
@@ -62,12 +62,14 @@ const lifted = (p: Piece, dz: number): Piece =>
  * story line to run there quickly (back too: the parts fly back up). */
 const Showcase: React.FC<{
   input: HouseRenderInput
+  /** more than one house (a terrace), each where it stands: built together, stage by stage across them all */
+  units?: PlacedHouse[]
   name: string
   /** a line of story for each stage, from the house's numbers */
   facts: Partial<Record<string, string>>
   onClose: () => void
-}> = ({ input, name, facts, onClose }) => {
-  const model = useMemo(() => housePieces(input, new Set()), [input])
+}> = ({ input, units, name, facts, onClose }) => {
+  const model = useMemo(() => (units?.length ? groupPieces(units, new Set()) : housePieces(input, new Set())), [input, units])
   // the finished house's box, for framing the view on it (its corners frame it as well as every point, and cheaply)
   const fitTo = useMemo((): V3[] => {
     let [x0, y0, z0, x1, y1, z1] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]

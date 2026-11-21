@@ -105,6 +105,23 @@ const joistsAlong = (pts: Pt[]): "x" | "y" => {
   return w >= h ? "y" : "x"
 }
 
+/** a square-cornered outline pulled in by `d` all round (to the inside of its walls) */
+const insetOutline = (pts: Pt[], d: number): Pt[] => {
+  const n = pts.length
+  const area = pts.reduce((s, p, i) => s + p.x * pts[(i + 1) % n].y - pts[(i + 1) % n].x * p.y, 0)
+  // (inward of a → b: to its right when the outline runs clockwise on plan, y down)
+  const sign = area > 0 ? 1 : -1
+  const inward = (a: Pt, b: Pt) => {
+    const l = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    return { x: (-(b.y - a.y) / l) * sign, y: ((b.x - a.x) / l) * sign }
+  }
+  return pts.map((p, i) => {
+    const n0 = inward(pts[(i - 1 + n) % n], p)
+    const n1 = inward(p, pts[(i + 1) % n])
+    return { x: p.x + (n0.x + n1.x) * d, y: p.y + (n0.y + n1.y) * d }
+  })
+}
+
 /** The floors' framing, as solids: a timber ground floor's subfloor (piles,
  * bearers, joists and sheet flooring, its top at the floor), and the first
  * floor's midfloor (joists between the ground floor's walls, under the
@@ -120,7 +137,9 @@ function floorFraming(house: HouseProject, graph: FloorGraph, upperGraph: FloorG
   }
   const midfloor = !!upperGraph && upperGraph.outline.length >= 3
   if (midfloor) {
-    const f = buildFrame(upperGraph!.outline, joistsAlong(upperGraph!.outline), { ...DEFAULT_FRAME_INPUT, support: "walls", covering: "sheet" })
+    // (inside the walls: their cladding and framing, not through them)
+    const inner = insetOutline(upperGraph!.outline, 140)
+    const f = buildFrame(inner, joistsAlong(inner), { ...DEFAULT_FRAME_INPUT, support: "walls", covering: "sheet" })
     // (its joists on the ground floor's top plates; the walls it spans between are the house's own)
     for (const solid of frameSolids({ frame: f }, new Set(["walls"]), house.settings.studHeightMm)) solids.push({ solid, member: "midfloor" })
   }

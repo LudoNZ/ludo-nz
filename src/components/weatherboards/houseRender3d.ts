@@ -614,6 +614,37 @@ export function housePieces(input: HouseRenderInput, hidden: ReadonlySet<HouseRe
   return { pieces: kept, faces: faces.filter((f) => !(f.upper && hidden.has("upper"))), front: outwardOf(s0), groundZ, floor }
 }
 
+/** a house of a terrace (or any group): its 3D input, and where it stands — world mm, x east, y north, z up */
+export interface PlacedHouse {
+  input: HouseRenderInput
+  at: V3
+}
+
+const movedPiece = (p: Piece, [dx, dy, dz]: V3): Piece => ({
+  ...p,
+  solid: { ...p.solid, faces: p.solid.faces.map((f) => ({ ...f, pts: f.pts.map(([x, y, z]): V3 => [x + dx, y + dy, z + dz]) })) },
+  ...(p.lines ? { lines: p.lines.map(([a, b]): [V3, V3] => [[a[0] + dx, a[1] + dy, a[2] + dz], [b[0] + dx, b[1] + dy, b[2] + dz]]) } : {}),
+})
+
+/** Several houses as one model — a terrace of townhouses, each its own
+ * house project, stood side by side (and up or down to its own floor
+ * level): every piece moved to where its house stands. The camera squares
+ * up to the first house's front; the lawn runs under them all. */
+export function groupPieces(units: PlacedHouse[], hidden: ReadonlySet<HouseRenderMember>): HouseModel {
+  const models = units.map((u) => ({ u, m: housePieces(u.input, hidden) }))
+  const pieces = models.flatMap(({ u, m }) => m.pieces.map((p) => movedPiece(p, u.at)))
+  const first = models.find(({ m }) => m.front)
+  return {
+    pieces,
+    // (picking a wall's for one house at a time)
+    faces: [],
+    front: first?.m.front ?? null,
+    groundZ: Math.min(...models.map(({ u, m }) => m.groundZ + u.at[2])),
+    // (each house's floor's its own polygon: left out — the lawn shows through only with the roof off)
+    floor: null,
+  }
+}
+
 /** square-on is looking at the first wall's outside (the model is built
  * once by housePieces; this is what turning the camera redoes) */
 export function buildHouseScene(model: HouseModel, options: Omit<HouseRenderOptions, "hidden">): HouseScene | null {
