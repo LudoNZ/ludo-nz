@@ -8,7 +8,8 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { StairInput } from "@/components/stairs/stairs"
-import { deleteStairProject, loadStairProject, ProjectLocation, saveStairProject } from "@/components/stairs/stairProjectStore"
+import { copyStairToPublic, deleteStairProject, loadStairProject, moveStairToPublic, ProjectLocation, saveStairProject } from "@/components/stairs/stairProjectStore"
+import MakePublicButton from "@/components/projects/makePublicButton"
 import StairsPage from "../stairsPage"
 
 const SAVE_DELAY_MS = 1000
@@ -143,6 +144,23 @@ const StairProjectEditor = () => {
     router.push("/stairs")
   }
 
+  /** moves it to the public ones (same id, same link) and carries on there */
+  const makePublic = async () => {
+    if (location.kind !== "private") return
+    // the move writes the latest stair itself, so drop any save still waiting
+    pending.current = false
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setDirty(false)
+    try {
+      await moveStairToPublic(location.uid, projectId, name, latest.current.input ?? input)
+      setLocation({ kind: "public" })
+    } catch (err) {
+      pending.current = true
+      throw err
+    }
+  }
+
   const statusText = failed ? "Couldn't save — your changes will retry on the next edit" : dirty ? "Unsaved changes…" : unsynced > 0 ? "Saving…" : "All changes saved"
 
   return (
@@ -165,9 +183,12 @@ const StairProjectEditor = () => {
           }
           actions={
             location.kind === "private" ? (
-              <Button size="small" variant="danger" onClick={remove}>
-                Delete stair
-              </Button>
+              <>
+                <MakePublicButton name={name} what="stair" onMove={makePublic} onCopy={() => copyStairToPublic(name, latest.current.input ?? input)} />
+                <Button size="small" variant="danger" onClick={remove}>
+                  Delete stair
+                </Button>
+              </>
             ) : null
           }
         />

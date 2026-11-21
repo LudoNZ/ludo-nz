@@ -107,3 +107,19 @@ export const deleteStairProject = async (location: ProjectLocation, id: string) 
  * Admins only (see projects/adminProjects.ts). */
 export const subscribeToAllStairProjects = (onData: (rows: AdminProjectRow<StairSummary>[]) => void, onError?: (err: unknown) => void) =>
   subscribeToAllOf<StairSummary>(PUBLIC, PRIVATE, onData, onError)
+
+/** Moves a private stair into the public ones, keeping its id (so its link
+ * carries on, now for anyone): the public one is written first, the
+ * private one removed only once that's on the server. Needs a connection. */
+export const moveStairToPublic = async (uid: string, id: string, name: string, stair: StairInput) => {
+  await saveStairProject({ kind: "public" }, id, name, stair)
+  await deleteDoc(docRef({ kind: "private", uid }, id))
+}
+
+/** A public copy of a stair, as it is now; the private one's left alone.
+ * Resolves to the copy's link. */
+export const copyStairToPublic = async (name: string, stair: StairInput) => {
+  const id = newStairProjectId({ kind: "public" })
+  await saveStairProject({ kind: "public" }, id, name, stair)
+  return stairProjectHref(id)
+}

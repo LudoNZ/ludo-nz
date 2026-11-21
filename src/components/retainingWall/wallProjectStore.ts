@@ -138,3 +138,11 @@ export const makeProjectPublic = async (uid: string, id: string, name: string, w
  * account's private ones. Admins only (see projects/adminProjects.ts). */
 export const subscribeToAllProjects = (onData: (rows: AdminProjectRow<WallSummary>[]) => void, onError?: (err: unknown) => void) =>
   subscribeToAllOf<WallSummary>(PUBLIC, PRIVATE, onData, onError)
+
+/** A public copy of a wall, as it is now; the private one's left alone.
+ * Resolves to the copy's id. */
+export const copyProjectToPublic = async (name: string, wall: WallProject) => {
+  const id = newProjectId({ kind: "public" })
+  await saveProject({ kind: "public" }, id, name, wall)
+  return id
+}

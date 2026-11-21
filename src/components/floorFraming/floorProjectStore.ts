@@ -106,3 +106,19 @@ export const deleteFloorProject = async (location: ProjectLocation, id: string) 
  * Admins only (see projects/adminProjects.ts). */
 export const subscribeToAllFloorProjects = (onData: (rows: AdminProjectRow<FloorSummary>[]) => void, onError?: (err: unknown) => void) =>
   subscribeToAllOf<FloorSummary>(PUBLIC, PRIVATE, onData, onError)
+
+/** Moves a private floor into the public ones, keeping its id (so its link
+ * carries on, now for anyone): the public one is written first, the
+ * private one removed only once that's on the server. Needs a connection. */
+export const moveFloorToPublic = async (uid: string, id: string, name: string, floor: FloorInput) => {
+  await saveFloorProject({ kind: "public" }, id, name, floor)
+  await deleteDoc(docRef({ kind: "private", uid }, id))
+}
+
+/** A public copy of a floor, as it is now; the private one's left alone.
+ * Resolves to the copy's link. */
+export const copyFloorToPublic = async (name: string, floor: FloorInput) => {
+  const id = newFloorProjectId({ kind: "public" })
+  await saveFloorProject({ kind: "public" }, id, name, floor)
+  return floorProjectHref(id)
+}

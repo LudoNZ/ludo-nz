@@ -9,6 +9,7 @@ import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { WallProject } from "@/components/retainingWall/wallProject"
 import {
+  copyProjectToPublic,
   deleteProject,
   loadProject,
   makeProjectPublic,
@@ -21,6 +22,7 @@ import {
 import { activityProject, logWallActivity, logWallMilestone } from "@/components/retainingWall/wallActivity"
 import type { WallActivity } from "@/components/retainingWall/wallHistory"
 import RetainingWallEditor from "../retainingWallEditor"
+import MakePublicButton from "@/components/projects/makePublicButton"
 
 const SAVE_DELAY_MS = 1000
 
@@ -279,12 +281,6 @@ const ProjectEditor = () => {
   const makePublic = async () => {
     const wall = latest.current.wall
     if (!location || location.kind !== "private" || !wall) return
-    if (
-      !window.confirm(
-        `Make "${name}" public? Anyone with the link will be able to see and edit it, and it will be listed under public projects. It can't be made private again.`,
-      )
-    )
-      return
     // the move writes the latest wall itself, so drop any save still waiting
     pending.current = false
     if (timer.current) clearTimeout(timer.current)
@@ -301,6 +297,7 @@ const ProjectEditor = () => {
       console.error("Making retaining wall project public failed", err)
       pending.current = true
       setPublishError(true)
+      throw err
     } finally {
       setPublishing(false)
     }
@@ -356,9 +353,19 @@ const ProjectEditor = () => {
             location.kind === "private" ? (
               <>
                 {copyButton}
-                <Button size="small" variant="secondary" onClick={makePublic} disabled={!online || publishing}>
-                  {publishing ? "Making public…" : "Make public"}
-                </Button>
+                <MakePublicButton
+                  name={name}
+                  what="project"
+                  disabled={!online || publishing}
+                  onMove={makePublic}
+                  onCopy={async () => {
+                    const wall = latest.current.wall
+                    if (!wall) throw new Error("no wall yet")
+                    const id = await copyProjectToPublic(name, wall)
+                    if (auth?.currentUser) logWallMilestone(activityProject({ kind: "public" }, id, name), "create", `Made a public copy of private project "${name}"`, auth.currentUser)
+                    return projectHref(id)
+                  }}
+                />
                 <Button size="small" variant="danger" onClick={remove} disabled={publishing}>
                   Delete project
                 </Button>

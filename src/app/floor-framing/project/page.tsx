@@ -8,7 +8,8 @@ import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
 import EditorHeader from "@/components/weatherboards/editorHeader"
 import { FloorInput } from "@/components/floorFraming/floorData"
-import { deleteFloorProject, loadFloorProject, ProjectLocation, saveFloorProject } from "@/components/floorFraming/floorProjectStore"
+import { copyFloorToPublic, deleteFloorProject, loadFloorProject, moveFloorToPublic, ProjectLocation, saveFloorProject } from "@/components/floorFraming/floorProjectStore"
+import MakePublicButton from "@/components/projects/makePublicButton"
 import FloorFramingPage from "../floorFramingPage"
 
 const SAVE_DELAY_MS = 1000
@@ -143,6 +144,23 @@ const FloorProjectEditor = () => {
     router.push("/floor-framing")
   }
 
+  /** moves it to the public ones (same id, same link) and carries on there */
+  const makePublic = async () => {
+    if (location.kind !== "private") return
+    // the move writes the latest floor itself, so drop any save still waiting
+    pending.current = false
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setDirty(false)
+    try {
+      await moveFloorToPublic(location.uid, projectId, name, latest.current.input ?? input)
+      setLocation({ kind: "public" })
+    } catch (err) {
+      pending.current = true
+      throw err
+    }
+  }
+
   const statusText = failed ? "Couldn't save — your changes will retry on the next edit" : dirty ? "Unsaved changes…" : unsynced > 0 ? "Saving…" : "All changes saved"
 
   return (
@@ -165,9 +183,12 @@ const FloorProjectEditor = () => {
           }
           actions={
             location.kind === "private" ? (
-              <Button size="small" variant="danger" onClick={remove}>
-                Delete floor
-              </Button>
+              <>
+                <MakePublicButton name={name} what="floor" onMove={makePublic} onCopy={() => copyFloorToPublic(name, latest.current.input ?? input)} />
+                <Button size="small" variant="danger" onClick={remove}>
+                  Delete floor
+                </Button>
+              </>
             ) : null
           }
         />

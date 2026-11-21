@@ -121,3 +121,19 @@ export const deleteSiteProject = async (location: ProjectLocation, id: string) =
  * Admins only (see projects/adminProjects.ts). */
 export const subscribeToAllSiteProjects = (onData: (rows: AdminProjectRow<SiteSummary>[]) => void, onError?: (err: unknown) => void) =>
   subscribeToAllOf<SiteSummary>(PUBLIC, PRIVATE, onData, onError)
+
+/** Moves a private site into the public ones, keeping its id (so its link
+ * carries on, now for anyone): the public one is written first, the
+ * private one removed only once that's on the server. Needs a connection. */
+export const moveSiteToPublic = async (uid: string, id: string, name: string, site: SiteProject) => {
+  await saveSiteProject({ kind: "public" }, id, name, site)
+  await deleteDoc(docRef({ kind: "private", uid }, id))
+}
+
+/** A public copy of a site, as it is now; the private one's left alone.
+ * Resolves to the copy's link. */
+export const copySiteToPublic = async (name: string, site: SiteProject) => {
+  const id = newSiteProjectId({ kind: "public" })
+  await saveSiteProject({ kind: "public" }, id, name, site)
+  return siteProjectHref(id)
+}

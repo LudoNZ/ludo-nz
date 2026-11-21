@@ -30,7 +30,8 @@ import {
 import StairOrderCard from "@/components/stairs/stairOrderCard"
 import type { RenderExtra } from "@/components/retainingWall/wallRender3d"
 import type { ElevationExtra } from "@/components/retainingWall/wallProfileDiagram"
-import { deleteSiteProject, loadSiteProject, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
+import { copySiteToPublic, deleteSiteProject, loadSiteProject, moveSiteToPublic, ProjectLocation, saveSiteProject, siteProjectHref } from "@/components/site/siteProjectStore"
+import MakePublicButton from "@/components/projects/makePublicButton"
 import RetainingWallEditor, { EditorAddOnContext, EditorAddOns } from "../../retaining-walls/retainingWallEditor"
 import StairsCard, { StairsPlanOverlay, wallHostInfo } from "../stairsCard"
 import { stairCalculatorHref } from "../stairLink"
@@ -423,6 +424,23 @@ const SiteProjectEditor = () => {
     )
   }
 
+  /** moves it to the public ones (same id, same link) and carries on there */
+  const makePublic = async () => {
+    if (location.kind !== "private") return
+    // the move writes the latest site itself, so drop any save still waiting
+    pending.current = false
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    setDirty(false)
+    try {
+      await moveSiteToPublic(location.uid, projectId, latest.current.name, latest.current.site ?? site)
+      setLocation({ kind: "public" })
+    } catch (err) {
+      pending.current = true
+      throw err
+    }
+  }
+
   // ---- the site ----
   const placements = placedOnSite(site)
   const addWall = (wall: WallProject, wallName: string, source: string) => {
@@ -457,9 +475,12 @@ const SiteProjectEditor = () => {
         status={status}
         actions={
           location.kind === "private" ? (
-            <Button size="small" variant="danger" onClick={remove}>
-              Delete project
-            </Button>
+            <>
+              <MakePublicButton name={name} what="site project" onMove={makePublic} onCopy={() => copySiteToPublic(name, latest.current.site ?? site)} />
+              <Button size="small" variant="danger" onClick={remove}>
+                Delete project
+              </Button>
+            </>
           ) : null
         }
       />

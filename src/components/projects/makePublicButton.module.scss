@@ -1,0 +1,78 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-width: 32rem;
+  padding: 1.5rem;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+
+  h2 {
+    font-size: 1.15rem;
+    color: var(--color-primary);
+    overflow-wrap: anywhere;
+  }
+
+  p {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    opacity: 0.85;
+  }
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--borderRadius);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  cursor: pointer;
+
+  strong {
+    color: var(--color-primary);
+    font-size: 0.95rem;
+  }
+
+  span {
+    font-size: 0.82rem;
+    opacity: 0.8;
+    line-height: 1.4;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: rgba(27, 177, 47, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.openLink {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.error {
+  color: var(--color-danger);
+}

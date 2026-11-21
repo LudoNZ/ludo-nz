@@ -9,6 +9,7 @@ import { UnitField } from "../retaining-walls/obstructionsCard"
 import StairsCard, { StairHostInfo } from "./stairsCard"
 import { DECK_COLOR } from "./siteView"
 import styles from "../retaining-walls/obstructionsCard.module.scss"
+import site from "./siteView.module.scss"
 
 const CORNERS = ["the top-left corner", "the top-right corner", "the bottom-right corner", "the bottom-left corner"]
 
@@ -44,97 +45,114 @@ const DecksCard: React.FC<{
   const update = (id: string, patch: Partial<SiteDeck>) => onChange(decks.map((d) => (d.id === id ? { ...d, ...patch } : d)))
 
   return (
-    <section className={styles.card} id="site-decks">
-      <div className={styles.header}>
-        <h3>Decks and floors</h3>
+    <section className={site.card} id="site-decks">
+      <div className={site.headRow}>
+        <h2>Decks and floors</h2>
         <Button size="small" variant="secondary" onClick={onAdd}>
           Add deck
         </Button>
       </div>
       {decks.length === 0 && (
-        <p className={styles.hint}>
+        <p className={site.hint}>
           A deck (or a floor under sheets) on the site: its frame — bearers and piles, or a ledger on the house — worked out
           by the Floor Framing engine, drawn on the plan and in 3D, in the order and the estimate. Stairs can come down off
           any of its edges.
         </p>
       )}
-      {decks.map((d, n) => {
+      {decks.map((d) => {
         const f = siteDeckFrame(d)
-        const selected = d.id === selectedId
+        const picked = d.id === selectedId
         const key = (k: string) => `deck-${d.id}-${k}`
         const mine = stairs.filter((s) => s.deckId === d.id)
         const placed = new Map<string, StairPlacement>(placements.filter((p) => p.deck?.id === d.id).map((p) => [p.placement.stair.id, p.placement]))
         const decked = d.frame.covering === "decking"
+        const joists = f.members.filter((m) => m.kind === "joist").length
         return (
-          <div key={d.id} className={selected ? styles.itemSelected : styles.item} style={{ borderLeftColor: DECK_COLOR }} onClick={() => !selected && onSelect(d.id)}>
-            <div className={styles.itemHeader}>
-              <strong>
-                {n + 1}. {d.name}
-              </strong>
-              <span className={styles.itemActions}>
-                <button
-                  type="button"
-                  className={styles.link}
-                  aria-expanded={selected}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSelect(selected ? null : d.id)
-                  }}
+          <div key={d.id} className={picked ? site.itemPicked : site.item} style={picked ? undefined : { borderLeftColor: DECK_COLOR }} onClick={() => !picked && onSelect(d.id)}>
+            <div className={site.itemHead}>
+              <strong>{d.name}</strong>
+              <span className={site.meta}>
+                {d.lengthM.toFixed(2)} × {d.widthM.toFixed(2)} m · {d.frame.heightMm} mm high · {mine.length} stair{mine.length === 1 ? "" : "s"}
+              </span>
+              <span className={site.itemActions}>
+                <Button
+                  size="small"
+                  variant={picked ? "secondary" : "primary"}
+                  onClick={() => onSelect(picked ? null : d.id)}
                 >
-                  {selected ? "Done" : "Edit"}
-                </button>
+                  {picked ? "Done" : `Edit deck${mine.length ? " & stairs" : ""}`}
+                </Button>
                 <button
                   type="button"
-                  className={styles.link}
+                  className={site.link}
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (window.confirm(`Remove "${d.name}"${mine.length ? ` and its ${mine.length} stair${mine.length > 1 ? "s" : ""}` : ""}?`)) onRemove(d.id)
+                    if (window.confirm(`Remove ${d.name}${mine.length ? ` and its ${mine.length} stair${mine.length > 1 ? "s" : ""}` : ""} from the site?`)) onRemove(d.id)
                   }}
                 >
                   Remove
                 </button>
               </span>
             </div>
-            <p className={styles.summary}>
-              {d.lengthM.toFixed(2)} × {d.widthM.toFixed(2)} m · {decked ? "decking" : "sheet floor"} · {SUPPORT_LABELS[d.frame.support].toLowerCase()} · top RL {deckTopLevelM(d).toFixed(3)} ·{" "}
-              {f.members.filter((m) => m.kind === "joist").length} joists {f.joistSize.replace("mm", "")}, {f.piles.length} piles · about {siteDeckHours(d)} h
-              {mine.length ? ` · ${mine.length} stair${mine.length > 1 ? "s" : ""}` : ""}
+            <p className={site.meta}>
+              {decked ? "Decking" : "Sheet floor"} {SUPPORT_LABELS[d.frame.support].toLowerCase()} · {joists} joists {f.joistSize.replace("mm", "").replace(" x ", " × ")} · {f.piles.length} piles · top RL{" "}
+              {deckTopLevelM(d).toFixed(3)} · about {siteDeckHours(d)} h
             </p>
-            {f.needsEngineer && <p className={styles.warn}>⚠ {f.needsEngineer}</p>}
-            {f.warnings.map((w) => (
+            {[...(f.needsEngineer ? [f.needsEngineer] : []), ...f.warnings].map((w) => (
               <p key={w} className={styles.warn}>
                 ⚠ {w}
               </p>
             ))}
 
-            {selected && (
+            {picked && (
               <div onClick={(e) => e.stopPropagation()}>
-                <div className={styles.grid} style={{ marginTop: "0.75rem" }}>
-                  <div className={styles.field}>
+                <div className={site.fields}>
+                  <div className={site.field}>
                     <label htmlFor={key("name")}>Name</label>
                     <input
                       id={key("name")}
                       key={`${key("name")}-${d.name}`}
-                      type="text"
                       defaultValue={d.name}
+                      maxLength={60}
                       onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== d.name && update(d.id, { name: e.target.value.trim() })}
                     />
                   </div>
-                  <UnitField id={key("length")} label="Length along the joists (m)" value={d.lengthM} scale={1} step={0.1} min={0.3} max={30} onCommit={(v) => v !== null && v >= 0.3 && update(d.id, { lengthM: v })} />
-                  <UnitField id={key("width")} label="Width across the joists (m)" value={d.widthM} scale={1} step={0.1} min={0.3} max={30} onCommit={(v) => v !== null && v >= 0.3 && update(d.id, { widthM: v })} />
-                  <UnitField id={key("x")} label="First corner, across the site (m)" value={d.xM} scale={1} step={0.1} onCommit={(v) => v !== null && update(d.id, { xM: v })} />
-                  <UnitField id={key("y")} label="First corner, down the site (m)" value={d.yM} scale={1} step={0.1} onCommit={(v) => v !== null && update(d.id, { yM: v })} />
-                  <UnitField id={key("rot")} label="Turned (°, clockwise)" value={d.rotationDeg} scale={1} step={5} min={-360} max={360} onCommit={(v) => v !== null && update(d.id, { rotationDeg: v })} />
+                  <UnitField id={key("length")} label="Length (m)" value={d.lengthM} scale={1} step={0.1} min={0.3} max={30} onCommit={(v) => v !== null && v >= 0.3 && update(d.id, { lengthM: v })} />
+                  <UnitField id={key("width")} label="Width (m)" value={d.widthM} scale={1} step={0.1} min={0.3} max={30} onCommit={(v) => v !== null && v >= 0.3 && update(d.id, { widthM: v })} />
+                  <UnitField id={key("x")} label="First corner — across (m)" value={d.xM} scale={1} step={0.05} onCommit={(v) => v !== null && update(d.id, { xM: v })} />
+                  <UnitField id={key("y")} label="First corner — down (m)" value={d.yM} scale={1} step={0.05} onCommit={(v) => v !== null && update(d.id, { yM: v })} />
+                  <div className={site.field}>
+                    <label htmlFor={key("rot")}>Turned (° clockwise)</label>
+                    <div className={site.rotate}>
+                      <button type="button" onClick={() => update(d.id, { rotationDeg: (((d.rotationDeg - 15) % 360) + 360) % 360 })} aria-label="Turn 15° anticlockwise">
+                        ↺
+                      </button>
+                      <input
+                        id={key("rot")}
+                        key={`${key("rot")}-${d.rotationDeg}`}
+                        type="number"
+                        step={1}
+                        defaultValue={Math.round(d.rotationDeg * 10) / 10}
+                        onBlur={(e) => {
+                          const v = Number(e.target.value)
+                          if (e.target.value !== "" && Number.isFinite(v)) update(d.id, { rotationDeg: ((v % 360) + 360) % 360 })
+                        }}
+                      />
+                      <button type="button" onClick={() => update(d.id, { rotationDeg: (d.rotationDeg + 15) % 360 })} aria-label="Turn 15° clockwise">
+                        ↻
+                      </button>
+                    </div>
+                  </div>
                   <UnitField id={key("ground")} label="Ground under it (RL, m)" value={d.groundLevelM} scale={1} step={0.01} onCommit={(v) => v !== null && update(d.id, { groundLevelM: v })} />
-                  <div className={styles.field}>
+                  <div className={site.field}>
                     <label htmlFor={key("covering")}>On top</label>
                     <select
                       id={key("covering")}
                       value={d.frame.covering}
                       onChange={(e) => update(d.id, { frame: { ...d.frame, covering: e.target.value === "sheet" ? "sheet" : "decking", sheet: d.frame.sheet ?? { ...SHEET_PRESETS[0].sheet } } })}
                     >
-                      <option value="decking">Decking boards (outside)</option>
-                      <option value="sheet">Sheet flooring (inside)</option>
+                      <option value="decking">Decking</option>
+                      <option value="sheet">Sheet flooring</option>
                     </select>
                   </div>
                   {decked && (
@@ -144,10 +162,11 @@ const DecksCard: React.FC<{
                     </>
                   )}
                 </div>
-                <p className={styles.status}>
-                  Its own plan: joists run along its length, from its first corner (the dot on the site plan). The top of the{" "}
-                  {decked ? "decking" : "floor"} is RL {deckTopLevelM(d).toFixed(3)} — the ground plus the height below.
+                <p className={site.hint}>
+                  The joists run along its length, from its first corner (the dot on the site plan). The top of the {decked ? "decking" : "floor"} is RL{" "}
+                  {deckTopLevelM(d).toFixed(3)} — the ground plus its height, below.
                 </p>
+                <h3 className={site.subhead}>Frame</h3>
                 <FrameForm
                   value={d.frame}
                   onChange={(frame) => update(d.id, { frame })}
@@ -156,20 +175,20 @@ const DecksCard: React.FC<{
                   showSpacing
                   endLabels={{ start: DECK_EDGE_NAMES[0], end: DECK_EDGE_NAMES[2] }}
                 />
-                <FramePlanView frame={f} outline={rectangleOutline(d.lengthM * 1000, d.widthM * 1000)} />
-                <div style={{ marginTop: "1rem" }}>
-                  <StairsCard
-                    host={deckHostInfo(d)}
-                    wallId=""
-                    deckId={d.id}
-                    stairs={mine}
-                    placements={placed}
-                    onChange={(next) => onChangeStairs(d.id, next)}
-                    selectedId={selectedStair}
-                    onSelect={onSelectStair}
-                    calculatorHref={calculatorHref}
-                  />
+                <div className={site.planBox}>
+                  <FramePlanView frame={f} outline={rectangleOutline(d.lengthM * 1000, d.widthM * 1000)} />
                 </div>
+                <StairsCard
+                  host={deckHostInfo(d)}
+                  wallId=""
+                  deckId={d.id}
+                  stairs={mine}
+                  placements={placed}
+                  onChange={(next) => onChangeStairs(d.id, next)}
+                  selectedId={selectedStair}
+                  onSelect={onSelectStair}
+                  calculatorHref={calculatorHref}
+                />
               </div>
             )}
           </div>

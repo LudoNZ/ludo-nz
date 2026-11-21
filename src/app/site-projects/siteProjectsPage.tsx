@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth"
 import Button from "@/components/button/button"
-import WallProjectCard from "@/components/retainingWall/wallProjectCard"
+import SiteProjectCard from "./siteProjectCard"
 import { newBlankSite } from "@/components/site/siteProject"
 import {
   newSiteProjectId,
@@ -82,13 +82,7 @@ const SiteProjectsPage = () => {
 
   const card = (p: StoredSiteProject) => (
     <div key={`${p.location.kind}-${p.id}`}>
-      <WallProjectCard
-        href={siteProjectHref(p.id)}
-        name={p.name}
-        badge={`${p.location.kind === "public" ? "Public" : "Private"} · ${plural(p.summary?.wallCount ?? (p.summary?.wall ? 1 : 0), "wall")} · ${plural(p.summary?.stairs ?? 0, "stair")}${p.summary?.decks ? ` · ${plural(p.summary.decks, "deck")}` : ""}`}
-        summary={(p.summary?.wallCount ?? 1) > 0 ? (p.summary?.wall ?? null) : null}
-        updatedAt={p.updatedAt}
-      />
+      <SiteProjectCard href={siteProjectHref(p.id)} name={p.name} badge={p.location.kind === "public" ? "Public" : "Private"} summary={p.summary} updatedAt={p.updatedAt} />
     </div>
   )
 
@@ -97,8 +91,8 @@ const SiteProjectsPage = () => {
       <h1>Site Projects</h1>
       <p className={styles.subtitle}>
         More than one calculator on one site. A project starts blank: import your retaining walls into it (or add blank
-        ones), place them around the site plan, then put stairs on them — pin each stair&apos;s top tread to a point
-        along a wall and its rise comes from the wall&apos;s height there. Saved as you go.
+        ones) and decks, place them around the site plan, then put stairs on them — pin each stair&apos;s top tread to
+        a point along a wall or a deck&apos;s edge, and its rise comes from the height there. Saved as you go.
       </p>
 
       <div className={styles.actions}>
