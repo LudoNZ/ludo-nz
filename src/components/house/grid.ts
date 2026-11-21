@@ -28,7 +28,31 @@ export interface ProjectGrid {
   origin?: GridPoint
   /** measurements drawn on the plan */
   dims?: GridDim[]
+  /** rows of measurements typed in, down the left or along the top */
+  chains?: MeasureChain[]
+  /** what the rulers down the left (y) and along the top (x) show (default: in between) */
+  rulerShow?: Partial<Record<"x" | "y", RulerShow>>
 }
+
+/** a ruler's numbers: each mark's distance from its start (running), the gaps between, or both */
+export type RulerShow = "running" | "between" | "both"
+
+/** a row of measurements typed in, along one way of the plan: from `start`
+ * (mm from 0,0, that way), each step on from the last — it moves with 0,0 */
+export interface MeasureChain {
+  id: string
+  axis: "x" | "y"
+  start: number
+  steps: number[]
+  show: RulerShow
+}
+
+/** a list typed in ("1200, 900 2400", "1200+900") to its numbers, mm */
+export const parseMeasures = (text: string) =>
+  text
+    .split(/[\s,;+]+/)
+    .map((t) => Number(t))
+    .filter((v) => Number.isFinite(v) && v > 0)
 
 export const DEFAULT_GRID: ProjectGrid = { stepMm: 500, moved: {} }
 
@@ -55,7 +79,19 @@ export function gridFromData(d: unknown): ProjectGrid {
     const b = gp(m?.b)
     return a && b && typeof m.id === "string" ? [{ id: m.id, a, b }] : []
   })
-  return { stepMm: o.stepMm, moved: o.moved && typeof o.moved === "object" ? o.moved : {}, ...(origin ? { origin } : {}), ...(dims.length ? { dims } : {}) }
+  const shows = ["running", "between", "both"]
+  const chains = (Array.isArray(o.chains) ? o.chains : []).filter(
+    (c) => c && typeof c.id === "string" && (c.axis === "x" || c.axis === "y") && typeof c.start === "number" && Array.isArray(c.steps) && c.steps.every((v) => typeof v === "number") && shows.includes(c.show),
+  )
+  const rulerShow = o.rulerShow && typeof o.rulerShow === "object" ? Object.fromEntries(Object.entries(o.rulerShow).filter(([k, v]) => (k === "x" || k === "y") && shows.includes(v as string))) : {}
+  return {
+    stepMm: o.stepMm,
+    moved: o.moved && typeof o.moved === "object" ? o.moved : {},
+    ...(origin ? { origin } : {}),
+    ...(dims.length ? { dims } : {}),
+    ...(chains.length ? { chains } : {}),
+    ...(Object.keys(rulerShow).length ? { rulerShow } : {}),
+  }
 }
 
 export interface GridLine {

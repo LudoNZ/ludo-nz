@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { FloorGraph, simplify } from "./floorPlan"
-import { GridLine, gridLines, gridOrigin, gridPointAt, GridPoint, nearestLine, ProjectGrid } from "./grid"
+import { GridLine, gridLines, gridOrigin, gridPointAt, GridPoint, nearestLine, ProjectGrid, RulerShow } from "./grid"
 import { Pt, ROOM_KIND_COLOURS, RoomBox } from "./houseTypes"
 import type { Structure } from "./structure"
 import styles from "./house.module.scss"
@@ -18,6 +18,8 @@ export type Selection =
   | { kind: "dim"; id: string }
   /** a section of the roof, by its key (see HouseSettings.roofSections) */
   | { kind: "section"; key: string }
+  /** a ruler: the one down the left (y) or along the top (x), or a row typed in (id) */
+  | { kind: "ruler"; axis: "x" | "y"; id?: string }
   | null
 
 /** what the plan can do here: pick things, draw inside walls, shape the
@@ -67,13 +69,15 @@ const PlanCanvas: React.FC<{
   snapOn?: boolean
   /** the roof's sections can be picked, by their span arrows */
   pickSections?: boolean
+  /** the rulers can be picked (id: a row typed in; null: a new row, from its +) */
+  onRuler?: (axis: "x" | "y", id?: string | null) => void
   /** the outside walls' windows and doors on plan (tap one: onPickJoinery) */
   joinery?: { id: string; a: Pt; b: Pt; door: boolean }[]
   onPickJoinery?: (id: string) => void
   /** placing windows and doors: tapping a wall (outside or inside) places one there */
   placing?: boolean
   onPlace?: (hit: { kind: "edge"; index: number } | { kind: "wall"; id: string }, p: Pt) => void
-}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true, pickSections, joinery, onPickJoinery, placing, onPlace }) => {
+}> = ({ graph, ghost, boxes, structure, tool = "select", selection, onSelect, onDrawWall, onMoveBox, onResizeBox, grid, onOutlineChange, onMoveGridline, doors, pickOutside, onAddDim, onSetOrigin, onMoveWall, snapOn = true, pickSections, joinery, onPickJoinery, placing, onPlace, onRuler }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   // (state to draw them, refs so a quick pointer-up reads the latest)
   const [draft, setDraftState] = useState<{ a: Pt; b: Pt } | null>(null)
@@ -128,7 +132,9 @@ const PlanCanvas: React.FC<{
   const cy0 = Math.min(...pts.map((p) => p.y))
   const cy1 = Math.max(...pts.map((p) => p.y))
   // (more room left and top, for the grid's measurements)
-  const lead = grid ? 1500 + Math.max(cx1 - cx0, cy1 - cy0) * 0.15 : 1500
+  // (and more for each row of measurements typed in)
+  const rows = Math.max(0, ...(["x", "y"] as const).map((a) => (grid?.chains ?? []).filter((c) => c.axis === a).length))
+  const lead = grid ? 1500 + Math.max(cx1 - cx0, cy1 - cy0) * (0.15 + 0.06 * rows) : 1500
   const x0 = cx0 - lead
   const x1 = cx1 + 1500
   const y0 = cy0 - lead
@@ -773,14 +779,15 @@ const PlanCanvas: React.FC<{
         })}
 
       {/* the grid's measurements down the left and along the top: from 0,0
-          to each moved line and the house's ends, and the gaps between */}
+          to each moved line and the house's ends — and under them, the rows
+          typed in — each showing its gaps, its running measurements, or both */}
       {gl &&
         (["x", "y"] as const).map((axis) => {
           const ls = axis === "x" ? gl.xs : gl.ys
           const lo = axis === "x" ? x0 : y0
           const hi = axis === "x" ? x1 : y1
           const live = (l: GridLine) => (gdrag?.line.key === l.key ? gdrag.at : l.at)
-          const marks = [
+          const auto = [
             origin[axis],
             ...ls.filter((l) => l.moved || gdrag?.line.key === l.key).map(live),
             ...(outline.length ? [Math.min(...outline.map((p) => p[axis])), Math.max(...outline.map((p) => p[axis]))] : []),
@@ -788,44 +795,95 @@ const PlanCanvas: React.FC<{
             .filter((v) => v > lo && v < hi)
             .sort((a, b) => a - b)
             .filter((v, i, a) => i === 0 || v - a[i - 1] >= 1)
-          if (marks.length < 2) return null
-          const r = (axis === "x" ? y0 : x0) + sw * 34
+          const base = (axis === "x" ? y0 : x0) + sw * 34
           const t = sw * 3
           const P = (along: number, across: number) => (axis === "x" ? { x: along, y: across } : { x: across, y: along })
-          const a = P(marks[0], r)
-          const z = P(marks[marks.length - 1], r)
+          const rot = (at: Pt) => (axis === "y" ? `rotate(-90 ${at.x} ${at.y})` : undefined)
+          const chains = (grid?.chains ?? []).filter((c) => c.axis === axis)
+          /** a row of marks at `r` across: ticks, the gaps between and/or each one's distance on from `from` */
+          const row = (key: string, marks: number[], r: number, show: RulerShow, from: number, picked: boolean, onPick?: () => void) => {
+            if (marks.length < 2) return null
+            const a = P(marks[0], r)
+            const z = P(marks[marks.length - 1], r)
+            const between = show !== "running"
+            const running = show !== "between"
+            let lastShown = -Infinity
+            return (
+              <g key={key} className={picked ? styles.rulerPicked : styles.ruler} pointerEvents={onPick ? undefined : "none"}>
+                <line x1={a.x} y1={a.y} x2={z.x} y2={z.y} strokeWidth={sw * (picked ? 1.1 : 0.6)} />
+                {marks.map((v) => {
+                  const p = P(v, r - t)
+                  const q = P(v, r + t)
+                  const tk = P(v, r)
+                  return (
+                    <g key={v}>
+                      <line x1={p.x} y1={p.y} x2={q.x} y2={q.y} strokeWidth={sw * 0.6} />
+                      <line x1={tk.x - t * 0.7} y1={tk.y + t * 0.7} x2={tk.x + t * 0.7} y2={tk.y - t * 0.7} strokeWidth={sw * 0.9} />
+                    </g>
+                  )
+                })}
+                {between &&
+                  marks.slice(1).map((v, i) => {
+                    const at = P((v + marks[i]) / 2, r - sw * 2.5)
+                    const gap = v - marks[i]
+                    return gap < sw * 14 ? null : (
+                      <text key={`g${v}`} x={at.x} y={at.y} textAnchor="middle" fontSize={sw * 5.5} className={styles.rulerLabel} transform={rot(at)}>
+                        {mm(gap)}
+                      </text>
+                    )
+                  })}
+                {running &&
+                  marks.map((v) => {
+                    // (one too close to the last shown is left off)
+                    if (v - lastShown < sw * 12) return null
+                    lastShown = v
+                    const at = P(v, between ? r + sw * 7 : r - sw * 2.5)
+                    return (
+                      <text key={`r${v}`} x={at.x} y={at.y} textAnchor="middle" fontSize={sw * 5} className={styles.rulerRunning} transform={rot(at)}>
+                        {mm(v - from)}
+                      </text>
+                    )
+                  })}
+                {onPick && (
+                  <line
+                    x1={a.x}
+                    y1={a.y}
+                    x2={z.x}
+                    y2={z.y}
+                    stroke="transparent"
+                    strokeWidth={sw * 9}
+                    style={{ cursor: "pointer" }}
+                    role="button"
+                    aria-label="Measurements — tap to change them"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => (e.stopPropagation(), onPick())}
+                  />
+                )}
+              </g>
+            )
+          }
+          const plusAt = P((auto.length ? auto[0] : origin[axis]) - sw * 11, base)
           return (
-            <g key={`ruler${axis}`} className={styles.ruler} pointerEvents="none">
-              <line x1={a.x} y1={a.y} x2={z.x} y2={z.y} strokeWidth={sw * 0.6} />
-              {marks.map((v) => {
-                const p = P(v, r - t)
-                const q = P(v, r + t)
-                const tk = P(v, r)
-                return (
-                  <g key={v}>
-                    <line x1={p.x} y1={p.y} x2={q.x} y2={q.y} strokeWidth={sw * 0.6} />
-                    <line x1={tk.x - t * 0.7} y1={tk.y + t * 0.7} x2={tk.x + t * 0.7} y2={tk.y - t * 0.7} strokeWidth={sw * 0.9} />
-                  </g>
-                )
+            <g key={`ruler${axis}`}>
+              {row("auto", auto, base, grid?.rulerShow?.[axis] ?? "between", origin[axis], selection?.kind === "ruler" && selection.axis === axis && !selection.id, onRuler && (() => onRuler(axis)))}
+              {chains.map((c, k) => {
+                const marks = [origin[axis] + c.start]
+                for (const st of c.steps) marks.push(marks[marks.length - 1] + st)
+                return row(c.id, marks, base + sw * 16 * (k + 1), c.show, marks[0], selection?.kind === "ruler" && selection.id === c.id, onRuler && (() => onRuler(axis, c.id)))
               })}
-              {marks.slice(1).map((v, i) => {
-                const m = (v + marks[i]) / 2
-                const at = P(m, r - sw * 2.5)
-                const gap = v - marks[i]
-                return gap < sw * 14 ? null : (
-                  <text
-                    key={`g${v}`}
-                    x={at.x}
-                    y={at.y}
-                    textAnchor="middle"
-                    fontSize={sw * 5.5}
-                    className={styles.rulerLabel}
-                    transform={axis === "y" ? `rotate(-90 ${at.x} ${at.y})` : undefined}
-                  >
-                    {mm(gap)}
-                  </text>
-                )
-              })}
+              {onRuler && tool === "measure" && (
+                <g
+                  className={styles.rulerPlus}
+                  role="button"
+                  aria-label={`Add measurements ${axis === "x" ? "along the top" : "down the left"}`}
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => (e.stopPropagation(), onRuler(axis, null))}
+                >
+                  <circle cx={plusAt.x} cy={plusAt.y} r={sw * 5.5} strokeWidth={sw * 0.8} />
+                  <path d={`M${plusAt.x - sw * 3},${plusAt.y}H${plusAt.x + sw * 3}M${plusAt.x},${plusAt.y - sw * 3}V${plusAt.y + sw * 3}`} strokeWidth={sw * 1.1} />
+                </g>
+              )}
             </g>
           )
         })}

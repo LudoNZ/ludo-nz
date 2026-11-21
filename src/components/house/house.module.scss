@@ -672,6 +672,31 @@
   stroke-opacity: 0.8;
 }
 
+.rulerPicked {
+  stroke: var(--color-primary);
+}
+
+.rulerPicked .rulerLabel,
+.rulerPicked .rulerRunning {
+  fill: var(--color-primary);
+}
+
+.rulerRunning {
+  fill: #2b6cb0;
+  stroke: none;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.rulerPlus {
+  stroke: #2b6cb0;
+  fill: #fbfaf6;
+}
+
+.rulerPlus:hover {
+  fill: #e6eef8;
+}
+
 .rulerLabel {
   fill: #2b6cb0;
   stroke: none;

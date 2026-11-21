@@ -27,7 +27,7 @@ import {
   STARTING_OUTLINE,
 } from "./houseTypes"
 import PlanCanvas, { CanvasTool, Selection } from "./planCanvas"
-import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
+import { GridDim, GridLine, gridOrigin, gridPointAt, GridPoint, MeasureChain, parseMeasures, RulerShow, lineAt as gridLineAt, lineHome as gridLineHome, linesAround, movePlanLine, nearestLine, ProjectGrid, squareUp } from "./grid"
 import { analyseHouse, Structure } from "./structure"
 import { houseRenderInputFrom } from "./houseRenderInput"
 import { claddingFloorOf, insideTarget, outsideAt, outsideTarget, planJoinery, useJoineryEditor } from "./joineryEditor"
@@ -649,7 +649,9 @@ const FloorStep: React.FC<{
             onMoveWall={moveWall}
             snapOn={snapOn}
             {...gridToolProps(setGrid, setSelection, () => setTool("select"))}
+            onRuler={(axis, id) => setSelection({ kind: "ruler", axis, ...(id === null ? { id: NEW_ROW } : id ? { id } : {}) })}
           />
+          <RulerPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
           <DimPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
           {wall && (
             <div className={styles.panel}>
@@ -825,7 +827,9 @@ const OutlineEditor: React.FC<{
         onOutlineChange={setOutline}
         onMoveGridline={(line: GridLine, to: number) => onMoveGridline(line, to)}
         {...gridToolProps(setGrid, setSelection, () => setTool("outline"))}
+        onRuler={(axis, id) => setSelection({ kind: "ruler", axis, ...(id === null ? { id: NEW_ROW } : id ? { id } : {}) })}
       />
+      <RulerPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
       {/* (below the plan, so it doesn't shift under the pointer as the tool changes) */}
       {tool !== "outline" && <p className={styles.hint}>{GRID_TOOL_HINTS[tool]}</p>}
       <DimPanel grid={grid} setGrid={setGrid} selection={selection} setSelection={setSelection} />
@@ -909,6 +913,153 @@ const gridToolProps = (setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void, se
     done()
   },
 })
+
+const SHOWS: { value: RulerShow; label: string }[] = [
+  { value: "between", label: "In between" },
+  { value: "running", label: "Running" },
+  { value: "both", label: "Both" },
+]
+/** the rulers' new-row mode, in a ruler selection's id */
+const NEW_ROW = "+"
+
+/** A ruler picked (or its + tapped): what the one down the left or along
+ * the top shows, and the rows of measurements typed in under it — a list
+ * of gaps (or running measurements) from a start, each row showing its
+ * gaps, its running measurements, or both. */
+const RulerPanel: React.FC<{ grid: ProjectGrid; setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void; selection: Selection; setSelection: (s: Selection) => void }> = ({
+  grid,
+  setGrid,
+  selection,
+  setSelection,
+}) => {
+  const sel = selection?.kind === "ruler" ? selection : null
+  const chain = sel?.id && sel.id !== NEW_ROW ? grid.chains?.find((c) => c.id === sel.id) : undefined
+  const adding = sel?.id === NEW_ROW
+  // the list as typed, and whether it's gaps or running measurements
+  const [text, setText] = useState("")
+  const [typedAs, setTypedAs] = useState<"gaps" | "running">("gaps")
+  const [start, setStart] = useState(0)
+  const [show, setShow] = useState<RulerShow>("both")
+  const key = sel ? `${sel.axis}${sel.id ?? ""}` : ""
+  const [loadedFor, setLoadedFor] = useState("")
+  if (key !== loadedFor) {
+    // (a row picked: its numbers to change; a new one: a blank list)
+    setLoadedFor(key)
+    setText(chain ? chain.steps.join(" ") : "")
+    setTypedAs("gaps")
+    setStart(chain?.start ?? 0)
+    setShow(chain?.show ?? "both")
+  }
+  if (!sel) return null
+  const way = sel.axis === "x" ? "along the top" : "down the left"
+  const nums = parseMeasures(text)
+  // running measurements typed: each on from the start, in order
+  const steps = typedAs === "gaps" ? nums : nums.map((v, i) => v - (i ? nums[i - 1] : 0))
+  const ok = steps.length > 0 && steps.every((v) => v > 0)
+  const save = () => {
+    if (!ok) return
+    const id = chain?.id ?? newHouseId()
+    const c: MeasureChain = { id, axis: sel.axis, start, steps, show }
+    setGrid((g) => ({ ...g, chains: chain ? (g.chains ?? []).map((x) => (x.id === id ? c : x)) : [...(g.chains ?? []), c] }))
+    setSelection({ kind: "ruler", axis: sel.axis, id })
+  }
+  const showToggle = (value: RulerShow, onChange: (v: RulerShow) => void) => (
+    <div className={styles.toggle} role="radiogroup" aria-label="Show">
+      {SHOWS.map((o) => (
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={value === o.value ? styles.toggleOn : ""} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+  if (!chain && !adding)
+    return (
+      <div className={styles.panel}>
+        <p>
+          <strong>The measurements {way}</strong> — from 0,0 to each line you&apos;ve moved and the house&apos;s ends.
+        </p>
+        {showToggle(grid.rulerShow?.[sel.axis] ?? "between", (v) => setGrid((g) => ({ ...g, rulerShow: { ...(g.rulerShow ?? {}), [sel.axis]: v } })))}
+        <div className={styles.toolbar}>
+          <button type="button" className={styles.pill} onClick={() => setSelection({ kind: "ruler", axis: sel.axis, id: NEW_ROW })}>
+            + Add a row of measurements {way}
+          </button>
+        </div>
+      </div>
+    )
+  return (
+    <div className={styles.panel}>
+      <p>
+        <strong>{adding ? `A row of measurements ${way}` : `Measurements ${way}`}</strong> — type them in, any way apart (1200 900 2400, or
+        1200, 900, 2400).
+      </p>
+      <div className={styles.fields}>
+        <label style={{ flex: "2 1 18rem" }}>
+          Measurements
+          <input
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            placeholder="1200 900 2400"
+            inputMode="decimal"
+          />
+          <span className={styles.muted}>
+            {ok
+              ? `${steps.length} gap${steps.length === 1 ? "" : "s"}, ${steps.reduce((a, b) => a + b, 0)} mm in all`
+              : nums.length
+                ? "Running measurements need to go up each time."
+                : "mm"}
+          </span>
+        </label>
+        <label>
+          Starting
+          <span className={styles.unit}>
+            <NumField value={start} step={10} onChange={setStart} /> mm
+          </span>
+          <span className={styles.muted}>from 0,0</span>
+        </label>
+      </div>
+      <div className={styles.toolbar}>
+        <span className={styles.muted}>Typed as</span>
+        <div className={styles.toggle} role="radiogroup" aria-label="Typed as">
+          {(["gaps", "running"] as const).map((v) => (
+            <button key={v} type="button" role="radio" aria-checked={typedAs === v} className={typedAs === v ? styles.toggleOn : ""} onClick={() => setTypedAs(v)}>
+              {v === "gaps" ? "Gaps between" : "Running from the start"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className={styles.toolbar}>
+        <span className={styles.muted}>Show</span>
+        {showToggle(show, (v) => {
+          setShow(v)
+          // (a row already there shows it straight away)
+          if (chain) setGrid((g) => ({ ...g, chains: (g.chains ?? []).map((x) => (x.id === chain.id ? { ...x, show: v } : x)) }))
+        })}
+      </div>
+      <div className={styles.toolbar}>
+        <button type="button" className={`${styles.pill} ${styles.pillOn}`} disabled={!ok} onClick={save}>
+          {adding ? "Add the row" : "Save"}
+        </button>
+        {chain && (
+          <button
+            type="button"
+            className={styles.danger}
+            onClick={() => {
+              setGrid((g) => ({ ...g, chains: (g.chains ?? []).filter((x) => x.id !== chain.id) }))
+              setSelection(null)
+            }}
+          >
+            Remove the row
+          </button>
+        )}
+        <button type="button" className={styles.link} onClick={() => setSelection(null)}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /** a measurement picked: what it measures, and to take it off */
 const DimPanel: React.FC<{ grid: ProjectGrid; setGrid: (u: (g: ProjectGrid) => ProjectGrid) => void; selection: Selection; setSelection: (s: Selection) => void }> = ({
