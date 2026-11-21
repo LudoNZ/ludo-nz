@@ -448,26 +448,27 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
             if (s === "u1") wing.u1 += run
             if (s === "v0") wing.v0 -= run
             if (s === "v1") wing.v1 += run
-            // its ends: flush with that roof's eaves side, hipped (that
-            // slope carried on out); set in from it, its verge brought out to
-            // that roof's eaves line — so its front slope is the roof from
-            // its ridge out, the whole width of that one
+            // its ends: flush with that roof's eaves side, a gable whose verge
+            // is out on that roof's eaves line (that roof's slope gone in
+            // front of this one's ridge); set in from it, that roof stays the
+            // higher one — its gable carries on out, meeting this one's front
+            // slope in a valley
             const [lo, hi, plo, phi] = across ? [rect.v0, rect.v1, parent.v0, parent.v1] : [rect.u0, rect.u1, parent.u0, parent.u1]
             const [sLo, sHi]: Side[] = across ? ["v0", "v1"] : ["u0", "u1"]
-            wing.hipEnds = []
             wing.widen = {}
-            if (Math.abs(lo - plo) < 5) wing.hipEnds.push(sLo)
-            else wing.widen[sLo] = lo - plo + r.eavesMm
-            if (Math.abs(hi - phi) < 5) wing.hipEnds.push(sHi)
-            else wing.widen[sHi] = phi - hi + r.eavesMm
+            wing.covers = []
             const BIG = 1e6
             const ridge = across ? (wing.u0 + wing.u1) / 2 : (wing.v0 + wing.v1) / 2
             const [f0, f1] = s.endsWith("0") ? [ridge, BIG] : [-BIG, ridge]
             const strip: Rect = across ? { u0: f0, u1: f1, v0: -BIG, v1: BIG } : { u0: -BIG, u1: BIG, v0: f0, v1: f1 }
-            wing.covers = [
-              { plane: 0, rect: strip },
-              { plane: 1, rect: strip },
-            ]
+            if (Math.abs(lo - plo) < 5) {
+              wing.widen[sLo] = r.eavesMm
+              wing.covers.push({ plane: 0, rect: strip })
+            }
+            if (Math.abs(hi - phi) < 5) {
+              wing.widen[sHi] = r.eavesMm
+              wing.covers.push({ plane: 1, rect: strip })
+            }
             wing.behind = { onU: across, at: ridge, sign: s.endsWith("0") ? 1 : -1 }
           } else {
             // falling back to a valley at the wall, under that gable
@@ -603,6 +604,9 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
           // ridge (valleys); in front, they're gone
           const bh = A.w.over === bi && (A.w.covers ?? []).some((c) => c.plane === qi) ? A.w.behind : undefined
           const pokes = againstB
+          // a slope of A's that B covers: buried wherever it's under B, however
+          // far (its eaves don't run on through B's gable)
+          const buriedByB = B.w.over === ai && (B.w.covers ?? []).some((c) => c.plane === pi)
           const hidden: Half[] = [
             ...(bh ? [bh.onU ? { a: bh.sign * cos, b: bh.sign * sin, c: -bh.sign * bh.at } : { a: -bh.sign * sin, b: bh.sign * cos, c: -bh.sign * bh.at }] : []),
             ...halvesOf(B.region),
@@ -611,7 +615,7 @@ export function buildRoof(layout: HouseLayout, walls: Map<string, Wall>, plan: R
             // under it (or, against B, above it too)…
             ...(pokes ? [] : [{ a: P.a - Q.a, b: P.b - Q.b, c: P.c - Q.c + d }]),
             // …but not by more than a roof's depth
-            { a: Q.a - P.a, b: Q.b - P.b, c: Q.c - P.c - ROOF_DEPTH },
+            ...(buriedByB ? [] : [{ a: Q.a - P.a, b: Q.b - P.b, c: Q.c - P.c - ROOF_DEPTH }]),
           ]
           pieces = pieces.flatMap((pc) => subtract(pc, hidden))
         })
